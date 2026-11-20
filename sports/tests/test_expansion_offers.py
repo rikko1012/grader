@@ -159,7 +159,8 @@ def test_prizepicks_missing_wager_field_is_both_sides_only_on_standard_lines():
     assert offers.prizepicks(pp_tennis(odds='demon'), 'tennis', NOW) == []      # side unknown: never invented
     assert offers.prizepicks(pp_tennis(odds='goblin'), 'tennis', NOW) == []
     assert list(offers.prizepicks(pp_tennis(odds='demon', allowed='over'), 'tennis', NOW)[0]['sides']) == ['over']
-    assert offers.prizepicks(pp_tennis('Fantasy Score'), 'tennis', NOW) == []    # still unmapped
+    # sg-stats 2026-11-20: Fantasy Score is mapped (expansion_stats tennis fantasy model)
+    assert offers.prizepicks(pp_tennis('Fantasy Score'), 'tennis', NOW)[0]['stat'] == 'fantasy_tennis'
 
 
 def test_prizepicks_tennis_opponent_must_agree_and_never_a_doubles_pair():
@@ -200,8 +201,14 @@ def test_underdog_soccer_keeps_only_listed_sides_and_exact_team_names():
     assert row['teams'] == ['Bayern München', '1. FC Köln'] and row['team'] == 'Bayern München'
     assert row['team_aliases'] == [['Bayern München', 'Bayern', 'BAY'], ['1. FC Köln', 'Köln', 'KOE']]
     assert offers.underdog_soccer(ud_soccer(team='a'), NOW)[0]['team'] == '1. FC Köln'
-    for stat in ('period_1_2_goals_assists', 'period_1_goals', 'period_1_2_cards'):
-        assert offers.underdog_soccer(ud_soccer(stat), NOW) == []
+    # sg-stats 2026-11-20: summed / first-half / card lines map to the expansion_stats component models
+    for stat, (name, scope) in {'period_1_2_goals_assists': ('goals_assists', 'full_game'),
+                                'period_1_goals': ('goals', 'first_half'), 'period_1_2_cards': ('cards', 'full_game'),
+                                'period_1_2_fouls_against': ('fouls', 'full_game'),
+                                'period_1_2_fouls_for': ('fouls_suffered', 'full_game')}.items():
+        row = offers.underdog_soccer(ud_soccer(stat), NOW)[0]
+        assert (row['stat'], row['scope']) == (name, scope)
+    assert offers.underdog_soccer(ud_soccer('period_1_2_offsides'), NOW) == []
     assert offers.underdog_soccer(ud_soccer(team='x'), NOW) == []
 
 

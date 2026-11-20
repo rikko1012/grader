@@ -48,7 +48,8 @@ def fit(players, starts, limit=RESEARCH_BYTES):
     if total <= limit:
         return players
     keep, used = {}, 0
-    for k in sorted(players, key=lambda k: (starts.get(k, ''), k)):
+    # sg-stats: component-model entries (expansion_stats) go last, so they can never push out a count-model entry.
+    for k in sorted(players, key=lambda k: (bool(players[k].get('component_model')), starts.get(k, ''), k)):
         if used + sizes[k] > limit:
             break
         keep[k] = players[k]
@@ -183,7 +184,10 @@ def publish(sport, budget_s=20, results_at=None):
     for offer in board['offers']:
         unique.setdefault(key(offer), offer)
     # Rotate pending identities without starving previously missing histories.
-    order = sorted(unique, key=lambda k: previous.get(k, {}).get('checked_at', ''))
+    # sg-stats component-model offers after every count-model offer: they never take research budget from a line the
+    # count model already grades (both groups still rotate least-recently-checked first).
+    from .expansion_stats import model_of, history_scope, games as component_games
+    order = sorted(unique, key=lambda k: (model_of(unique[k]) is not None, previous.get(k, {}).get('checked_at', '')))
     matches_path = boards.root(sport) / 'current-matches.json'
     try:
         st = matches_path.stat()
@@ -198,15 +202,28 @@ def publish(sport, budget_s=20, results_at=None):
         offer = unique[k]
         identity = history.resolve(offer, matches)
         scope = 'regulation' if sport == 'soccer' and offer['scope'] == 'full_game' else offer['scope']
+        component = model_of(offer)
+        if component:
+            scope = history_scope(offer)
         entry = {'identity': identity, 'scope': scope, 'games': [], 'checked_at': now_utc()}
         if identity:
             path = isolated_database(boards.root(sport).parent, identity['competition'])
             before = min(now_utc(), offer['start'])
             before = parse_utc(before).replace(second=0, microsecond=0).isoformat().replace('+00:00', 'Z')
             try:
-                entry['games'] = history._history(str(path), history._file_signature(path),
-                    identity['player_id'], offer['stat'], scope, before)
                 comp = identity['competition']
+                if component:
+                    if comp not in catalogs:
+                        catalog = path.parent / 'matches.json'
+                        catalogs[comp] = json.loads(catalog.read_text(encoding='utf-8')) if catalog.stat().st_size <= 5_000_000 else {}
+                    from contextlib import closing
+                    with closing(history.store.connect(path, read_only=True)) as con:
+                        entry['games'] = component_games(con, history.store, offer, identity['player_id'], before,
+                                                         catalogs[comp])
+                    entry['component_model'] = component
+                else:
+                    entry['games'] = history._history(str(path), history._file_signature(path),
+                        identity['player_id'], offer['stat'], scope, before)
                 if comp not in catalogs:
                     catalog = path.parent / 'matches.json'
                     catalogs[comp] = json.loads(catalog.read_text(encoding='utf-8')) if catalog.stat().st_size <= 5_000_000 else {}
@@ -267,6 +284,9 @@ def publish(sport, budget_s=20, results_at=None):
                 entry['stats'] = fact_cache[fk]
             except (OSError, ValueError, history.sqlite3.Error):
                 entry['error'] = 'history_unavailable'
+        if component == 'first_half_goals' and entry['games']:
+            # regulation goals feed the thinned model; the member-visible list stays empty (no 1H results stored)
+            entry['model_games'], entry['games'] = entry['games'], []
         players[k] = entry
     try:
         events = _events(sport, players, matches)

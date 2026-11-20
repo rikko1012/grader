@@ -94,3 +94,41 @@ Owner mandate 2026-11-20: every offered soccer / tennis prop gets a grade from a
 - **Ops**: `learning-status.json published_model.pending_by` counts each pending reason by
   competition | stat | platform (top 60).
 - Stakes: unchanged (this model assigns none); new paths carry `scope_rule` / `settlement_scope` / `format_rule`.
+
+## Component models for the other stat types (sg-stats, 2026-11-20)
+
+`expansion-components-v1` (`sports/expansion_stats.py`) gives a model, a letter and a
+chance to the soccer and tennis stat types the count model never graded. It builds
+each one from component stats the history workers already store, and collects
+nothing new. Count-model forecasts keep their exact payloads and ids. A golden test
+pins one against origin/main e6e155d. Component-model offers run after every
+count-model offer, so the research and publish budgets cannot drop an existing grade.
+
+| Stat (book label) | Model | Walk-forward tier |
+|---|---|---|
+| Goal + Assist (PP), Goals + Assists (UD) | count predictive on the per-game goals + assists, population prior (m0 0.153, k 8) | failed (A band 69% printed / 63% hit) |
+| Cards (UD; 0.5 lines only, where the red-card weight cannot matter) | count on yellow + red, prior (0.131, 16) | close (max band gap 1.3 pts) |
+| Shots Assisted (PP) | count on FotMob chances created, prior (0.657, 4) | close (1.8 pts) |
+| 1H Goals (UD) | regulation-goals predictive, prior (0.090, 8), binomial thinning at the measured first-half share 0.442 | passed |
+| Outfield Fantasy Score (PP) | PP playbook formula per past game, kernel mixture, 0.2 shrink to 8.05 | close (2.3 pts) |
+| Goalie Fantasy Score (PP) | 5 + 2 x saves - 2 x conceded (catalog score) + 5 clean sheet, Student-t, 0.4 shrink to 9.36 | failed (3.4 pts) |
+| Fantasy Score (PP tennis) | 10 + games won - lost + 3 x sets won - 3 x lost + 0.5 x aces - 0.5 x DFs, kernel mixture | failed (games/sets part only) |
+| 2nd Set Total Games (PP tennis) | both players' set-2 games, finite-score Dirichlet | failed |
+| 1st Set Total Games Won (PP), Fouls Committed / Fouls Drawn (UD) | the existing count model (label maps only) | (count model) |
+
+- **Tiers.** All three tiers ship at 0 units, each with its letter, its chance and a definite stake reason (display gd-1).
+- **Walk-forward data.** Every forecast used only that player's earlier games (latest 20, at least 5). The test covers:
+  - 2,749 ESPN match summaries across nine leagues;
+  - 1,449 FotMob matches from the top five leagues;
+  - ESPN ATP/WTA set scores for Jan 1 – Nov 19, 2026.
+- **Tuning and holdout.** Every setting was chosen on matches before Sep 1 by tune-window log loss. The Sep 1 – Nov 19 holdout was NOT scored only once: it was printed in a partial-data smoke run and in a first full run, and the population priors and shrinkage were added after that first run. It is therefore not untouched.
+- **Tiers.** The pre-registered rule ('passed') is met by 1 of 8 models (1H Goals, whose evidence is almost all one Under band). The 'close' tier and its 3-point cut were defined after the holdout had been seen.
+- **Lines.** The lines are synthetic. Count models use fixed offered values (0.5 / 1.5 / 2.5), and fantasy uses the player's history mean plus offsets. No past real lines exist for these stats.
+- **Underdog letters.** Underdog soccer lines are Higher-only, and on 0.5 lines the model picks Under almost every time. Those props get a chance but, under the current letter rules, rarely a letter.
+- **Reliability.** Over-chance deciles for the 0.5-line count models are in `stats/reliability_and_size.json`.
+- **Where the evidence is.** Tables are in `cs2_scout_ops/logs/soccer_grades_1120/stats/wf_final/`.
+- **FotMob fields.** FotMob lists a stat only when it is non-zero. Across 44,170 played player-games there was no contradiction, and the key shares are in `fotmob_zero_check.json`.
+  - An absent FotMob component counts as 0 when FotMob reported that player's match, which is shown by a minutes row.
+  - The live crosses and attempted-dribbles histories hold only non-zero games. They are therefore biased toward Over. This release does not change them.
+- **Not modelled.** PrizePicks tennis "Matches Won" covers a whole tournament, not one match, so it is not modelled.
+- **Unverified scoring rules, all at 0U:** FotMob tackles (won or attempted), the PrizePicks goalie start and clean-sheet conditions, the tennis fantasy formula (Rotowire) and Underdog Cards above 0.5.
