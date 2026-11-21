@@ -443,7 +443,7 @@ def make_forecast(offer, facts, now):
         # does not know the player's level - on live member lines those letters ran 39 Under / 9 Over outside Lean and the
         # prior-only chances failed the pre-registered test at book-like lines for every candidate prior (thin-2 as is,
         # starter-like, league starter-like, league all-minutes). Kept as a letter, capped at Lean; chance unchanged.
-        result.update(grade=policy.LEAN, lean_cap=LEAN_CAP_VERSION,
+        result.update(grade=policy.LEAN, lean_cap={'version': LEAN_CAP_VERSION, 'model_letter': result['grade']},
                       grade_reason=[*result['grade_reason'], 'Lean: no past games at this stat.'])
     result['id'] = digest({k:v for k,v in result.items() if k != 'made_at'})
     return result, None
