@@ -31,7 +31,7 @@ PHASES = {'soccer': (('fotmob', 6, 20), ('squads', 6, 12), ('football_data', 1, 
 
 def enabled(name):
     """Research kill switches, no deploy needed: SCOUT_EXPANSION_SOURCES=0 stops every research phase;
-    SCOUT_EXPANSION_PHASE_<NAME>=0 (FOTMOB, THESCORE, FOOTBALL_DATA, EXCHANGES) stops one. For FotMob / theScore
+    SCOUT_EXPANSION_PHASE_<NAME>=0 (FOTMOB, THESCORE, FOOTBALL_DATA, EXCHANGES, SQUADS) stops one. For FotMob / theScore
     this stops only their research part (new leagues, pre-match context, research stat names): the graded inputs of
     53dad0b (FotMob's six leagues, theScore finals counts) keep their own switch, graded_enabled()."""
     import os
