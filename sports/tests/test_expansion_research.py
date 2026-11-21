@@ -116,6 +116,11 @@ def test_event_lookup_is_memoised_per_store_signature_with_identical_answers(mon
         return {'event': event_id, 'before': before}
     monkeypatch.setattr(history.store, '_any_event', any_event)
     history._EVENTS.clear()
+    history._event(None, 'p', (1, 2), 'e1', 'T')                  # off (member requests): no memo
+    history._event(None, 'p', (1, 2), 'e1', 'T')
+    assert len(calls) == 2 and not history._EVENTS
+    calls.clear()
+    monkeypatch.setattr(history, '_EVENTS_ON', [True])
     a = history._event(None, 'p', (1, 2), 'e1', 'T')
     b = history._event(None, 'p', (1, 2), 'e1', 'T')
     assert a == b == {'event': 'e1', 'before': 'T'} and calls == [('e1', 'T')]
@@ -125,3 +130,20 @@ def test_event_lookup_is_memoised_per_store_signature_with_identical_answers(mon
     from pathlib import Path
     memo = research._MemoStore(history, Path('p'))
     assert memo._latest_rows is history.store._latest_rows        # everything else is the store itself
+
+
+def test_publish_drops_the_event_memo_when_it_ends(setup, monkeypatch):
+    from sports import expansion_history as history
+    root, path, match, offer = setup
+    offer.update(player_id='native', event_id='native', sport='tennis')
+    atomic_json(path.parent/'matches.json', {match['event_id']: match})
+    monkeypatch.setattr(boards, 'board', lambda req: (200, {'offers': [offer]}))
+    seen = []
+    real = history._event
+
+    def spy(*a):
+        seen.append(history._EVENTS_ON[0])
+        return real(*a)
+    monkeypatch.setattr(history, '_event', spy)
+    assert research.publish('tennis')['with_history'] == 1
+    assert seen and all(seen) and history._EVENTS_ON[0] is False and history._EVENTS == {}

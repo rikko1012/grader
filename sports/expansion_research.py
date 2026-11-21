@@ -198,6 +198,18 @@ def _fresh(entry, now_ts, recheck_s=None):
 
 
 def publish(sport, budget_s=20, results_at=None):
+    """Research for every board offer of the sport -> research.json (worker only). sg-fair: event lookups are memoised
+    for this run only (expansion_history._event) and the memo is dropped when it ends."""
+    from . import expansion_history as history
+    history._EVENTS_ON[0] = True
+    try:
+        return _publish(sport, budget_s, results_at)
+    finally:
+        history._EVENTS_ON[0] = False
+        history._EVENTS.clear()
+
+
+def _publish(sport, budget_s=20, results_at=None):
     from . import expansion_history as history
     from .expansion import isolated_database
     from .contracts import parse_utc
@@ -351,12 +363,17 @@ def publish(sport, budget_s=20, results_at=None):
         events = _events(sport, players, matches)
     except (OSError, ValueError, KeyError, TypeError):
         events = {}                                   # research rows never block the player research
+    researched = len(players)
     doc = document(sport, players, {k: unique[k].get('start') or '' for k in players}, events,
                    results_at or history.results_at(sport))
     players = doc['players']
     history.atomic_json(boards.root(sport) / 'research.json', doc)
-    return {'offers': len(board['offers']), 'markets': len(players),
-            'with_history': sum(bool(x['games']) for x in players.values()), 'at': doc['at']}
+    out = {'offers': len(board['offers']), 'markets': len(players),
+           'with_history': sum(bool(x['games']) for x in players.values()), 'at': doc['at']}
+    if researched > len(players):
+        # sg-fair: entries left out to keep research.json under its read limit (component entries go first) - ops sees it
+        out['dropped_by_size'] = researched - len(players)
+    return out
 
 
 def attach(sport, data):

@@ -1152,24 +1152,30 @@ def _matches(path, stamp, size):
     return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
-_EVENTS = {}   # sg-fair: (path, signature) -> {(event_id, before): event record}; same store file = same answers
+_EVENTS = {}          # sg-fair: (path, signature) -> {(event_id, before): event record}; same store file = same answers
+_EVENTS_ON = [False]  # on only while research.publish runs (worker); member requests never fill it
+_MISS = object()
 
 
 def _event(con, path, signature, event_id, before):
-    """store._any_event, memoised per store file signature. research.publish reads up to 40 stats of one player and
-    each stat looked up the same events again (tennis: ~12 ms a lookup, 15 s budget gone after 6 offers); the answer
-    of one store file for (event, before) never changes, so the result is identical."""
+    """store._any_event, memoised per store file signature while research.publish runs. It reads up to 40 stats of one
+    player and each stat looked up the same events again (tennis: ~12 ms a lookup, the 15 s budget gone after 6 offers);
+    one store file's answer for (event, before) never changes, so the result is identical. research.publish clears it
+    when it ends, so no process keeps it."""
+    if not _EVENTS_ON[0]:
+        return store._any_event(con, event_id, before)
     rows = _EVENTS.get((path, signature))
     if rows is None:
         if len(_EVENTS) >= 8:
             _EVENTS.clear()
         rows = _EVENTS[(path, signature)] = {}
     key = (event_id, before)
-    if key not in rows:
+    event = rows.get(key, _MISS)
+    if event is _MISS:
         if len(rows) >= 50_000:
             rows.clear()
-        rows[key] = store._any_event(con, event_id, before)
-    return rows[key]
+        event = rows[key] = store._any_event(con, event_id, before)
+    return event
 
 
 @lru_cache(maxsize=64)
