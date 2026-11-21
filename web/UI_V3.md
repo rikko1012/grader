@@ -55,8 +55,8 @@ The page files on disk are never edited.
 
 | Route | Files |
 |---|---|
-| `/v3/member.css` | tokens, components, shell, **board, slips, picks, player, account** (`.css`) |
-| `/v3/member.js` | shell, **board, slips, picks, player, account** (`.js`) |
+| `/v3/member.css` | tokens, components, shell, **board, slips, picks, player, account, views, faces** (`.css`) |
+| `/v3/member.js` | shell, **board, slips, picks, player, account, views, faces** (`.js`) |
 | `/v3/record.css` · `.js` | tokens, components, shell, **record** · shell, **record** |
 | `/v3/landing.css` · `.js` | tokens, components, shell, **landing** · shell, **landing** |
 | `/v3/art/<scene>.svg` | the 19 scenes in `web/v3/art/` (fixed list `ui_v3.ART`) |
@@ -82,6 +82,7 @@ Adding a new file to a bundle is a one-line change to `ui_v3.BUNDLES`. Ask the s
 | `web/v3/player.css` · `player.js` | **PLAYER** | hub player card (`#hub-card`, `#hub-detail`, `upgrade-cards.js` output) |
 | `web/v3/landing.css` · `landing.js` | **D** | signed-out landing |
 | `web/v3/account.css` · `account.js` | **D** | member-side account / help / paywall / sign-in states, nav extras |
+| `web/v3/views.css` · `views.js` | **VIEWS** | Moneylines (`#/tools?v3=moneylines`: a v3 section in the hub; `/api/moneylines` + `/api/moneyline-games`, the classic tab's rules, read only while open), Line moves and Lines differ (`#/board?v3=moves\|differ`: the board with the hub's own `#hub-movedOnly` / `#hub-diff` on, a note, Views + More entries, each book's line per row in Lines differ). `tests/test_ui_v3_views_browser.py` |
 | `tests/test_ui_v3_<group>_browser.py` | each group | its own browser tests (see below); `tests/test_ui_v3_browser.py` + `tests/test_ui_v3_gate.py` are SHELL's |
 
 Existing files (`web/*.html`, `upgrade-*.js/css`, `sports/*`) stay untouched: v3 restyles by CSS and, where markup must change, by
@@ -237,3 +238,31 @@ Owner, Nov 20: "stop using BO3.gg we have HLTV". The v3 CS2 card's hero stat gri
   reproduce the saved L10). The Genie's payload on a v3 request goes through the same rules in `v3_hltv.scrub`. Grades, chances, stakes and
   projections are untouched. Test: `tests/test_v3_hltv_only_browser.py` (real stadodo docs, every tab, 390 / 1280, deny-set from the doc's
   BO3.gg fields).
+
+## Card pictures (`faces`, owner 2026-11-20: "Add player and team pictures to cards also")
+
+- **Files:** `web/v3/faces.css` · `faces.js` (last in the member bundle), `img_cache.py`, `img_index.py`, `sports/expansion_images.py`.
+  Shared lines touched: one `ui_v3.BUNDLES` entry each for member.css / member.js, one `server.py` dispatch line + `Handler._img_route`,
+  one line in `workspace_expansion._build` (keeps the sports service's `images` map beside the board), and the research body /
+  collectors in `sports/expansion_board.py`.
+- **Routes (v3 on only; off = the unknown-route answer):** `/img/<p|t>/<sport>/<token>.webp` (stored files only, public, 30-day
+  immutable cache + ETag, 404 for 60 s when not ready) and `/img/index/<sport>.json` (members; which board players have a READY picture).
+- **Sources, exact ids only:** NBA / NFL ESPN athlete id + team abbreviation, soccer / tennis ESPN athlete id where resolved, then the
+  PrizePicks picture of the offer's own player id (shared art and placeholders dropped). Hosts: `a.espncdn.com`, `static.prizepicks.com`.
+- **CS2: no pictures (owner 2026-11-20 "stop using BO3.gg, we have HLTV").** BO3.gg is not a picture source, and the HLTV scraper
+  DB stores no picture URLs (`players`: playerid, name; `teams`: teamid, name, country), so CS2 cards keep the hub's monogram and
+  show no team logo. No `/img/*/cs2/*` route, no CS2 list, nothing registered or stored; `faces.js` never asks for one.
+  LoL: monograms until the owner approves lolesports images.
+- **Desktop rows:** where `board.js` already drew its initial (`.sc-bd-av`) and that sport has pictures, `faces.js` replaces it with
+  the picture box (never two avatars). Phone rows show no avatar (polish2, mock 06); the card hero, slip legs and My picks do.
+- **Never on a member request:** one warmer thread fetches (paced, https, no redirects, 4 MB / 4.2 MP caps; the pixel cap is read
+  from the header before any decode, JPEGs decode at reduced scale), re-encodes WEBP (160 px headshot, 128 px logo on its own
+  contrast disc) and writes atomically under `.cache/img` (20k files / 200 MB bound).
+- **The picture list never makes a member wait:** one request rebuilds a sport's list; every other request gets the last list (an
+  empty one before the first build) at once. Stored pictures move the list at most every 30 s while the warmer works through its
+  queue, and at once when it is idle.
+- **Which card gets which picture (review 2026-11-20):** the card's own sport (row / card record key, leg or Auto-build sport tag,
+  receipt sport) and only that sport's list; LoL or an unknown sport keeps the monogram. The open card uses its exact player id
+  (its line doc, or the NBA / NFL hotlink id) or nothing; an id without a ready picture keeps the monogram. Rows, legs and Auto-build
+  legs without an id use that sport's own board (a name only when one board player has it).
+- **Load:** `python scripts/load_v3_images_700.py . 700` (cold / warm / off phases, slow stub upstream).

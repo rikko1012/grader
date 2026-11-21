@@ -85,3 +85,7 @@ html[data-ui-v3] .sc-v3-bar [data-v3=more]{display:none}
    already sit at 16, so the other sections take the 4px difference */
 @media (max-width:1023px){html[data-ui-v3] #u-hub #hub-center>:is(#hub-picks-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-record-section,#hub-alerts-section,#hub-tools-section){padding-left:calc(var(--sc-gutter) - 12px);padding-right:calc(var(--sc-gutter) - 12px)}}
 @media (max-width:1023px){html[data-ui-v3] #u-hub #hub-center:has(>#hub-board-section[hidden])>.h-top{padding-left:calc(var(--sc-gutter) - 12px);padding-right:calc(var(--sc-gutter) - 12px)}}
+/* qa 11-20: the same on the desktop, where the header, the board and Slips start at 24px: My picks, Record, EV, Arbitrage, Sportsbooks,
+   Alerts and Tools (titles at 12px) take the 12px difference, so every page title lines up under the 1T mark */
+@media (min-width:1024px){html[data-ui-v3] #u-hub:not(.h-studio-mode) #hub-center>:is(#hub-picks-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-record-section,#hub-alerts-section,#hub-tools-section){padding-left:12px;padding-right:12px}
+  html[data-ui-v3] #u-hub:not(.h-studio-mode) #hub-center:has(>#hub-board-section[hidden])>.h-top{padding-left:12px;padding-right:12px}}

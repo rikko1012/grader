@@ -189,6 +189,11 @@
         cells[0].dataset.v3w = '1';
         var em = cells[0].querySelector('b > em');
         if (em && em.textContent.trim() === '/') em.textContent = EN;
+        /* thousands as the public record writes them ("1,379–1,240"): the same counts, one format on both record pages */
+        var wl = cells[0].querySelector('b');
+        if (wl) [].forEach.call(wl.childNodes, function (n) {
+          if (n.nodeType === 3 && /^\s*\d{4,}\s*$/.test(n.nodeValue)) n.nodeValue = n.nodeValue.replace(/\d{4,}/, function (d) { return d.replace(/\B(?=(\d{3})+$)/g, ','); });
+        });
         var lab = cells[0].querySelector('span');
         if (lab && lab.firstChild && lab.firstChild.nodeType === 3) lab.firstChild.nodeValue = lab.firstChild.nodeValue.replace(/^Wins \/ losses/, 'Wins' + EN + 'losses');
       }

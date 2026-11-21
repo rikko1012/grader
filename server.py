@@ -5018,6 +5018,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_shared(("asset", "scout-ui"), 200, web_file("scout-ui.css"), "text/css; charset=utf-8", keep=600)
             if u.path.startswith(("/v3/", ui_v3.PREVIEW)) and self._v3_route(u, q):   # v3 (web/UI_V3.md): False = not sent, so
                 return                                                              # off / not the owner = the unknown-route answer below
+            if u.path.startswith("/img/") and self._img_route(u, q):                       # v3 card pictures (img_cache.py): v3 off =
+                return                                                              # the unknown-route answer below
             if u.path == "/alerts/unsubscribe":
                 return self.send(*unsubscribe_page(q.get("m"), q.get("t")))
             if u.path == "/health":
@@ -6508,6 +6510,34 @@ class Handler(BaseHTTPRequestHandler):
         allow = {x.strip().lower() for x in os.environ.get("SPORTS_UI_ALLOW", "").split(",") if x.strip()}
         user = whop_auth.cookie_user(self.cookie(whop_auth.COOKIE)) if allow else None
         return bool(user) and sports_allow_id(user) in allow and self._sports_owner()
+
+    def _img_route(self, u, q):
+        """/img/<p|t>/<sport>/<token>.webp (stored pictures only, never an upstream call on this thread) and /img/index/<sport>.json
+        (members: which board players have a READY picture; the same gates as that sport's /api/upgrade/board read, so a sport a
+        member cannot see is a 404 here too). Only while v3 is on for this request; False = not sent."""
+        if not self._v3_on():
+            return False
+        import img_cache
+        m = img_cache.INDEX_ROUTE.match(u.path)
+        if m:
+            if not self.allowed():
+                self.send(403, {"error": "members only"})
+                return True
+            import workspace_api
+            if not self._upgrade_on(q) or workspace_api._sport_q(self, sys.modules[__name__], {"sport": m.group(1)}) is None:
+                self.send(404, {"error": "not found"})
+                return True
+            import img_index
+            body = img_index.index(sys.modules[__name__], m.group(1))
+            # the empty list (sent while the first build runs) has its own key: it never replaces the real list's ETag / gzip copy
+            self.send_shared(("img_index", m.group(1)) + (("empty",) if body is img_index.EMPTY else ()), 200, body, keep=60)
+            return True
+        hit = img_cache.answer(u.path, self.headers.get("If-None-Match"))
+        if hit is None:
+            return False
+        code, body, ctype, hdrs = hit
+        self.send(code, body, ctype, hdrs)
+        return True
 
     def _v3_route(self, u, q):
         """/v3/* assets and the owner's /preview/v3 switch. True = answered; False = not for this request (nothing was sent, so the

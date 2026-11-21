@@ -111,7 +111,7 @@
       var g = read.querySelector('.sc-grade'), lab = 'Lean ' + (r.scout.side === 'over' ? 'Over' : 'Under');
       if (!g) read.insertAdjacentHTML('beforeend', '<span class="sc-grade sc-grade--sm sc-grade--lean">' + esc(lab) + '</span>');
       var sm = read.querySelector(':scope > small:not(.sb-stake)');
-      if (sm && sm.textContent === 'No grade yet') sm.textContent = 'Model estimate';
+      if (sm && /^(No grade: )?No grade yet$/.test(sm.textContent)) sm.textContent = 'Model estimate';   /* the leg's own read is "No grade: No grade yet" (upgrade.js) */
     }
   }
   function decorateCard(li) {                               /* Auto-build slip cards: initials when the leg has no face */
@@ -219,7 +219,19 @@
       if (n.textContent !== t) n.textContent = t;
       rail.classList.toggle('sb-has-stat', !!t);
     };
-    if (status) { new MutationObserver(subLine).observe(status, {childList: true, characterData: true, subtree: true}); setTimeout(subLine, 0); }
+    /* qa 11-20: on a phone / tablet the generated slips sit far below the form (about 1,800px on a phone) and only the bar's one-line
+       subtitle changed, so a tap on Generate looked like nothing happened: a fresh batch brings its first card into view (a member's own
+       scrolling afterwards is left alone; the desktop shows the rail beside the form, unchanged) */
+    var lastStat = status ? status.textContent : '';
+    var showBatch = function () {
+      var t = status ? status.textContent : '';
+      if (t === lastStat) return;
+      lastStat = t;
+      if (!/^\d+ of \d+ slips? generated/.test(t.trim()) || !(window.matchMedia && window.matchMedia('(max-width: 1023px)').matches)) return;
+      var first = document.querySelector('#hub-generated .h-batch-head') || document.querySelector('#hub-generated .h-generated-card') || document.getElementById('hub-generated');
+      if (first && first.scrollIntoView) first.scrollIntoView({block: 'start'});
+    };
+    if (status) { new MutationObserver(function () { subLine(); showBatch(); }).observe(status, {childList: true, characterData: true, subtree: true}); setTimeout(subLine, 0); }
     var how = [].slice.call(gen.children).filter(function (c) { return c.tagName === 'DETAILS'; })[0];
     if (how) build.appendChild(how);
     controls.hidden = true;                                  /* now empty: its children moved into the panels and the rail */
@@ -325,7 +337,12 @@
       if (done || sec.hidden) return;
       done = true;
       var slip = tab('slip'), build = tab('build');
-      if (!count() && slip && slip.getAttribute('aria-selected') === 'true' && build) { auto = true; build.click(); }
+      if (!count() && slip && slip.getAttribute('aria-selected') === 'true' && build) {
+        var had = document.activeElement;
+        auto = true; build.click();
+        /* the hub focuses the tab it selects (keyboard use); our own switch is not a member's press, so no focus ring on arrival */
+        if (document.activeElement === build && had !== build) build.blur();
+      }
     }
     /* the switch is ours until the member picks a tab: once the slip holds picks (a saved slip that loads late, or a pick added from
        the board) My slip comes back, so a member with picks never lands on Auto-build because of it */
@@ -334,7 +351,7 @@
       if (!auto || !count() || sec.hidden) return;       /* hidden: done the next time Slips opens (the hidden observer) */
       auto = false;
       var slip = tab('slip');
-      if (slip && slip.getAttribute('aria-selected') !== 'true') slip.click();
+      if (slip && slip.getAttribute('aria-selected') !== 'true') { var had = document.activeElement; slip.click(); if (document.activeElement === slip && had !== slip) slip.blur(); }
     }
     new MutationObserver(function () { check(); back(); }).observe(sec, {attributes: true, attributeFilter: ['hidden']});
     var n = document.getElementById('hub-studio-tab-n');
