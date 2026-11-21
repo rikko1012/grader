@@ -1,0 +1,45 @@
+{
+ "version": "ac-2",
+ "flag": "NBA_ASSISTS_CAL2",
+ "market": "nba:assists",
+ "lambda": 20.0,
+ "params": {
+  "b": 0.473295,
+  "form": "q = sigmoid(b * logit P_raw(Over | no push)), zero intercept"
+ },
+ "fitted_on": {
+  "rows": 3807,
+  "game_days": 26,
+  "games": 203,
+  "first_game_day": "2026-10-24",
+  "last_game_day": "2026-11-20",
+  "population": "P1 (last sm-1 forecast >= 30 min before start, one row per offer line), PrizePicks + Underdog, win/loss only",
+  "source": "audit_1121 data/nba train.csv + holdout.csv (GET-only exports)"
+ },
+ "walk_forward": {
+  "test_days": "2026-10-28..2026-11-20 (23)",
+  "rows": 3368,
+  "games": 179,
+  "verdict": "PASS (i)",
+  "logloss_cal_minus_raw": -0.0055,
+  "ci_game": [
+   -0.0106,
+   -0.0002
+  ],
+  "ci_day": [
+   -0.0108,
+   -0.0009
+  ],
+  "lag_d2": {
+   "mean": -0.0058,
+   "ci_game": [
+    -0.0109,
+    -0.0005
+   ]
+  },
+  "share_over": 0.4005,
+  "over_rate": 0.4822,
+  "evidence": "C:/Users/tikic/cs2_scout_ops/logs/audit_1121/round2/nba-cal/"
+ },
+ "sha": "764f8955d2fb64ed"
+}

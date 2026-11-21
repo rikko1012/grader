@@ -82,6 +82,16 @@ Switches: `SPORTS_CAL_MI=0` (global off); per market `params["<lg>:<stat>"].on`.
 `<SPORTS_DATA_DIR>/model/cal_mi.json` (owner's Shell `python -m sports.model.cal fit`), else the committed default
 `sports/model/artifacts/cal_mi_default.json`; invalid -> next; none valid -> off.
 
+**ac-2 (NBA assists, 2026-11-21, `sports/model/ac2.py`, flag `NBA_ASSISTS_CAL2`, default on, rollback `=0`).** cal-mi-1
+fails A8a for nba:assists every day (its intercept pushes the share favouring Over to ~0.32 vs over rate ~0.48), so
+assists was the only NBA stat shown at the raw sm-1 chance. ac-2 shows assists at q = sigmoid(b logit P_raw), zero
+intercept (sides never change; share Over = raw share), b = 0.4733 (penalised ML, ridge 20 toward 1, 3,807 P1 rows,
+26 game days 10-24..11-20). Walk-forward (23 test days, 3,368 rows, 179 games): log loss -0.0055, game CI
+[-0.0106, -0.0002], day CI [-0.0108, -0.0009], share Over 0.40 vs over rate 0.48 -> cal.report PASS (i); d-2 lag
+-0.0058 [-0.0109, -0.0005]. Board order: pc-1 -> cal-mi-1 (wins if ON for assists) -> ac-2. Gradecheck scores assists at
+the ac-2 walk-forward chance (counts.chance_ac2). Evidence: cs2_scout_ops/logs/audit_1121/round2/nba-cal/.
+Owner option `NBA_POINTS_NOLETTER` (default OFF): NBA points keep their side but show Lean instead of a letter.
+
 Committed default (local, A8 8; `sports/research/results/cal_mi_local_nba_1023.json`): 443 reconstructed NBA props of
 one night (7 games), 188 with a market chance (Kalshi / Polymarket only). Leave-one-game-out, live -> cal-mi:
 points log loss 0.789 -> 0.722 (game CI -0.113..-0.012), threes 0.745 -> 0.701 (-0.106..-0.011), rebounds 0.732 -> 0.704
