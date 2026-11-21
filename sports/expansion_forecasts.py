@@ -181,6 +181,10 @@ def fit(offer, facts, now):
     context = facts.get('context') or {}
     if any(context.get(k) and parse_utc(context[k])>parse_utc(now) for k in ('surface_known_at','format_known_at')):
         return None, 'future_context'
+    if facts.get('doubles'):
+        # doubles-1 (soccer-grades-1120 fair): a tennis pair line - its own population model (expansion_doubles)
+        from . import expansion_doubles
+        return expansion_doubles.fit(offer, facts, now)
     component = stats.model_of(offer)
     if component == 'first_half_goals' and facts.get('scope') == 'first_half':
         component = None    # first-half goal history in the facts (no collector writes it today): the e6e155d count path
@@ -415,6 +419,9 @@ def make_forecast(offer, facts, now):
     if fitted.get('component_model') and not fitted.get('thin_model'):
         # 0 units with a definite reason by walk-forward tier (display gd-1 keeps the letter on a 0U line).
         result.update(units=0.0, stake_reason=stats.STAKE_REASONS[fitted['stake_tier']])
+    elif fitted.get('doubles_model'):
+        from .expansion_doubles import REASONS as DOUBLES_REASONS
+        result.update(units=0.0, stake_reason=DOUBLES_REASONS[fitted['stake_tier']])
     elif fitted.get('thin_model'):
         result.update(units=0.0, stake_reason=THIN_REASONS[fitted['stake_tier']])
     if grade.letter is None:
@@ -644,6 +651,25 @@ def settle(sport, now=None, budget_s=3):
             if time.monotonic() >= deadline:
                 break
             comp, eid = event['competition'],event['event_id']
+            if '_doubles:' in eid:
+                # doubles-1: the final's games / sets from doubles-matches.json (no singles store holds doubles)
+                from . import expansion_doubles
+                for row in c.execute('SELECT id,payload FROM forecasts WHERE competition=? AND event_id=?',(comp,eid)):
+                    f = json.loads(row['payload'])
+                    actual, result_ids = expansion_doubles.actual(f, boards.root(sport))
+                    if actual is None:
+                        continue
+                    rid = digest([f['id'],result_ids])
+                    outcome = 'push' if actual==f['line'] else 'over' if actual>f['line'] else 'under'
+                    report = {'forecast_id':f['id'],'actual':actual,'outcome':outcome,
+                              'won':None if outcome=='push' else outcome==f['side'],
+                              'projection_error':f['projection']-actual,'result_ids':result_ids,'known_at':now,
+                              'kind':'model_evaluation','book_settlement':False}
+                    added += c.execute('INSERT OR IGNORE INTO reviews VALUES (?,?,?,?)',
+                                       (rid,f['id'],now,encode(report))).rowcount
+                c.execute('INSERT OR REPLACE INTO checked VALUES (?,?)',(comp+'|'+eid,now))
+                c.commit()
+                continue
             path = isolated_database(boards.root(sport).parent,comp)
             if not path.exists():
                 continue

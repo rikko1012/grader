@@ -846,6 +846,13 @@ def collect(sport, max_requests=16, max_seconds=150):
                     counts['errors'].append(type(e).__name__)
                     phase_ok = False
                     continue
+                if sport == 'tennis':
+                    # doubles-1 (soccer-grades-1120 fair): the same body's doubles fixtures, own bounded file
+                    try:
+                        from . import expansion_doubles
+                        expansion_doubles.absorb(directory, expansion_doubles.parse(body, comp, now_utc()))
+                    except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
+                        counts['errors'].append('doubles_' + type(e).__name__)
                 grouped = {}
                 for event in body.get('events') or []:
                     actual = soccer_competition(event) if sport == 'soccer' else comp

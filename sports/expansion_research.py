@@ -222,6 +222,8 @@ def publish(sport, budget_s=20, results_at=None):
         matches = history._matches(str(matches_path), st.st_mtime_ns, st.st_size) if st.st_size <= 3_000_000 else []
     except (OSError, ValueError):
         matches = []
+    from . import expansion_doubles as doubles
+    doubles_fixtures = doubles.load(boards.root(sport)) if sport == 'tennis' else {}
     links = None
     if sport == 'soccer':
         from .expansion_squads import load as load_links
@@ -238,6 +240,11 @@ def publish(sport, budget_s=20, results_at=None):
             continue
         started = time.monotonic()
         offer = unique[k]
+        if sport == 'tennis' and doubles.is_pair(offer):
+            # doubles-1: a pair line - fixture from doubles-matches.json, no singles store read (expansion_doubles)
+            players[k] = doubles.facts(offer, doubles_fixtures, now_utc())
+            spent[group] += time.monotonic() - started
+            continue
         identity = history.resolve(offer, matches, links)
         scope = 'regulation' if sport == 'soccer' and offer['scope'] == 'full_game' else offer['scope']
         component = model_of(offer)
