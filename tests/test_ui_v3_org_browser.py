@@ -5,7 +5,7 @@
 - Edge: EV and Arbitrage are one tap away on both surfaces (desktop header, phone Edge tab); the Edge strip on top of each edge tool
   switches between EV, Arbitrage, Line moves, Lines differ, Sportsbooks and Moneylines in one tap; the Edge tab reopens the last one.
 - With no edge tool (their flags off) the phone bar is the previous one (Board · Slips · My picks · Record · More) and no strip shows.
-- Tools repeats neither Sportsbooks' Game lines nor the EV / Arbitrage sheet; its cards name and open EV and Arbitrage.
+- Tools does not repeat the EV / Arbitrage sheet; its cards name and open EV and Arbitrage.
 - No sideways scroll, no script error, dark and light. V3_SHOTS=<folder> keeps screenshots."""
 import os
 from pathlib import Path
@@ -162,7 +162,7 @@ def test_with_ev_and_arbitrage_off_edge_holds_the_rest(browser, env, monkeypatch
         c.close()
 
 
-def test_tools_repeats_no_other_page_and_names_ev_and_arbitrage(browser, env, monkeypatch):
+def test_tools_does_not_repeat_the_price_sheet_and_names_ev_and_arbitrage(browser, env, monkeypatch):
     prod(monkeypatch)
     c, p = v3_page(browser, env, monkeypatch, "board", DESK, "dark")
     try:
@@ -170,7 +170,6 @@ def test_tools_repeats_no_other_page_and_names_ev_and_arbitrage(browser, env, mo
         p.locator(".sc-v3-bar [data-v3-nav=tools]").click()
         p.wait_for_selector("#hub-tools-section:not([hidden])")
         p.wait_for_function("document.querySelector('#hub-tools-body article[data-v3-tool=arb]')")
-        assert p.evaluate("!document.getElementById('hub-game-prices') || !document.getElementById('hub-game-prices').offsetParent")
         assert p.evaluate("!document.querySelector('#hub-tools-body>#hub-market-tools') || !document.querySelector('#hub-tools-body>#hub-market-tools').offsetParent")
         titles = p.evaluate("[...document.querySelectorAll('#hub-tools-body article[data-v3-tool] h2')].map(e=>e.textContent)")
         assert titles == ["EV", "Arbitrage"], titles

@@ -242,13 +242,11 @@
   function pressEdge(it) {
     if (!it || !it.el.isConnected) return;
     try { localStorage.setItem(EDGE_KEY, it.key); } catch (e) { /* storage blocked: EV stays the default */ }
+    var other = {moves: 'hub-diff', differ: 'hub-movedOnly'}[it.key], q = other && document.getElementById(other);
+    if (q && q.getAttribute('aria-pressed') === 'true') q.click();   /* one board view at a time, as the strip shows one current tool */
     if (it.quick) {
       var bs = document.getElementById('hub-board-section'), board = hubBtn('board');
       if (bs && bs.hidden && board) board.click();
-      ['hub-movedOnly', 'hub-diff'].forEach(function (id) {   /* one board view at a time, as the strip shows one current tool */
-        var q = document.getElementById(id);
-        if (q && q !== it.el && q.getAttribute('aria-pressed') === 'true') q.click();
-      });
       if (it.el.getAttribute('aria-pressed') !== 'true') it.el.click();
       return;
     }
@@ -423,8 +421,7 @@
     return {slips: 'slips', results: 'record', record: 'record', picks: 'picks', tools: 'tools', alerts: 'tools', ev: 'ev', arb: 'arb', books: 'books'}[k] || 'board';
   }
   function paintCurrent() {
-    var k = currentKey(), ek = edgeNow();
-    if (ek === 'moves' || ek === 'differ' || ek === 'moneylines') k = 'edge';      /* not a header item: the Edge strip marks it */
+    var k = currentKey(), ek = edgeNow();                     /* header: the hub section on screen; the Edge strip marks the tool */
     bar.querySelectorAll('.sc-nav [data-v3-nav]').forEach(function (a) { if (a.getAttribute('data-v3-nav') === k) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     var inTabs = false;
     var tk = ek ? 'edge' : k;
@@ -453,14 +450,13 @@
     if (et.hidden === edge) et.hidden = !edge;
     if (rt.hidden !== edge) rt.hidden = edge;
   }
-  /* Tools (v3 only): no second copy of what has its own place. With Sportsbooks on, its Game lines are not repeated in Tools; with
-     EV / Arbitrage on, the combined price sheet is not repeated either (it is those two pages) and the two cards that led to it
+  /* Tools (v3 only): with EV / Arbitrage on, the combined price sheet is not repeated in Tools (it is those two pages) and the two
+     cards that led to it
      name them: "EV" and "Arbitrage", opening the pages. The hub repaints Tools, so this runs on each sync; the CSS does the hiding. */
   function tidyTools() {
     var body = document.getElementById('hub-tools-body'), h = document.getElementById('u-hub');
     if (!body || !h) return;
     var ev = !!hubBtn('ev'), arb = !!hubBtn('arb');
-    root.classList.toggle('sc-v3-has-books', !!hubBtn('books'));
     root.classList.toggle('sc-v3-has-edge', ev || arb);
     body.querySelectorAll('.h-tool-grid article').forEach(function (art) {
       var to = art.querySelector('[data-hub="section"][data-id="ev"]') ? 'ev' : art.querySelector('[data-hub="mt-jump"]') && arb ? 'arb' : '';
