@@ -7,6 +7,11 @@ their team versus that team". Teams also switch orgs (3DMAX's five became Envy o
   hltv.resolve_team_id), when that series is at most LINEUP_DAYS old. A benched player does not play, so he is not in that lineup.
   Fewer than 5 ids or no recent series (an org whose new roster has not played under it yet): no core, no core H2H - the
   exact-opponent meetings alone, as before.
+- Stale lineups (owner review 2026-11-20: 9% of teams, ENCE's five play on as ex-ENCE, 3DMAX's as Envy): a player of that five
+  whose newer HLTV series (date, then match id) was for ANOTHER team id has left. MIN_CORE (3) or more gone: that team id has no
+  current lineup (None - no core, the exact-name meetings as before); one or two gone: they are dropped from the five. HLTV has no
+  separate active-roster table: player_roles.hltv_team is each player's newest HLTV team (it lists 'ex-ENCE'), so the newest series
+  per player is the roster evidence.
 - A past series of his is an H2H when at least MIN_CORE (3) of those five played on the side AGAINST him in it, whatever that
   side was called then and whichever team he played for. Series where they were his teammates never count.
 - The meetings with the same org (today's rule, any lineup) still count: the owner said "not only". The card marks each meeting
@@ -19,11 +24,14 @@ H2H input (cs2_scout.h2h, grader h2h_series) is untouched. The walk-forward test
 research/h2h_core_2026_11_20 (FROZEN_DEFINITIONS.md, RESULTS.md).
 
 Reads: one cached read per opponent (CORE_TTL), one per player for the team core meetings; single-flight per key, at most
-SLOTS reads at a time, the last good answer is kept through a failed read and a failure is never cached (memory:
+SLOTS reads at a time, the last good answer is kept through a failed read and a failure is never cached but always logged (memory:
 transient-failure-rule)."""
+import logging
 import threading
 import time
 from datetime import date, timedelta
+
+log = logging.getLogger("h2h_core")
 
 MIN_CORE = 3        # owner: "3 people = a team's core"
 LINEUP = 5
@@ -42,6 +50,28 @@ def current_lineup(rows):
     rows = sorted(((int(p), int(n or 0)) for p, n in rows or [] if p is not None), key=lambda r: (-r[1], r[0]))
     ids = [p for p, _ in rows[:LINEUP]]
     return ids if len(ids) == LINEUP else None
+
+
+def moved_players(newest, team_id, series_date, series_mid):
+    """newest: (playerid, teamid, date, matchid) = each lineup player's newest HLTV series -> the ids who have since played for
+    another team id: a series newer than the lineup series (date, then match id: a date has day precision) under a team id other
+    than team_id. Their newest series being the lineup series itself (or older) is no move."""
+    ref = (str(series_date)[:10], int(series_mid))
+    out = set()
+    for p, tid, d, mid in newest or ():
+        if tid is not None and int(tid) != int(team_id) and (str(d)[:10], int(mid)) > ref:
+            out.add(int(p))
+    return out
+
+
+def live_lineup(ids, moved, min_core=MIN_CORE):
+    """The five without the players who have left; None when min_core or more left (that team id's five play elsewhere now)."""
+    if not ids:
+        return None
+    gone = {int(x) for x in moved or ()}
+    if len(gone & set(ids)) >= min_core:
+        return None
+    return [p for p in ids if p not in gone]
 
 
 def core_matches(rows, current_ids, min_core=MIN_CORE):
@@ -98,13 +128,21 @@ def team_core_meetings(mine, theirs, played, scores=None):
 
 
 # ---------------------------------------------------------------- HLTV reads
+_SERIES_SQL = """
+SELECT m.matchid, mo.date FROM matches m JOIN match_overview mo USING (matchid)
+WHERE m.teamid = %(tid)s AND m.sideid = 0 AND mo.date >= %(fresh)s
+ORDER BY mo.date DESC, m.matchid DESC LIMIT 1
+"""
 _LINEUP_SQL = """
 SELECT ps.playerid, count(*) FROM player_stats ps
-WHERE ps.sideid = 0 AND ps.teamid = %(tid)s AND ps.matchid = (
-    SELECT m.matchid FROM matches m JOIN match_overview mo USING (matchid)
-    WHERE m.teamid = %(tid)s AND m.sideid = 0 AND mo.date >= %(fresh)s
-    ORDER BY mo.date DESC, m.matchid DESC LIMIT 1)
+WHERE ps.sideid = 0 AND ps.teamid = %(tid)s AND ps.matchid = %(mid)s
 GROUP BY ps.playerid
+"""
+_NEWEST_SQL = """
+SELECT DISTINCT ON (ps.playerid) ps.playerid, ps.teamid, mo.date, ps.matchid
+FROM player_stats ps JOIN match_overview mo USING (matchid)
+WHERE ps.playerid = ANY(%(ids)s) AND ps.sideid = 0 AND mo.date >= %(since)s AND mo.date <= %(until)s
+ORDER BY ps.playerid, mo.date DESC, ps.matchid DESC
 """
 _CORE_SQL = """
 SELECT ps.matchid, ps.teamid, t.name, mo.date, array_agg(DISTINCT ps.playerid)
@@ -116,11 +154,22 @@ HAVING count(DISTINCT ps.playerid) >= %(k)s
 
 
 def _lineup_of(cur, tid, today=None):
-    """The five of the team's newest HLTV series within LINEUP_DAYS: an org whose last series is older (a new roster that has not
-    played under it yet, an inactive team) has no current lineup here, so no roster-core H2H (never an old roster's)."""
-    fresh = ((today or date.today()) - timedelta(days=LINEUP_DAYS)).isoformat()
-    cur.execute(_LINEUP_SQL, {"tid": tid, "fresh": fresh})
-    return current_lineup(cur.fetchall())
+    """The five of the team's newest HLTV series within LINEUP_DAYS, without the players who have since played for another team id
+    (live_lineup): an org whose last series is older (a new roster that has not played under it yet, an inactive team) or whose five
+    play elsewhere now (ENCE -> ex-ENCE, 3DMAX -> Envy) has no current lineup here, so no roster-core H2H (never an old roster's)."""
+    today = today or date.today()
+    fresh = (today - timedelta(days=LINEUP_DAYS)).isoformat()
+    cur.execute(_SERIES_SQL, {"tid": tid, "fresh": fresh})
+    row = cur.fetchone()
+    if not row:
+        return None
+    mid, d = row[0], row[1]
+    cur.execute(_LINEUP_SQL, {"tid": tid, "mid": mid})
+    ids = current_lineup(cur.fetchall())
+    if not ids:
+        return None
+    cur.execute(_NEWEST_SQL, {"ids": ids, "since": str(d)[:10], "until": today.isoformat()})
+    return live_lineup(ids, moved_players(cur.fetchall(), tid, d, mid))
 
 
 def _names(cur, ids):
@@ -136,7 +185,7 @@ def _core_of(cur, ids, since):
 def read_opponent(cur, opponent, today=None):
     """{"team_id", "lineup": [{id, name}], "names", "matches"} for tonight's opponent, or None when HLTV has no exact team / lineup."""
     import hltv
-    tid = hltv.resolve_team_id(cur, opponent)
+    tid = hltv.canonical_team_id(cur, opponent)      # raises on a database failure (never cached as 'no core'); None = no exact team
     if tid is None:
         return None
     ids = _lineup_of(cur, tid, today)
@@ -231,8 +280,9 @@ def _cached_state(key, read, ttl=CORE_TTL, wait=SLOT_WAIT):
                 val, ok = read(), True
             finally:
                 SLOTS.release()
-    except Exception:
+    except Exception as e:                       # noqa: BLE001 - never an error on a card; logged, retried in FAIL_RETRY
         val, ok = None, False
+        _note_failure(key, e)
     with _LOCK:
         prev = _CACHE.get(key)
         known = ok or bool(prev and prev[3])
@@ -244,6 +294,31 @@ def _cached_state(key, read, ttl=CORE_TTL, wait=SLOT_WAIT):
         _INFLIGHT.pop(key, None)
     ev.set()
     return val, known
+
+
+FAILS = {"n": 0, "last": None, "at": None}
+
+
+def _err(e):
+    """Log text for a failed read without connection details: a transient failure is hltv.err_text's 'unreachable'; a query error
+    (a broken statement, a missing column) keeps the server's first message line - it names the SQL problem, never the DSN."""
+    import hltv
+    if hltv.is_transient(e):
+        return hltv.err_text(e)
+    code = getattr(e, "pgcode", None)
+    msg = (str(e).strip().splitlines() or [""])[0][:200]
+    return f"{type(e).__name__} [{code}]: {msg}" if code else hltv.err_text(e)
+
+
+def _note_failure(key, e):
+    try:
+        text = _err(e)
+    except Exception:                            # noqa: BLE001
+        text = type(e).__name__
+    with _LOCK:
+        FAILS.update(n=FAILS["n"] + 1, last=f"{key[0]}: {text}", at=time.time())
+    log.warning("h2h_core read failed (%s %s): %s - last good answer kept, retry in %ss", key[0], key[1] if len(key) > 1 else "",
+                text, FAIL_RETRY)
 
 
 def _with_cursor(fn):

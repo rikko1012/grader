@@ -147,27 +147,36 @@ class _Cur:
             self.out = [r for r in FX["core_rows"] if r[3] >= params["since"] and len(ids & set(r[4])) >= params["k"]]
         elif "FROM players" in sql:
             self.out = [(int(k), v) for k, v in FX["names"].items() if int(k) in params["ids"]]
-        elif "LIMIT 1)" in sql:
+        elif sql is h2h_core._SERIES_SQL:
             assert params["tid"] == FX["opponent_team_id"]
+            self.out = [(FX["lineup_from_match"], "2026-10-14")]
+        elif sql is h2h_core._LINEUP_SQL:
+            assert params["tid"] == FX["opponent_team_id"] and params["mid"] == FX["lineup_from_match"]
             self.out = [tuple(r) for r in FX["lineup_rows"]]
+        elif sql is h2h_core._NEWEST_SQL:                                   # the extract ends before 2026-10-15: nobody has moved
+            assert params["until"] == "2026-10-15"
+            self.out = [(p, FX["opponent_team_id"], "2026-10-14", FX["lineup_from_match"]) for p in params["ids"]]
         else:
             raise AssertionError(sql)
 
     def fetchall(self):
         return self.out
 
+    def fetchone(self):
+        return self.out[0] if self.out else None
+
 
 def test_read_opponent_flow_on_real_rows(monkeypatch):
     import hltv
     from datetime import date
-    monkeypatch.setattr(hltv, "resolve_team_id", lambda cur, name: FX["opponent_team_id"] if name == "Envy" else None)
+    monkeypatch.setattr(hltv, "canonical_team_id", lambda cur, name: FX["opponent_team_id"] if name == "Envy" else None)
     cur = _Cur()
     core = h2h_core.read_opponent(cur, "Envy", today=date(2026, 10, 15))
     assert {p["id"] for p in core["lineup"]} == ENVY_FIVE and {p["name"] for p in core["lineup"]} >= {"Maka", "Graviti"}
     assert core["matches"][2397317]["side"] == 4914 and core["matches"][2397317]["team"] == "3DMAX"
     assert core["matches"][2392665]["faced"] == sorted([13138, 13497, 14176, 21969])
     assert h2h_core.read_opponent(_Cur(), "Unknown Org") is None             # no exact HLTV team: no core
-    assert all(p.get("since", "2025-10-15") == "2025-10-15" for _, p in cur.sql if p and "since" in p)   # 365 days back
+    assert all(p["since"] == "2025-10-15" for s, p in cur.sql if p and "since" in p and s is not h2h_core._NEWEST_SQL)   # 365 days back
     assert any((p or {}).get("fresh") == "2026-08-16" for _, p in cur.sql)  # the lineup is a series of the last 60 days, never an old roster
 
 
@@ -201,9 +210,14 @@ class _TeamCur(_Cur):
         self.sql.append((sql, params))
         if "ORDER BY mo.date DESC, ps.matchid DESC LIMIT 1" in sql:
             self.out = [(self.MIBR,)]
-        elif "LIMIT 1)" in sql:
+        elif sql is h2h_core._SERIES_SQL:
             assert params["tid"] == self.MIBR
+            self.out = [(2399000, "2026-10-10")]
+        elif sql is h2h_core._LINEUP_SQL:
+            assert params["tid"] == self.MIBR and params["mid"] == 2399000
             self.out = [(FX["player_id"], 2), (101, 2), (102, 2), (103, 2), (104, 2)]
+        elif sql is h2h_core._NEWEST_SQL:
+            self.out = [(p, self.MIBR, "2026-10-10", 2399000) for p in params["ids"]]
         elif "array_agg" in sql:
             assert FX["player_id"] not in params["ids"] and set(params["ids"]) == {101, 102, 103, 104}
             self.out = [[2397317, self.MIBR, "MIBR", "2026-09-02", [101, 102, 103]],
@@ -234,3 +248,105 @@ def test_read_team_core_flow(monkeypatch):
     assert (out[0]["team"], out[0]["opponent"], out[0]["maps_won"], out[0]["maps_lost"]) == ("MIBR", "3DMAX", 2, 1)
     assert out[0]["faced"] == ["Maka", "Lucky", "Graviti"]
     assert h2h_core.read_team_core(_TeamCur(), "tomaszin", "MIBR", None) == []
+
+
+# ---------------------------------------------------------------- stale lineups (owner review 2026-11-20: ENCE -> ex-ENCE, 3DMAX -> Envy)
+ST = json.load(open(os.path.join(os.path.dirname(__file__), "fixtures", "h2h_core_stale_lineups.json"), encoding="utf-8"))["teams"]
+
+
+class _StaleCur:
+    """_lineup_of's three reads answered from the production rows in h2h_core_stale_lineups.json."""
+
+    def __init__(self, team):
+        self.t, self.out, self.sql = ST[team], [], []
+
+    def execute(self, sql, params=None):
+        self.sql.append((sql, params))
+        if sql is h2h_core._SERIES_SQL:
+            assert params["tid"] == self.t["team_id"]
+            self.out = [tuple(self.t["series"])]
+        elif sql is h2h_core._LINEUP_SQL:
+            assert params["mid"] == self.t["series"][0]
+            self.out = [tuple(r) for r in self.t["lineup_rows"]]
+        elif sql is h2h_core._NEWEST_SQL:
+            assert params["since"] == self.t["series"][1] and set(params["ids"]) == {r[0] for r in self.t["lineup_rows"]}
+            self.out = [tuple(r) for r in self.t["newest"]]
+        else:
+            raise AssertionError(sql)
+
+    def fetchall(self):
+        return self.out
+
+    def fetchone(self):
+        return self.out[0] if self.out else None
+
+
+@pytest.mark.parametrize("team", ["3DMAX", "ENCE"])
+def test_a_team_whose_five_play_for_another_team_id_has_no_lineup(team):
+    from datetime import date
+    t = ST[team]
+    five = {r[0] for r in t["lineup_rows"]}
+    assert h2h_core.moved_players(t["newest"], t["team_id"], t["series"][1], t["series"][0]) == five    # all five moved on
+    assert h2h_core._lineup_of(_StaleCur(team), t["team_id"], today=date(2026, 11, 20)) is None        # no core: name-only H2H
+
+
+@pytest.mark.parametrize("team, was", [("Envy", "3DMAX"), ("ex-ENCE", "ENCE")])
+def test_the_team_they_play_for_now_keeps_the_five(team, was):
+    from datetime import date
+    got = h2h_core._lineup_of(_StaleCur(team), ST[team]["team_id"], today=date(2026, 11, 20))
+    assert sorted(got) == sorted(r[0] for r in ST[was]["lineup_rows"])                                 # the same five, current id
+
+
+def test_read_opponent_3dmax_is_none(monkeypatch):
+    import hltv
+    from datetime import date
+    monkeypatch.setattr(hltv, "canonical_team_id", lambda cur, name: ST[name]["team_id"])
+    assert h2h_core.read_opponent(_StaleCur("3DMAX"), "3DMAX", today=date(2026, 11, 20)) is None
+
+
+def test_moved_rule_edges():
+    five = [1, 2, 3, 4, 5]
+    assert h2h_core.moved_players([(1, 9, "2026-11-01", 101), (2, 9, "2026-11-01", 101)], 7, "2026-11-01", 100) == {1, 2}  # same day, later id
+    assert h2h_core.moved_players([(1, 9, "2026-11-01", 99)], 7, "2026-11-01", 100) == set()      # an earlier series: no move
+    assert h2h_core.moved_players([(1, 7, "2026-11-05", 120)], 7, "2026-11-01", 100) == set()     # newer series, same team id
+    assert h2h_core.live_lineup(five, {1, 2}) == [3, 4, 5]                                         # one or two left: dropped
+    assert h2h_core.live_lineup(five, {1, 2, 3}) is None                                           # three left: no lineup
+    assert h2h_core.live_lineup(five, set()) == five
+
+
+def test_a_failed_read_is_logged_never_silent_and_never_cached(caplog):
+    import logging
+    h2h_core._CACHE.clear()
+
+    class QueryError(Exception):
+        pgcode = "42703"
+
+        def __str__(self):
+            return 'column "nope" does not exist\nLINE 1: SELECT nope'
+
+    def boom():
+        raise QueryError()
+
+    def dropped():
+        raise ConnectionError("could not connect host=secret.example port=5432")
+
+    with caplog.at_level(logging.WARNING, logger="h2h_core"):
+        assert h2h_core._cached_state(("opp", "envy", "d"), boom) == (None, False)
+        msg = " ".join(r.getMessage() for r in caplog.records)
+        assert "h2h_core read failed" in msg and "42703" in msg and 'column "nope"' in msg and "LINE 1" not in msg
+        assert h2h_core.FAILS["n"] >= 1 and "42703" in h2h_core.FAILS["last"]
+        caplog.clear()
+        assert h2h_core._cached_state(("opp", "x", "d"), dropped) == (None, False)
+        msg = " ".join(r.getMessage() for r in caplog.records)
+    assert "unreachable" in msg and "secret.example" not in msg                                    # connection details never logged
+
+
+def test_a_database_blip_in_the_team_lookup_is_a_failure_not_no_core(monkeypatch):
+    import hltv
+    h2h_core._CACHE.clear()
+
+    def blip(cur, name):
+        raise ConnectionError("dropped")
+    monkeypatch.setattr(hltv, "canonical_team_id", blip)
+    monkeypatch.setattr(h2h_core, "_with_cursor", lambda fn: fn(None))
+    assert h2h_core.opponent_core_state("Some Team") == (None, False)                             # unknown (board waits), never 'no core'
