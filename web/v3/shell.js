@@ -359,7 +359,7 @@
     var k = null;
     try { k = localStorage.getItem(EDGE_KEY); } catch (e) { /* storage blocked */ }
     var pick = function (key) { return items.filter(function (it) { return it.key === key && !leavesV3(it); })[0]; };   /* a saved key outside v3 is ignored */
-    return pick(k) || pick('ev') || pick('arb') || pick('books') || items[0];   /* a page of its own before a board view */
+    return pick(k) || pick('ev') || pick('arb') || pick('books') || items.filter(function (it) { return !leavesV3(it); })[0] || items[0];   /* a page of its own before a board view */
   }
   function openMore(btn) {
     if (!sheet) {

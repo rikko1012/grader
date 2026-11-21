@@ -187,40 +187,61 @@ def test_tools_does_not_repeat_the_price_sheet_and_names_ev_and_arbitrage(browse
         c.close()
 
 
+# A Moneylines link that leaves v3 for the classic tab, forced in place of the views' entry so the leaving-v3 case runs on every tree
+# (an extra query key, so the views' own catch of the plain classic Moneylines link does not keep it in v3).
+CLASSIC_ML = r"""(()=>{const a=document.querySelector('#u-hub #hub-more [data-v3x-ml]'); if(!a) return false;
+  a.removeAttribute('data-v3x-ml'); a.setAttribute('href','/?view=classic&from=v3#moneylines'); a.textContent='Moneylines ↗'; return true;})()"""
+
+
+def open_edge(p, size):
+    if size is PHONE:
+        p.locator(".sc-v3-tabs [data-v3-nav=edge]").click()
+    else:
+        p.locator(".sc-v3-bar [data-v3-nav=ev]").click()
+    p.wait_for_selector(".sc-v3-edge:not([hidden])")
+
+
 @pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
 def test_edge_memory_never_points_outside_v3(browser, env, monkeypatch, size):
     """The Edge memory (localStorage scout-v3-edge) only ever names a tool inside v3: a pill that leaves v3 (the hub's classic
     Moneylines link, any view=classic href) is not saved, and a saved key whose target is outside v3 is ignored on load (EV opens).
-    With the views' in-hub Moneylines the saved key is a v3 page and opens in place."""
+    With the views' in-hub Moneylines the pill opens in place, is remembered, and the Edge tab reopens it in v3."""
     prod(monkeypatch)
     c, p = v3_page(browser, env, monkeypatch, "board", size, "dark")
     try:
         p.wait_for_function("document.querySelector('#u-hub .h-sidebar [data-id=ev]') && document.getElementById('hub-diff')", timeout=20000)
-        in_v3 = p.evaluate("!!document.querySelector('#u-hub #hub-more [data-v3x-ml]')")
         start = p.url
-        p.evaluate("localStorage.setItem('scout-v3-edge','moneylines')")
+        if p.evaluate("!!document.querySelector('#u-hub #hub-more [data-v3x-ml]')"):     # the views' Moneylines: a v3 page
+            open_edge(p, size)
+            p.locator(".sc-v3-edge [data-v3-edge=moneylines]").click()
+            p.wait_for_function("document.querySelector('.sc-v3-edge:not([hidden]) [aria-current=page]')?.dataset.v3Edge==='moneylines'")
+            assert "view=classic" not in p.url and "v3=moneylines" in p.url, p.url
+            assert p.evaluate("localStorage.getItem('scout-v3-edge')") == "moneylines"
+            if size is PHONE:
+                p.locator(".sc-v3-tabs [data-v3-nav=board]").click()
+                p.wait_for_selector("#hub-board-section:not([hidden])")
+                p.locator(".sc-v3-tabs [data-v3-nav=edge]").click()
+                p.wait_for_function("document.querySelector('.sc-v3-edge:not([hidden]) [aria-current=page]')?.dataset.v3Edge==='moneylines'")
+                assert "view=classic" not in p.url, p.url
+            p.locator(".sc-v3-tabs [data-v3-nav=board]" if size is PHONE else ".sc-v3-bar .sc-nav [data-v3-nav=board]").click()
+            p.wait_for_selector("#hub-board-section:not([hidden])")
+            p.evaluate(CLASSIC_ML)                                       # now the leaving-v3 case, as without the views
+        p.evaluate("localStorage.setItem('scout-v3-edge','moneylines')")  # a saved key whose target leaves v3
+        open_edge(p, size)
+        if size is PHONE:
+            p.wait_for_selector("#hub-ev-section:not([hidden])")        # ignored: EV opens, not the classic page
+        assert "view=classic" not in p.url, p.url
+        p.wait_for_function("document.querySelectorAll('.sc-v3-edge [data-v3-edge=moneylines] svg').length>=2")   # icon + leaves-v3 mark
+        p.evaluate("localStorage.setItem('scout-v3-edge','arb')")
+        with p.expect_navigation():
+            p.locator(".sc-v3-edge [data-v3-edge=moneylines]").click()
+        assert "view=classic" in p.url, p.url
+        assert p.evaluate("localStorage.getItem('scout-v3-edge')") == "arb"   # the classic tool was not remembered
+        p.goto(start)
+        p.wait_for_function("document.querySelector('#u-hub .h-sidebar [data-id=arb]')", timeout=20000)
         if size is PHONE:
             p.locator(".sc-v3-tabs [data-v3-nav=edge]").click()
-        else:
-            p.locator(".sc-v3-bar [data-v3-nav=ev]").click()
-        p.wait_for_selector(".sc-v3-edge:not([hidden])")
-        if size is PHONE and in_v3:                                      # a v3 Moneylines: the saved key opens it in place
-            p.wait_for_function("document.querySelector('.sc-v3-edge [aria-current=page]')?.dataset.v3Edge==='moneylines'")
-        elif size is PHONE:                                              # a classic Moneylines: the saved key is ignored, EV opens
-            p.wait_for_selector("#hub-ev-section:not([hidden])")
-        assert "view=classic" not in p.url, p.url
-        if not in_v3:
-            p.evaluate("localStorage.setItem('scout-v3-edge','arb')")
-            assert p.locator(".sc-v3-edge [data-v3-edge=moneylines] svg").count() >= 2   # its own icon + the leaves-v3 mark
-            with p.expect_navigation():
-                p.locator(".sc-v3-edge [data-v3-edge=moneylines]").click()
-            assert "view=classic" in p.url, p.url
-            assert p.evaluate("localStorage.getItem('scout-v3-edge')") == "arb"   # the classic tool was not remembered
-            p.goto(start)
-            p.wait_for_function("document.querySelector('#u-hub .h-sidebar [data-id=arb]')", timeout=20000)
-            if size is PHONE:
-                p.locator(".sc-v3-tabs [data-v3-nav=edge]").click()
-                p.wait_for_selector("#hub-arb-section:not([hidden])")
+            p.wait_for_selector("#hub-arb-section:not([hidden])")
         assert not p.errors, p.errors
     finally:
         c.close()
