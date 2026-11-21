@@ -538,6 +538,7 @@ def test_progressive_jpeg_within_the_normal_cap_and_real_sizes_still_encode():
 
 
 def test_encode_peak_memory_stays_small_for_the_biggest_allowed_inputs(tmp_path):
+    pytest.importorskip("psutil")                 # measures peak RSS with psutil (not installed in CI)
     """RSS in a fresh process (Pillow / libjpeg buffers are invisible to tracemalloc), one case at a time: the largest PNG the cap
     allows, a progressive JPEG at the cap (4:4:4, the costliest layout), the largest single-scan baseline JPEG (16 M pixels,
     decoded at reduced scale), and progressive / baseline / multi-scan headers far over their caps (13300 x 13300 was +544 MB when
