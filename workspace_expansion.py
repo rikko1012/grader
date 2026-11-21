@@ -126,11 +126,12 @@ def _record(o, research, forecast=None):
         'research_only': True}
     if forecast:
         f = forecast
-        basis = (f"Model estimate from {f['sample']} completed games at the same stat and period and the average of "
+        unit = 'matches' if o['sport'] == 'tennis' else 'games'
+        basis = (f"Model estimate from {f['sample']} completed {unit} at the same stat and period and the average of "
                  "similar players. " if f.get('thin_model') or f.get('population_model') else
-                 f"Model estimate from {f['sample']} completed games at the same stat and period. ")
+                 f"Model estimate from {f['sample']} completed {unit} at the same stat and period. ")
         detail = (basis +
-                  "The forecast allows for variation between games. Chances are conditional on a non-push result.")
+                  f"The forecast allows for variation between {unit}. Chances are conditional on a non-push result.")
         record['scout'].update(side=f['side'],read_rev=f['id'],p_side=f['p_side'],
             p_over=f['p_over']/(1-f['p_push']),p_under=f['p_under']/(1-f['p_push']),p_push=f['p_push'],
             projection=f['projection'],range80=f['range80'],grade=f['grade'],
