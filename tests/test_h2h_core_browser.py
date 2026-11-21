@@ -35,7 +35,7 @@ def with_oids():
 def test_v3_card_h2h_counts_roster_meetings_and_names_them(browser, env, monkeypatch, size):
     setup(env, monkeypatch, "dark")
     monkeypatch.setattr(hltv, "recent_series", lambda *a, **k: with_oids())
-    monkeypatch.setattr(h2h_core, "opponent_core", lambda opp: CORE)
+    monkeypatch.setattr(h2h_core, "opponent_core_state", lambda opp, peek=False: (CORE, True))
     monkeypatch.setattr(h2h_core, "team_core", lambda nick, team, opp: TEAM_CORE)
     c, p = page(browser, env, size, "dark")
     try:
@@ -69,7 +69,7 @@ def test_v3_card_h2h_counts_roster_meetings_and_names_them(browser, env, monkeyp
 
 def test_v3_card_without_a_core_shows_the_hub_section_unchanged(browser, env, monkeypatch):
     setup(env, monkeypatch, "dark")
-    monkeypatch.setattr(h2h_core, "opponent_core", lambda opp: None)
+    monkeypatch.setattr(h2h_core, "opponent_core_state", lambda opp, peek=False: (None, True))
     c, p = page(browser, env, DESK, "dark")
     try:
         open_card(p, "cs2", "vargo")

@@ -117,7 +117,7 @@ def test_single_flight_one_read_for_many_callers():
 def test_workspace_core_h2h_uses_the_cached_history_and_core(monkeypatch):
     import workspace_api
     ser, mids, oids = _ser()
-    monkeypatch.setattr(h2h_core, "opponent_core", lambda opp: _core() if opp == "Envy" else None)
+    monkeypatch.setattr(h2h_core, "opponent_core_state", lambda opp, peek=False: (_core() if opp == "Envy" else None, True))
     monkeypatch.setattr(h2h_core, "team_core", lambda nick, team, opp: [])
     full = {"ser": ser, "mids": mids, "oids": oids}
     h = workspace_api._core_h2h(None, {"nick": "tomaszin", "team": "MIBR"}, "Envy", 24.5, full=full, team_core=True)
@@ -169,3 +169,68 @@ def test_read_opponent_flow_on_real_rows(monkeypatch):
     assert h2h_core.read_opponent(_Cur(), "Unknown Org") is None             # no exact HLTV team: no core
     assert all(p.get("since", "2025-10-15") == "2025-10-15" for _, p in cur.sql if p and "since" in p)   # 365 days back
     assert any((p or {}).get("fresh") == "2026-08-16" for _, p in cur.sql)  # the lineup is a series of the last 60 days, never an old roster
+
+
+def test_board_cell_waits_while_the_core_is_not_read(monkeypatch):
+    import workspace_api
+    ser, mids, oids = _ser()
+    full = {"ser": ser, "mids": mids, "oids": oids}
+    monkeypatch.setattr(h2h_core, "opponent_core_state", lambda opp, peek=False: (None, False))     # failed read / no slot yet
+    assert workspace_api._core_h2h(None, {}, "Envy", 24.5, board=True, full=full) is workspace_api.CORE_PENDING
+    card = workspace_api._core_h2h(None, {}, "Envy", 24.5, full=full)                              # the card: exact name only
+    assert card == workspace_h2h.h2h(ser, "Envy", 24.5)
+    monkeypatch.setattr(h2h_core, "opponent_core_state", lambda opp, peek=False: (None, True))      # read fine, no core exists
+    b = workspace_api._core_h2h(None, {}, "Envy", 24.5, board=True, full=full)
+    assert b is not workspace_api.CORE_PENDING and b == workspace_h2h.board_h2h(ser, "Envy", 24.5)
+
+
+def test_known_state_survives_a_later_failure(monkeypatch):
+    h2h_core._CACHE.clear()
+    assert h2h_core._cached_state(("k", 1), lambda: None) == (None, True)          # read fine: no core (known)
+    monkeypatch.setattr(h2h_core, "CORE_TTL", 0)
+    assert h2h_core._cached_state(("k", 1), lambda: 1 / 0, ttl=0) == (None, True)  # later failure: still known (last good)
+    assert h2h_core._cached_state(("k", 2), lambda: 1 / 0) == (None, False)        # never read: unknown
+    assert h2h_core.opponent_core_state("Nobody here", peek=True) == (None, False)
+
+
+class _TeamCur(_Cur):
+    """read_team_core's reads on real ids: tomaszin's newest team (MIBR, HLTV 11251 in the extract) and a stand-in score table."""
+    MIBR = 11251
+
+    def execute(self, sql, params=None):
+        self.sql.append((sql, params))
+        if "ORDER BY mo.date DESC, ps.matchid DESC LIMIT 1" in sql:
+            self.out = [(self.MIBR,)]
+        elif "LIMIT 1)" in sql:
+            assert params["tid"] == self.MIBR
+            self.out = [(FX["player_id"], 2), (101, 2), (102, 2), (103, 2), (104, 2)]
+        elif "array_agg" in sql:
+            assert FX["player_id"] not in params["ids"] and set(params["ids"]) == {101, 102, 103, 104}
+            self.out = [[2397317, self.MIBR, "MIBR", "2026-09-02", [101, 102, 103]],
+                        [2390001, self.MIBR, "MIBR", "2026-05-01", [101, 102, 104]],
+                        [2390002, self.MIBR, "MIBR", "2026-04-20", [101, 102]]]
+        elif "SELECT DISTINCT ps.matchid" in sql:
+            self.out = [(2397317,)]                                                 # he played that one: his own H2H
+        elif "FROM matches WHERE" in sql:
+            assert "mapid <> 0" in sql and params["m"] == [2390001]
+            self.out = [(2390001, self.MIBR, 3, 13), (2390001, 4914, 3, 7), (2390001, self.MIBR, 1, 10), (2390001, 4914, 1, 13),
+                        (2390001, self.MIBR, 8, 13), (2390001, 4914, 8, 11)]
+        else:
+            raise AssertionError(sql)
+
+    def fetchone(self):
+        return self.out[0] if self.out else None
+
+
+def test_read_team_core_flow(monkeypatch):
+    import hltv
+    from datetime import date
+    monkeypatch.setattr(hltv, "_player_ids", lambda cur, nick, team: [FX["player_id"]])
+    theirs = {2397317: {"side": 4914, "team": "3DMAX", "date": "2026-09-02", "faced": [13138, 13497, 14176]},
+              2390001: {"side": 4914, "team": "3DMAX", "date": "2026-05-01", "faced": [13138, 13497, 21969]}}
+    out = h2h_core.read_team_core(_TeamCur(), "tomaszin", "MIBR", {"matches": theirs, "names": {int(k): v for k, v in FX["names"].items()}},
+                                  today=date(2026, 10, 15))
+    assert len(out) == 1 and out[0]["hltv_match"] == 2390001
+    assert (out[0]["team"], out[0]["opponent"], out[0]["maps_won"], out[0]["maps_lost"]) == ("MIBR", "3DMAX", 2, 1)
+    assert out[0]["faced"] == ["Maka", "Lucky", "Graviti"]
+    assert h2h_core.read_team_core(_TeamCur(), "tomaszin", "MIBR", None) == []

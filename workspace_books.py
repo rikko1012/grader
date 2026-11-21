@@ -581,7 +581,8 @@ def reader(srv, sport, s):
         hist = _hist_of(ser, ln, opp)
         if sport == "cs2" and hist and "h2h" in hist and x is not None:   # the CS2 card's H2H rule (roster core, h2h_core)
             import workspace_api as api
-            hist["h2h"] = api._core_h2h(srv, x, opp, ln, board=True, peek=time.monotonic() > budget)
+            hh = api._core_h2h(srv, x, opp, ln, board=True, peek=time.monotonic() > budget)
+            hist["h2h"] = None if hh is api.CORE_PENDING else hh                  # core not read yet: no count, never a name-only one
         return chance_of(srv, sport, x, ln), hist
     return read
 

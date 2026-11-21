@@ -1023,23 +1023,30 @@ def _history(srv, x, full=False, peek=False):
     return ser
 
 
+CORE_PENDING = object()      # board cell: the roster core is not read yet (or the read failed) - leave the cell for a later pass
+
+
 def _core_h2h(srv, x, opponent, line, board=False, full=None, peek=False, team_core=False):
     """H2H of this CS2 line (the card's block, or with board=True the board cell): exact-opponent meetings plus roster-core meetings
     (h2h_core, hc-1: 3+ of tonight's opponent's current HLTV players on the side he faced, any team name). The same cached HLTV year
     as the history; the core is one cached read per opponent. Core unknown (no exact HLTV team / lineup, a failed read): the
-    exact-opponent meetings alone, as before. team_core=True (card): his current core's meetings with tonight's core without him."""
+    exact-opponent meetings alone, as before. team_core=True (card): his current core's meetings with tonight's core without him.
+    board=True while the core is not read yet / its read failed: CORE_PENDING (the cell waits, never a name-only count that the card
+    would later contradict)."""
     if full is None:
         full = _history(srv, x, full=True, peek=peek) or {}
     ser = full.get("ser")
     if not ser:
         return None
-    core = None
+    core, known = None, False
     try:
         import h2h_core
-        core = h2h_core.opponent_core(opponent) if not peek else h2h_core.peek_core(opponent)
+        core, known = h2h_core.opponent_core_state(opponent, peek=peek)
     except Exception:                                  # noqa: BLE001 - no core now: the exact-opponent meetings, never an error
-        core = None
+        core, known = None, False
     mids, oids = full.get("mids"), full.get("oids")
+    if board and not known:
+        return CORE_PENDING
     if board:
         return workspace_h2h.board_h2h(ser, opponent, line, mids=mids, oids=oids, core=core)
     out = workspace_h2h.h2h(ser, opponent, line, mids=mids, oids=oids, core=core)
@@ -1795,7 +1802,8 @@ def _hits_pass(srv, items, key, cols, budget, board=None):
         kept = {k: v for k, v in (d.get('rows') or {}).items() if k in live and sigs.get(k) == live[k]}
         d.update(key=key, cursor=0, rows=kept, sigs={k: sigs[k] for k in kept})
     t0, rows, complete, missing, failed = time.time(), dict(d.get('rows', {})), True, 0, None
-    todo = [it for it in items if f"{it[0][0]}|{it[0][1]}" not in rows]
+    pend = d.setdefault('h2h_pending', set())          # rows whose H2H cell waits for the opponent's roster core (h2h_core)
+    todo = [it for it in items if f"{it[0][0]}|{it[0][1]}" not in rows or f"{it[0][0]}|{it[0][1]}" in pend]
     start = 0
     for i in range(start, len(todo)):
         (book, rid), x = todo[i]
@@ -1809,8 +1817,14 @@ def _hits_pass(srv, items, key, cols, budget, board=None):
             if ser:
                 row = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
                 if cols:
-                    row.update(h2h=_core_h2h(srv, x, x.get("opp_name") or x.get("opponent"), x.get("line"), board=True),
-                               season=workspace_h2h.board_season(ser, x.get("line")))
+                    hh = _core_h2h(srv, x, x.get("opp_name") or x.get("opponent"), x.get("line"), board=True)
+                    if hh is CORE_PENDING:
+                        pend.add(f"{book}|{rid}")
+                        missing += 1               # retried like a row without history (HITS_RETRIES, HITS_RETRY_S apart)
+                        hh = None                  # the cell stays empty until the core is read (the next pass reads it again)
+                    else:
+                        pend.discard(f"{book}|{rid}")
+                    row.update(h2h=hh, season=workspace_h2h.board_season(ser, x.get("line")))
                 d.setdefault('sigs', {})[f"{book}|{rid}"] = (x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push'))
                 rows[f"{book}|{rid}"] = row
             else:
@@ -1820,6 +1834,7 @@ def _hits_pass(srv, items, key, cols, budget, board=None):
             failed = failed or e
     if failed is not None:
         _hits_log(key, failed)
+    pend &= {f"{book}|{rid}" for (book, rid), _ in items}   # rows gone from the board stop waiting
     d['rows'] = rows
     body = json.dumps({"rows": rows, "complete": complete}, separators=(",", ":")).encode()
     if d["body"] == body:

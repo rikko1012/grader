@@ -101,9 +101,9 @@ def team_core_meetings(mine, theirs, played, scores=None):
 _LINEUP_SQL = """
 SELECT ps.playerid, count(*) FROM player_stats ps
 WHERE ps.sideid = 0 AND ps.teamid = %(tid)s AND ps.matchid = (
-    SELECT ps2.matchid FROM player_stats ps2 JOIN match_overview mo USING (matchid)
-    WHERE ps2.teamid = %(tid)s AND ps2.sideid = 0 AND mo.date >= %(fresh)s
-    ORDER BY mo.date DESC, ps2.matchid DESC LIMIT 1)
+    SELECT m.matchid FROM matches m JOIN match_overview mo USING (matchid)
+    WHERE m.teamid = %(tid)s AND m.sideid = 0 AND mo.date >= %(fresh)s
+    ORDER BY mo.date DESC, m.matchid DESC LIMIT 1)
 GROUP BY ps.playerid
 """
 _CORE_SQL = """
@@ -204,11 +204,17 @@ def _norm(s):
 
 def _cached(key, read, ttl=CORE_TTL, wait=SLOT_WAIT):
     """read() under single-flight; a fresh answer within ttl; on a failure the last good answer (or None), retried in FAIL_RETRY."""
+    return _cached_state(key, read, ttl, wait)[0]
+
+
+def _cached_state(key, read, ttl=CORE_TTL, wait=SLOT_WAIT):
+    """(answer, known): known is False while no read of this key has ever succeeded (failed, no free slot, still running) - the
+    answer None then means 'not read', never 'no core'."""
     now = time.time()
     with _LOCK:
         hit = _CACHE.get(key)
         if hit and now - hit[0] < (ttl if hit[2] else FAIL_RETRY):
-            return hit[1]
+            return hit[1], hit[3]
         ev = _INFLIGHT.get(key)
         leader = ev is None
         if leader:
@@ -217,7 +223,7 @@ def _cached(key, read, ttl=CORE_TTL, wait=SLOT_WAIT):
         ev.wait(wait + 6)
         with _LOCK:
             hit = _CACHE.get(key)
-        return hit[1] if hit else None
+        return (hit[1], hit[3]) if hit else (None, False)
     val, ok = None, False
     try:
         if SLOTS.acquire(timeout=wait):
@@ -229,14 +235,15 @@ def _cached(key, read, ttl=CORE_TTL, wait=SLOT_WAIT):
         val, ok = None, False
     with _LOCK:
         prev = _CACHE.get(key)
+        known = ok or bool(prev and prev[3])
         if not ok:
             val = prev[1] if prev else None          # never a cached failure: the last good answer, retried soon
         if len(_CACHE) > MAX_KEYS:
             _CACHE.clear()
-        _CACHE[key] = (time.time(), val, ok)
+        _CACHE[key] = (time.time(), val, ok, known)
         _INFLIGHT.pop(key, None)
     ev.set()
-    return val
+    return val, known
 
 
 def _with_cursor(fn):
@@ -251,18 +258,27 @@ def _with_cursor(fn):
         con.close()
 
 
-def opponent_core(opponent):
-    """Tonight's opponent's roster core (read_opponent), cached; None when unknown."""
+def opponent_core_state(opponent, peek=False):
+    """(core, known) for tonight's opponent (read_opponent), cached. known False = not read yet / the read failed: the caller must
+    not present the exact-name meetings as the answer (the board leaves the cell for a later pass). peek=True: memory only."""
     if not _norm(opponent):
-        return None
-    return _cached(("opp", _norm(opponent), date.today().isoformat()), lambda: _with_cursor(lambda cur: read_opponent(cur, opponent)))
+        return None, True
+    key = ("opp", _norm(opponent), date.today().isoformat())
+    if peek:
+        with _LOCK:
+            hit = _CACHE.get(key)
+        return (hit[1], hit[3]) if hit else (None, False)
+    return _cached_state(key, lambda: _with_cursor(lambda cur: read_opponent(cur, opponent)))
+
+
+def opponent_core(opponent):
+    """Tonight's opponent's roster core (read_opponent), cached; None when there is none or it could not be read."""
+    return opponent_core_state(opponent)[0]
 
 
 def peek_core(opponent):
     """opponent_core from memory only (no read): a board build past its budget."""
-    with _LOCK:
-        hit = _CACHE.get(("opp", _norm(opponent), date.today().isoformat()))
-    return hit[1] if hit else None
+    return opponent_core_state(opponent, peek=True)[0]
 
 
 def team_core(nick, team, opponent):
