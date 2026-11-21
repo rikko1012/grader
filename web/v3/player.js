@@ -354,7 +354,7 @@
     return '';
   }
   function metaHtml(r, doc) {
-    var c = doc && doc.cs2_card, env = c && c.environment, comp = compText(r, r.event.competition_label || r.event.competition || (c && c.match && c.match.event) || '');
+    var c = doc && doc.cs2_card, env = c && c.environment, comp = compText(r, r.event.competition || r.event.competition_label || (c && c.match && c.match.event) || '');
     var tw = env && env.tonight === 'lan' ? 'LAN' : env && env.tonight === 'online' ? 'online' : '';
     var when = dateText(r.event.start_utc);
     return '<p class="v3p-meta"><span class="sc-chip">' + esc(SPORT[r.sport] || r.sport) + '</span>'
