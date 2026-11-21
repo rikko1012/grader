@@ -102,14 +102,19 @@ def research_body(sport, data):
     from .expansion_research import attach
     directory = root(sport)
     key = (sport, data.get('version'), data.get('built_at'), _signature(directory / 'research.json'),
-           _signature(directory / 'forecasts.json'))
+           _signature(directory / 'forecasts.json'), _signature(directory / 'images.json'))
     instant = datetime.now(timezone.utc).timestamp()
     with _SNAPSHOT_LOCK:
         hit = _RESEARCH_BODIES.get(key)
         if hit and instant < hit['expires']:
             return hit['body']
         expires = next((v['expires'] for v in _PREPARED.values() if v['data'] is data), instant + 30)
-    body = json.dumps(attach(sport, data), default=str).encode('utf-8')
+    out = attach(sport, data)
+    from .expansion_images import for_board
+    images = for_board(directory, out.get('offers') if isinstance(out, dict) else None)
+    if images:                         # v3 card pictures (expansion_images.py); no file / no match = the same bytes as before
+        out = {**out, 'images': images}
+    body = json.dumps(out, default=str).encode('utf-8')
     with _SNAPSHOT_LOCK:
         _RESEARCH_BODIES.pop(key, None)
         while len(_RESEARCH_BODIES) >= 2:
@@ -668,6 +673,8 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
                 leagues["refresh"] = True
                 raise ValueError("empty_listed_tab")
             found = adapters.prizepicks(body, "soccer", observed, None if lid == 82 else lid)
+            from .expansion_images import remember
+            remember(body, "soccer", directory)          # v3 card pictures only; never fails the read
             del body
             parsed = len(found)
             if lid != 82:
@@ -978,6 +985,8 @@ def collect(sport):
             observed = now_utc()
             if provider == "prizepicks":
                 found = adapters.prizepicks(body, sport, observed)
+                from .expansion_images import remember
+                remember(body, sport, root(sport))      # v3 card pictures only; never fails the read
             else:
                 found = adapters.underdog(body, observed) if sport == "tennis" else adapters.underdog_soccer(body, observed)
             del body

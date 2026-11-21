@@ -347,3 +347,8 @@ html[data-ui-v3] #u-hub #hub-detail .h-odds-table tr.v3p-dup{display:none}
 html[data-ui-v3] #u-hub #hub-detail .v3p-match{grid-template-columns:minmax(0,1fr) minmax(0,max-content) minmax(0,1fr)}
 html[data-ui-v3] #u-hub #hub-detail .v3p-match .sc-matchup__team b{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;line-height:20px}
 html[data-ui-v3] #u-hub #hub-detail .v3p-match .sc-matchup__clock{max-width:9.5em;white-space:normal}
+/* ---- qa 1120: delta arrows follow the sign (colour stays good / poor for Scout's side) ---- */
+html[data-ui-v3] #u-hub #hub-detail .sc-stat:is(.is-good,.is-poor) i.v3p-up::before{border-top:0;border-bottom:5px solid currentColor}
+html[data-ui-v3] #u-hub #hub-detail .sc-stat:is(.is-good,.is-poor) i.v3p-dn::before{border-bottom:0;border-top:5px solid currentColor}
+html[data-ui-v3] #u-hub #hub-detail .sc-scene__stat i:is(.sc-v-good,.sc-v-poor).v3p-up::before{border-top:0;border-bottom:4px solid currentColor}
+html[data-ui-v3] #u-hub #hub-detail .sc-scene__stat i:is(.sc-v-good,.sc-v-poor).v3p-dn::before{border-bottom:0;border-top:4px solid currentColor}

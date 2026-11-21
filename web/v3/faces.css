@@ -1,0 +1,36 @@
+/* v3 faces.css - player headshots and team logos on the v3 cards (faces.js). Display only.
+   The headshot is laid over the card's own monogram disc (which stays underneath as the fallback); team marks arrive as round
+   discs already (img_cache.logo_disc: light disc for dark marks, dark disc for white marks), so they read in both themes. */
+html[data-ui-v3] .v3f{position:relative;overflow:visible;--v3f-ring:color-mix(in srgb,var(--sc-accent,#77adff) 42%,transparent)}
+html[data-ui-v3] .v3f>.v3f-img{position:absolute;inset:0;z-index:1;width:100%;height:100%;margin:0;padding:0;border:0;border-radius:50%;
+  object-fit:cover;object-position:50% 0;opacity:0;transition:opacity .18s var(--sc-ease,ease)}
+html[data-ui-v3] .v3f>.v3f-img.is-in{opacity:1}
+/* with a headshot: a neutral studio disc behind the cut-out, a hairline inner edge and a quiet accent ring; the initials step back */
+html[data-ui-v3] #u-hub .v3f.v3f-on,html[data-ui-v3] .v3f.v3f-on{color:transparent!important;
+  background:radial-gradient(120% 100% at 50% 8%,#3a4458 0%,#1d2433 62%,#121722 100%)!important;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.10),0 0 0 1.5px var(--v3f-ring)!important;border-color:transparent!important}
+html[data-ui-v3][data-theme="light"] #u-hub .v3f.v3f-on,html[data-ui-v3][data-theme="light"] .v3f.v3f-on{
+  background:radial-gradient(120% 100% at 50% 8%,#ffffff 0%,#e9edf4 64%,#dce2ec 100%)!important;
+  box-shadow:inset 0 0 0 1px rgba(16,24,48,.10),0 0 0 1.5px var(--v3f-ring)!important}
+html[data-ui-v3] .v3f.v3f-on>i{visibility:hidden}
+/* team badge: bottom right, about 44% of the face, separated from it by the surface colour */
+html[data-ui-v3] .v3f>.v3f-badge{position:absolute;z-index:2;right:-3px;bottom:-3px;width:44%;height:44%;min-width:12px;min-height:12px;margin:0;
+  padding:0;border:0;border-radius:50%;object-fit:contain;opacity:0;transition:opacity .18s var(--sc-ease,ease);
+  box-shadow:0 0 0 1.5px var(--sc-s1,#0f1420),0 1px 3px rgba(0,0,0,.35)}
+html[data-ui-v3][data-theme="light"] .v3f>.v3f-badge{box-shadow:0 0 0 1.5px var(--sc-s1,#fff),0 1px 2px rgba(16,24,48,.18),inset 0 0 0 1px rgba(16,24,48,.08)}
+html[data-ui-v3] .v3f>.v3f-badge.is-in{opacity:1}
+/* faces added here (esports board rows, My picks rows) sit where the hub puts its NBA / NFL faces */
+html[data-ui-v3] #u-hub #hub-table td.h-c-player>.v3f-new{float:left;margin:4px 10px 0 0}
+html[data-ui-v3] #u-hub #hub-table td.h-c-player>.v3f-new+.h-player{width:calc(100% - 42px)}
+html[data-ui-v3] #u-hub .h-player-head>.v3f-new{flex:none;margin-right:8px}
+html[data-ui-v3] .u-pick>button>.v3f-new{flex:0 0 32px;grid-area:face}
+/* player hero: the big face gets a slightly stronger ring */
+html[data-ui-v3] #u-hub #hub-detail .h-card-head>.v3f.v3f-on{box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 0 0 2px var(--v3f-ring),0 8px 22px rgba(0,0,0,.35)!important}
+html[data-ui-v3][data-theme="light"] #u-hub #hub-detail .h-card-head>.v3f.v3f-on{box-shadow:inset 0 0 0 1px rgba(16,24,48,.10),0 0 0 2px var(--v3f-ring),0 8px 20px rgba(16,24,48,.14)!important}
+/* match strip: the team's mark beside its name */
+html[data-ui-v3] #u-hub .sc-matchup__team>.v3f-team{display:block;width:30px;height:30px;margin:0 0 6px;border-radius:50%;opacity:0;
+  transition:opacity .18s var(--sc-ease,ease);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+html[data-ui-v3][data-theme="light"] #u-hub .sc-matchup__team>.v3f-team{box-shadow:0 0 0 1px rgba(16,24,48,.08),0 1px 2px rgba(16,24,48,.14)}
+html[data-ui-v3] #u-hub .sc-matchup__team--b>.v3f-team{margin-left:auto}
+html[data-ui-v3] #u-hub .sc-matchup__team>.v3f-team.is-in{opacity:1}
+@media (prefers-reduced-motion:reduce){html[data-ui-v3] .v3f>img,html[data-ui-v3] .v3f-team{transition:none}}

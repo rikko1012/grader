@@ -150,7 +150,9 @@ def _build(srv, sport):
                      # when results were last stored, not when research.json was rebuilt (2026-11-18)
                      'history_at': doc.get('results_at') if 'results_at' in doc else doc.get('research_at')},
         'platforms': {k: {'label': v, 'kind': 'pickem'} for k, v in remote.LABEL.items()}}, separators=(',', ':')).encode()
-    _SNAP[sport] = {'body': body, 'index': index, 'props': props, 'at': now}
+    # v3 card pictures (img_index.py): the sports service's per-player PrizePicks picture map, kept beside the board (never in it)
+    images = doc.get('images') if isinstance(doc.get('images'), dict) else {}
+    _SNAP[sport] = {'body': body, 'index': index, 'props': props, 'at': now, 'images': images}
     return 200, body
 
 

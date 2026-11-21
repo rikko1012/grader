@@ -75,6 +75,14 @@
     var r = RECS[tr.getAttribute('data-record')], g = tr.querySelector('.h-scout-grade');
     if (!r || !g) return;
     var st = stakeOf(r, tr), have = g.querySelector('.sc-stake');
+    /* the soccer / tennis models publish the word "Lean" as their grade: the row spells the side out, as everywhere else
+       ("Lean Over" / "Lean Under"). Wording only: the record's grade is untouched */
+    var sd = r.scout && r.scout.side;
+    if ((sd === 'over' || sd === 'under') && /^lean$/i.test(String(r.scout.grade || '').trim())) {
+      g.querySelectorAll('.h-grade').forEach(function (c) {
+        if (/^lean$/i.test(c.textContent.trim())) { c.textContent = 'Lean ' + (sd === 'over' ? 'Over' : 'Under'); c.classList.add('sc-lean-word'); }
+      });
+    }
     if (leanOnly(r)) {
       var hold = g.querySelector('.h-hold-why');
       if (hold) hold.classList.add('sc-bd-hide');
@@ -323,11 +331,51 @@
     }
   }
 
+  /* ---------------------------------------------------------------- qa-boards (2026-11-20): browser Back closes the desktop card
+     The v3 card fills the page on desktop too, but the hub gives it a history entry only on a phone (its desktop card was a side
+     panel). So on a 1101px+ screen Back left the board's address behind and the full-page card stayed up. Here the desktop card gets
+     the phone's rule: one entry at the same address when it opens; Back closes it (through the card's own close control); closing it
+     any other way takes that entry back off, so Back then leaves as before. Our own popstate never reaches the hub's router. */
+  var DESK = window.matchMedia ? window.matchMedia('(min-width:1101px)') : {matches: false};
+  var cardEntry = null, cardSkip = false;
+  function cardUp() { var c = $('hub-card'); return !!(c && !c.hidden); }
+  function cardWatch() {
+    var c = $('hub-card');
+    if (!c || c.getAttribute('data-sc-hist')) return;
+    c.setAttribute('data-sc-hist', '1');
+    new MutationObserver(function () {
+      try {
+        if (cardUp()) {
+          if (!cardEntry && DESK.matches && !(history.state && history.state.hubCard)) {
+            /* a marker left on this entry (a reload with the card up, or Back onto it after leaving for another page) is adopted as
+               this card's entry, so Back still closes it; otherwise the card gets its own entry */
+            if (!(history.state && history.state.scV3Card)) history.pushState({scV3Card: 1}, '', location.href);
+            cardEntry = location.href;
+          }
+        } else if (cardEntry) {
+          var here = cardEntry === location.href && history.state && history.state.scV3Card;
+          cardEntry = null;
+          if (here) { cardSkip = true; history.back(); }
+          else if (history.state && history.state.scV3Card) { try { history.replaceState(null, '', location.href); } catch (e) { /* blocked */ } }
+        }
+      } catch (e) { /* history blocked: the card's own Back still closes it */ }
+    }).observe(c, {attributes: true, attributeFilter: ['hidden']});
+  }
+  window.addEventListener('popstate', function (e) {
+    if (cardSkip) { cardSkip = false; e.stopImmediatePropagation(); return; }          /* our entry, taken off after a close */
+    if (cardEntry && cardUp() && !(e.state && e.state.scV3Card)) {
+      cardEntry = null;
+      e.stopImmediatePropagation();
+      var x = document.querySelector('#hub-card [data-hub="card-close"]');
+      if (x) x.click();
+    }
+  }, true);
+
   var queued = 0;
   function run() {
     queued = 0;
     try { paintBand(); paintRows(); } catch (e) { /* keep the hub's own board */ }
-    try { avatars(); wireP2(); railAuto(); } catch (e) { /* the hub's own look */ }
+    try { avatars(); wireP2(); railAuto(); cardWatch(); } catch (e) { /* the hub's own look */ }
   }
   function soon() { if (!queued) queued = requestAnimationFrame(run); }
 
