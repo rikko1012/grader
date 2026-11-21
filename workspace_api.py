@@ -1812,16 +1812,28 @@ def _hits_pass(srv, items, key, cols, budget, board=None):
             break
         # owner 2026-11-04: L5 is never empty when L10 is shown, and L20 counts the games he has (e.g. 14/17), so the newest
         # HLTV results count even when they do not reproduce the saved L10 exactly
+        k = f"{book}|{rid}"
+        if k in rows and k in pend:         # only its H2H cell waits for the roster core: no new history read (memory only)
+            try:
+                full = _history(srv, x, full=True, peek=True) or {}
+                if full.get("ser"):
+                    hh = _core_h2h(srv, x, x.get("opp_name") or x.get("opponent"), x.get("line"), board=True, full=full)
+                    if hh is not CORE_PENDING:
+                        rows[k] = dict(rows[k], h2h=hh)
+                        pend.discard(k)
+            except Exception as e:          # noqa: BLE001
+                failed = failed or e
+            continue
         try:                                # review of N3: one row that raises is left out (shows L10), never the whole fill
-            ser = (_history(srv, x, full=True) or {}).get("ser")
+            full = _history(srv, x, full=True) or {}
+            ser = full.get("ser")
             if ser:
                 row = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
-                if cols:
-                    hh = _core_h2h(srv, x, x.get("opp_name") or x.get("opponent"), x.get("line"), board=True)
+                if cols:                    # the history just read is passed on: one history read per row (700-load test)
+                    hh = _core_h2h(srv, x, x.get("opp_name") or x.get("opponent"), x.get("line"), board=True, full=full)
                     if hh is CORE_PENDING:
-                        pend.add(f"{book}|{rid}")
-                        missing += 1               # retried like a row without history (HITS_RETRIES, HITS_RETRY_S apart)
-                        hh = None                  # the cell stays empty until the core is read (the next pass reads it again)
+                        pend.add(f"{book}|{rid}")  # the cell stays empty; a later pass fills it from memory (no history re-read,
+                        hh = None                  # no extra fill: 700-load review 2026-11-21 saw every row filled twice)
                     else:
                         pend.discard(f"{book}|{rid}")
                     row.update(h2h=hh, season=workspace_h2h.board_season(ser, x.get("line")))
