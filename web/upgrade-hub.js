@@ -33,7 +33,7 @@ export function mount(C) {
      removed (2+ books with a current price) minus what one pick needs on that app's 2-pick entry. Never Scout's grade. */
   const MX = R.me.features?.market_edge && typeof R.me.features.market_edge === 'object' ? R.me.features.market_edge : null;
   const $ = id => document.getElementById(id);
-  const H = {minGrade:'all',sport:'all', book:'all', q:'', side:'all', sort:'start', stat:'all', game:'all', onlyDiff:false, watched:false, freshOnly:false, soonOnly:false, movedOnly:false,
+  const H = {minGrade:'all',sport:'all', book:'all', q:'', side:'all', sort:'start', stat:'all', league:'all', game:'all', onlyDiff:false, watched:false, freshOnly:false, soonOnly:false, movedOnly:false,
     expanded:null, detail:null, detailDoc:null, detailState:'idle', detailSeq:0, histN:10, histSide:'over', pickSport:'all', pickStatus:'all',
     page:0, section:'board', loading:false, seq:0, records:[], views:[], watch:[], alerts:[], seen:new Map(), notices:[], saveBusy:false, generating:false, batch:null, batchSaved:false,
     cardTab:'overview', view:'list', studioTab:'slip'};
@@ -88,12 +88,17 @@ export function mount(C) {
   const key = r => [r.sport,r.offer.platform,r.offer.offer_id].join('|');
   const playerKey = r => r.sport+'|'+r.player.key;
   const num = n => typeof n === 'number' && Number.isFinite(n);
-  const filters = () => ({minGrade:H.minGrade,sport:H.sport,book:H.book,q:H.q,side:H.side,sort:H.sort,sortDir:H.sortDir,stat:H.stat,game:H.game,onlyDiff:H.onlyDiff,watched:H.watched,freshOnly:H.freshOnly,soonOnly:H.soonOnly,movedOnly:H.movedOnly});
-  const filterKeys = ['minGrade','sport','book','q','side','sort','sortDir','stat','game','onlyDiff','watched','freshOnly','soonOnly','movedOnly'];
+  const filters = () => ({minGrade:H.minGrade,sport:H.sport,book:H.book,q:H.q,side:H.side,sort:H.sort,sortDir:H.sortDir,stat:H.stat,league:H.league,game:H.game,onlyDiff:H.onlyDiff,watched:H.watched,freshOnly:H.freshOnly,soonOnly:H.soonOnly,movedOnly:H.movedOnly});
+  const filterKeys = ['minGrade','sport','book','q','side','sort','sortDir','stat','league','game','onlyDiff','watched','freshOnly','soonOnly','movedOnly'];
   const gradeOrder = ['B-','B','B+','A-','A','A+'];
   const gradeMatches = (r,minimum) => !minimum||minimum==='all'||(gradeOrder.includes(minimum)&&!r.scout.hold&&gradeOrder.indexOf(r.scout.grade)>=gradeOrder.indexOf(minimum));
   const gameKey = r => r.sport+'|'+r.event.id;
   const statKey = r => r.sport+'|'+r.market.stat;
+  /* soccer-epl (owner 2026-11-20 "add EPL league for soccer"): League filter for soccer / tennis boards, keyed by the competition code
+     (sport|eng.1), labelled by the server's competition_label. Premier League first, then the other leagues by name. */
+  const leagueKey = r => r.sport+'|'+(r.event.competition||'');
+  const leagueName = r => r.event.competition_label||r.event.competition||'';
+  const LEAGUE_FIRST = ['soccer|eng.1'];
   const isOpen = () => !$('u-hub').hidden;
   const focusAfter = container => {
     const el=document.activeElement;
@@ -108,7 +113,7 @@ export function mount(C) {
       (exact||fallback)?.focus({preventScroll:true});};
   };
   const plural = (n,w) => `${n.toLocaleString()} ${w}${n===1?'':'s'}`;
-  const compOf = r => {const c=String(r.event.competition||'').trim();return c&&c.toLowerCase()!==String(SPORTS[r.sport]||r.sport).toLowerCase()?c:'';};
+  const compOf = r => {const c=String(r.event.competition_label||r.event.competition||'').trim();return c&&c.toLowerCase()!==String(SPORTS[r.sport]||r.sport).toLowerCase()?c:'';};
   const eventTag = r => esc(SPORTS[r.sport]||r.sport)+(compOf(r)?' · '+esc(compOf(r)):'');
   const age = at => { const m = Math.max(0,Math.floor((Date.now()-Date.parse(at))/60000)); return Number.isFinite(m) ? m < 1 ? 'Just now' : m < 60 ? m+'m ago' : Math.floor(m/60)+'h ago' : 'Time unavailable'; };
   const different = r => C.siblings(r).some(x => x.offer.platform !== r.offer.platform && x.offer.line !== r.offer.line);
@@ -124,7 +129,7 @@ export function mount(C) {
   };
   function matches(r, f=H) {
     return (f.sport==='all'||r.sport===f.sport) && (f.book==='all'||r.offer.platform===f.book)
-      && (!f.stat||f.stat==='all'||statKey(r)===f.stat) && (!f.game||f.game==='all'||gameKey(r)===f.game)
+      && (!f.stat||f.stat==='all'||statKey(r)===f.stat) && (!f.league||f.league==='all'||leagueKey(r)===f.league) && (!f.game||f.game==='all'||gameKey(r)===f.game)
       && (f.side==='all'||sideMatches(r,f.side)) && (!f.onlyDiff||different(r))
       && gradeMatches(r,f.minGrade)
       && (!f.watched||H.watch.includes(playerKey(r)))
@@ -140,13 +145,13 @@ export function mount(C) {
   const graded=r=>gradeOrder.includes(r.scout.grade)&&!r.scout.hold;
   const gradeFilterOn=(sport=H.sport)=>sport==='all'?H.graded.size>0:H.graded.has(sport);
   /* the board's filters for one sport tab: the tab a member opens starts on All markets and all games (as the sport action does) */
-  const boardFilter=(sport=H.sport)=>({...filters(),sport,...(sport===H.sport?{}:{stat:'all',game:'all'}),minGrade:gradeFilterOn(sport)?H.minGrade:'all'});
+  const boardFilter=(sport=H.sport)=>({...filters(),sport,...(sport===H.sport?{}:{stat:'all',league:'all',game:'all'}),minGrade:gradeFilterOn(sport)?H.minGrade:'all'});
   /* N11: search reads the name, team, game and market, plus the exact other spellings the server sends for the row's two teams
      (the book's own name and maintained team aliases: player.aka). Plain substring of those exact strings, nothing fuzzy. */
   /* QOL 2026-11-07: case, accents and extra spaces never hide a row ("jokic" finds Jokić, " vargo  " finds vargo). The same exact
      strings, only folded (fold is defined once near the top of mount); one folded copy per record (records are replaced on every board read) */
   const SEARCH_TEXT=new WeakMap();
-  const searchText=r=>{let t=SEARCH_TEXT.get(r);if(t==null){t=fold([r.player.name,r.player.team,r.event.label,r.market.stat_label,...(Array.isArray(r.player.aka)?r.player.aka:[])].join(' '));SEARCH_TEXT.set(r,t);}return t;};
+  const searchText=r=>{let t=SEARCH_TEXT.get(r);if(t==null){t=fold([r.player.name,r.player.team,r.event.label,r.market.stat_label,r.event.competition_label,...(Array.isArray(r.player.aka)?r.player.aka:[])].join(' '));SEARCH_TEXT.set(r,t);}return t;};
   const boardSource=()=>isExtra(H.book)?H.extraRecs:H.records;
   function rows() {
     // owner rules (no unsure labels; transient failures hide the line): a row whose source is stale, failed or held is left off, never labelled
@@ -194,7 +199,7 @@ export function mount(C) {
   }
   const sortName=k=>(SORTS.find(x=>x[0]===k)||[k,k])[1];
   /* the filters that live in the Filters pop-over; the count on its button. Search, sport and platform are on the toolbar itself */
-  const activeFilters = () => [H.stat!=='all',H.side!=='all',H.minGrade!=='all'&&gradeFilterOn(),H.onlyDiff,H.watched,H.freshOnly,H.soonOnly,H.movedOnly,H.game!=='all'].filter(Boolean).length;
+  const activeFilters = () => [H.stat!=='all',H.league!=='all',H.side!=='all',H.minGrade!=='all'&&gradeFilterOn(),H.onlyDiff,H.watched,H.freshOnly,H.soonOnly,H.movedOnly,H.game!=='all'].filter(Boolean).length;
   const BOOK_SHORT={prizepicks:'PP',underdog:'UD',...Object.fromEntries((EXTRA||[]).map(x=>[x.id,x.short||x.label]))};
   /* 'yes' = lines on this tab now; 'no' = the server counted 0 open lines on every sport here (or the book lists none of them);
      'unknown' = no count yet for a sport here (first read pending, or a feed blip with no earlier count). Unknown never moves a member
@@ -254,6 +259,12 @@ export function mount(C) {
     const markets=[...new Map(sportRows.map(r=>[statKey(r),r.market.stat_label+(H.sport==='all'?' · '+SPORTS[r.sport]:'')])).entries()];
     $('hub-stat').innerHTML='<option value="all">All markets</option>'+markets.sort((a,b)=>a[1].localeCompare(b[1])).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');
     $('hub-stat').value=H.stat;
+    const lgs=[...new Map(sportRows.filter(r=>r.event.competition&&['soccer','tennis'].includes(r.sport)).map(r=>[leagueKey(r),leagueName(r)+(H.sport==='all'?' · '+SPORTS[r.sport]:'')])).entries()]
+      .sort((a,b)=>((LEAGUE_FIRST.indexOf(a[0])+1||99)-(LEAGUE_FIRST.indexOf(b[0])+1||99))||a[1].localeCompare(b[1]));
+    const lgSel=$('hub-league');
+    if(lgSel){if(H.league!=='all'&&!lgs.some(([id])=>id===H.league))lgs.push([H.league,H.league.split('|')[1]||H.league]);
+      lgSel.innerHTML='<option value="all">All leagues</option>'+lgs.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('');
+      lgSel.value=H.league;lgSel.closest('label').hidden=lgs.length<2&&H.league==='all';}
     const n=activeFilters();
     $('hub-filter-n').textContent=n?String(n):'';
     $('hub-filters-toggle').setAttribute('aria-label',n?`Filters, ${n} on`:'Filters');
@@ -857,6 +868,7 @@ export function mount(C) {
     if(H.q)add('q','Search: '+H.q);
     if(H.book!=='all')add('book',C.PLATFORMS[H.book]?.label||EXTRA?.find(x=>x.id===H.book)?.label||H.book);
     if(H.stat!=='all')add('stat',$('hub-stat').selectedOptions[0]?.textContent||H.stat);
+    if(H.league!=='all')add('league',$('hub-league')?.selectedOptions[0]?.textContent||H.league);
     if(H.side!=='all')add('side',H.side==='over'?'Over':'Under');
     if(H.minGrade!=='all')add('minGrade',H.minGrade+' or better');
     for(const [id,label] of [['onlyDiff','Different lines'],['watched','Watchlist'],['freshOnly','Fresh only'],['soonOnly','Starting soon'],['movedOnly','Moved lines']])if(H[id])add(id,label);
@@ -1002,7 +1014,7 @@ export function mount(C) {
           minGrade:gradeOrder.includes(f.minGrade)?f.minGrade:'all',freshOnly:f.freshOnly===true,soonOnly:f.soonOnly===true,movedOnly:f.movedOnly===true,
           sport:['all',...allowed()].includes(f.sport)?f.sport:'all',book:['all','prizepicks','underdog',...(EXTRA||[]).map(x=>x.id)].includes(f.book)?f.book:'all',
           q:typeof f.q==='string'?f.q.slice(0,100):'',side:['all','over','under'].includes(f.side)?f.side:'all',
-          sort:SORT_KEYS.includes(f.sort)?f.sort:'start',sortDir:f.sortDir==='asc'||f.sortDir==='desc'?f.sortDir:sortDirOf(SORT_KEYS.includes(f.sort)?f.sort:'start'),stat:typeof f.stat==='string'?f.stat.slice(0,150):'all',game:typeof f.game==='string'?f.game.slice(0,150):'all',onlyDiff:f.onlyDiff===true,watched:f.watched===true}};
+          sort:SORT_KEYS.includes(f.sort)?f.sort:'start',sortDir:f.sortDir==='asc'||f.sortDir==='desc'?f.sortDir:sortDirOf(SORT_KEYS.includes(f.sort)?f.sort:'start'),stat:typeof f.stat==='string'?f.stat.slice(0,150):'all',league:typeof f.league==='string'?f.league.slice(0,150):'all',game:typeof f.game==='string'?f.game.slice(0,150):'all',onlyDiff:f.onlyDiff===true,watched:f.watched===true}};
       });
       H.views=clean(p.views);
       if(p.sort&&adoptSort(p.sort)){try{localStorage.setItem(SORT_LS(),JSON.stringify({key:H.sort,dir:H.sortDir}));}catch(e){}}
@@ -2261,7 +2273,7 @@ export function mount(C) {
       if(['slip','build','tracked'].includes(tab))H.studioTab=tab;
       /* QOL 2026-11-07: Back from Slips / My picks to the same sport keeps the market, game and page the member left (they were reset,
          so Back lost the place). A different sport starts clean as before; By game always lists every game. */
-      if(H.sport!==wasSport||!H.routed){H.stat='all';H.game='all';H.page=0;}
+      if(H.sport!==wasSport||!H.routed){H.stat='all';H.league='all';H.game='all';H.page=0;}
       else if((modern||scout)?.[1]==='games')H.game='all';
       H.routed=true;
     }
@@ -2317,8 +2329,8 @@ export function mount(C) {
     filters(id,el){togglePop('filter');if(el?.closest('.h-pop'))$('hub-filters-toggle').focus({preventScroll:true});}, 'views-menu'(){togglePop('views');}, more(){togglePop('more');},
     book(id){if(!['all','prizepicks','underdog'].includes(id)&&!isExtra(id))return;if(!bookHasLines(id))return;H.book=id;H.page=0;paintBoard();if(isExtra(id))loadExtra();},
     'mt-jump'(){$('hub-market-tools')?.scrollIntoView({block:'start'});$('hub-market-tools')?.querySelector('h2')?.focus?.({preventScroll:true});},
-    'clear-filters'(){Object.assign(H,{book:'all',q:'',stat:'all',side:'all',minGrade:'all',onlyDiff:false,watched:false,freshOnly:false,soonOnly:false,movedOnly:false,game:'all',page:0});paintBoard();},
-    'filter-remove'(id){const defaults={q:'',book:'all',stat:'all',side:'all',minGrade:'all',onlyDiff:false,watched:false,freshOnly:false,soonOnly:false,movedOnly:false};if(!Object.hasOwn(defaults,id))return;H[id]=defaults[id];H.page=0;paintBoard();$('hub-filters-toggle').focus({preventScroll:true});},
+    'clear-filters'(){Object.assign(H,{book:'all',q:'',stat:'all',league:'all',side:'all',minGrade:'all',onlyDiff:false,watched:false,freshOnly:false,soonOnly:false,movedOnly:false,game:'all',page:0});paintBoard();},
+    'filter-remove'(id){const defaults={q:'',book:'all',stat:'all',league:'all',side:'all',minGrade:'all',onlyDiff:false,watched:false,freshOnly:false,soonOnly:false,movedOnly:false};if(!Object.hasOwn(defaults,id))return;H[id]=defaults[id];H.page=0;paintBoard();$('hub-filters-toggle').focus({preventScroll:true});},
     'focus-board'(){const on=$('u-hub').classList.toggle('h-focus-board');$('hub-focus').setAttribute('aria-pressed',String(on));$('hub-focus').textContent=on?'Show slip':'Hide slip';fitBar();},
     view(id){H.view=id==='games'?'games':'list';H.page=0;section('board');},
     /* N14 (site audit 2026-11-06): opens Tools scrolled to its Alerts section (it opened at the top of Tools) */
@@ -2326,7 +2338,7 @@ export function mount(C) {
     section(id){if(id==='board')H.view='list';if(id==='studio')H.studioTab='slip';section(id);},
     'studio-open'(id){H.studioTab=['slip','build','tracked'].includes(id)?id:'slip';section('studio');},
     'studio-tab'(id){if(!['slip','build','tracked'].includes(id))return;H.studioTab=id;paintStudio();if(id==='build')paintBatch();if(id==='tracked')C.loadMine();sectionFocus('studio-tab',id);},
-    sport(id){H.sport=id;H.stat='all';H.game='all';H.page=0;H.view==='games'?section('games'):section('board');scrollTop();load(false);},
+    sport(id){H.sport=id;H.stat='all';H.league='all';H.game='all';H.page=0;H.view==='games'?section('games'):section('board');scrollTop();load(false);},
     'sort-col'(id){if(!SORT_KEYS.includes(id))return;setSort(id,H.sortBy===id&&H.sort===id?(H.sortDir==='asc'?'desc':'asc'):sortDirOf(id));document.querySelector(`#hub-table [data-hub="sort-col"][data-id="${CSS.escape(id)}"]`)?.focus({preventScroll:true});},
     'sort-dir'(){setSort(H.sort,H.sortDir==='asc'?'desc':'asc');},
     'game-clear'(){H.game='all';H.page=0;paintBoard();$('hub-filters-toggle')?.focus({preventScroll:true});},
@@ -2403,7 +2415,7 @@ export function mount(C) {
           <div id="hub-platform" class="h-segment h-platform" role="group" aria-label="Platform"><button data-hub="book" data-id="all" aria-pressed="true">All</button><button data-hub="book" data-id="prizepicks" aria-pressed="false" aria-label="PrizePicks (PP)" title="PrizePicks">PP</button><button data-hub="book" data-id="underdog" aria-pressed="false" aria-label="Underdog (UD)" title="Underdog">UD</button></div>
           <div class="h-pop-wrap"><button id="hub-filters-toggle" class="h-filter-toggle" data-hub="filters" aria-expanded="false" aria-controls="hub-filter-pop">Filters<span id="hub-filter-n" class="h-count-badge"></span></button>
             <div id="hub-filter-pop" class="h-pop" role="group" aria-label="Filters and sort" hidden>
-              <div class="h-pop-grid"><label>Market<select id="hub-stat"><option value="all">All markets</option></select></label><label>Side<select id="hub-side"><option value="all">Both sides</option><option value="over">Over</option><option value="under">Under</option></select></label>
+              <div class="h-pop-grid"><label hidden>League<select id="hub-league"><option value="all">All leagues</option></select></label><label>Market<select id="hub-stat"><option value="all">All markets</option></select></label><label>Side<select id="hub-side"><option value="all">Both sides</option><option value="over">Over</option><option value="under">Under</option></select></label>
                 <label>Minimum grade<select id="hub-minGrade"><option value="all">Any grade</option>${gradeOrder.slice().reverse().map(g=>`<option value="${g}">${g} or higher</option>`).join('')}</select></label></div>
               <div class="h-quick"><button id="hub-diff" data-hub="diff" aria-pressed="false">Lines differ</button><button id="hub-watch" data-hub="watched" aria-pressed="false">★ Watchlist</button></div>
               <div class="h-pop-foot"><button data-hub="clear-filters">Clear filters</button><button data-hub="filters">Done</button></div></div></div>
@@ -2579,7 +2591,7 @@ export function mount(C) {
   $('u-hub').addEventListener('input',e=>{if(e.target.id==='hub-ask-q')G.q=e.target.value;});
   document.addEventListener('pointerdown',e=>{if(isOpen()&&openPop()&&!e.target.closest('.h-pop-wrap,#hub-more,#hub-more-toggle'))togglePop(null);});
   let chartWidth=0;window.addEventListener('resize',()=>{const el=document.querySelector('#hub-detail [data-hub-chart]');if(el&&Math.abs(el.clientWidth-chartWidth)>24){chartWidth=el.clientWidth;drawChart();}});
-  for(const f of ['q','side','stat']) $('hub-'+f).addEventListener(f==='q'?'input':'change',()=>{H[f]=$('hub-'+f).value;H.page=0;paintBoard();});
+  for(const f of ['q','side','stat','league']) $('hub-'+f).addEventListener(f==='q'?'input':'change',()=>{H[f]=$('hub-'+f).value;H.page=0;paintBoard();});
   /* QOL 2026-11-07: the phone keyboard's Search key puts the keyboard away so the results show (the board filters as you type) */
   $('hub-q').enterKeyHint='search';
   $('hub-q').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing&&!DESKTOP.matches){e.preventDefault();$('hub-q').blur();}});

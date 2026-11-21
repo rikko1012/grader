@@ -200,6 +200,15 @@ MLS and Serie A props missing). The soccer quotes job now reads every mapped tab
   full coverage leagues take turns on the board (level 1: each league ~300 s of every 8 x 180 s); at full coverage
   every source is re-read every 180 s and stays on continuously. If Render shows no 429s, 9 sources reach full
   coverage in ~40 min (4 steps x 600 s).
+- EPL priority (soccer-epl, owner 2026-11-20 "add EPL league for soccer"; live 2026-11-21 01:23Z: EPL listed 2,966
+  projections, 114 standard lines kept, 0 on the board, last read 893 s ago at level 1). The tabs in
+  `SCOUT_SOCCER_PP_PRIORITY` (default `14`, EPL; `""` = plain rotation) go right after tab 82 whenever due, with
+  standard lines (or never read) and a first kick-off inside `SCOUT_SOCCER_PP_PRIORITY_H` (48 h). Fairness guard:
+  after `SCOUT_SOCCER_PP_PRIORITY_STREAK` (2) priority reads in a row the next league slot goes to the
+  least-recently-attempted other tab with lines. Requests, level, spacing and back-off are unchanged. Fake-clock
+  replay (82 + EPL + MLS + Liga MX + Serie A + La Liga, 112 runs): level 1 - EPL on the board 26.8% -> 83.9% of runs,
+  each other league ~29-32% -> ~11-16%; level 2 - EPL 90% -> 100%, others 90% -> 75%; level 3+ - all 100% either way
+  (ops logs batch_1120b/epl/pp_priority_sim_level1.txt). Ops: `expansion_pp_soccer.priority` and per-tab `priority`.
 - An empty answer from a tab `/leagues` lists with lines is a failed read (and re-reads `/leagues`, at most every
   10 min). A failed `/leagues` read (429, 5xx, timeout, bad JSON, empty list) waits 600 s, then 1200, 2400, then
   hourly - never a retry every run. Book markets (BetRivers / DraftKings) keep their 180 s cadence and are carried.
