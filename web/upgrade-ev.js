@@ -19,6 +19,8 @@ const PAGE_SIZE = 50;
 const AUTO_MS = 60000;
 const A = {doc: null, error: false, busy: '', msg: {}};
 let autoTimer = 0;
+/* a card's message follows its slip (book rows + sides), not its position, so a re-read never shows it under another slip */
+const sigOf = s => s.platform + ':' + s.entry_type + ':' + s.legs.map(l => l.book + '|' + l.row_id + '|' + l.side).join(',');
 async function fetchAuto() {
   if (!C.autoOn) return;
   try { A.doc = await C.api('auto-slips'); A.error = false; }
@@ -251,9 +253,9 @@ function readyHtml(d) {
   let body;
   if (!A.doc) body = `<p class="ev-state" role="status">${A.error ? 'Ready slips could not be read. Scout tries again in a minute.' : 'Building ready slips from current prices…'}</p>`;
   else if (!list) body = `<p class="ev-state" role="status">Ready slips could not be built just now. Scout tries again in a minute.</p>`;
-  else if (!list.length) body = `<p class="ev-state" role="status">No ${esc(app)} entry has enough legs that beat it right now${S.f.sport !== 'all' ? ' in ' + esc(C.SPORTS[S.f.sport] || S.f.sport) : ''}. Checked ${ev.priced_legs || 0} priced legs${ev.books && ev.books.length ? ' at ' + esc(ev.books.join(', ')) : ''}${at ? ' · ' + esc(at) : ''}. New slips appear here as prices change.</p>`;
+  else if (!list.length) body = `<p class="ev-state" role="status">No ${esc(app)} slip can be built right now from legs that beat each entry${S.f.sport !== 'all' ? ' in ' + esc(C.SPORTS[S.f.sport] || S.f.sport) : ''}. Checked ${ev.priced_legs || 0} priced legs${ev.books && ev.books.length ? ' at ' + esc(ev.books.join(', ')) : ''}${at ? ' · ' + esc(at) : ''}. New slips appear here as prices change.</p>`;
   else body = `<div class="ev-ready-grid">${list.map(({e, s, id, nth}) => {
-    const m = A.msg[id] || '', busy = !!A.busy;
+    const m = A.msg[sigOf(s)] || '', busy = !!A.busy;
     return `<article class="ev-ready-card" data-auto="${esc(id)}"><div class="ev-ready-top"><h4>${esc(e.entry_label)} ${e.n}-pick${nth ? ' · option ' + (nth + 1) : ''}</h4>`
       + `<small>each pick needs ${pct(e.break_even)} · ${e.positive_legs} legs beat it</small></div><ol>${s.legs.map(l => readyLeg(l, sports)).join('')}</ol>`
       + `<div class="ev-ready-foot"><button data-ev="auto-add" data-id="${esc(id)}"${busy ? ' disabled' : ''}>Add to slip</button><button data-ev="auto-copy" data-id="${esc(id)}"${busy ? ' disabled' : ''}>Copy</button>`
@@ -269,18 +271,19 @@ function autoFind(id) {
 }
 async function autoAct(a, id) {
   const s = autoFind(id); if (!s || A.busy) return;
-  A.busy = id; A.msg[id] = 'Checking current offers…'; render();
+  const k = sigOf(s);
+  A.busy = id; A.msg[k] = 'Checking current offers…'; render();
   try {
     const slip = await C.autoSlip(s);
-    if (a === 'auto-add') { await C.useGenerated(slip); A.msg[id] = 'Added. Your ' + (slip.platform === 'prizepicks' ? 'PrizePicks' : 'Underdog') + ' slip now holds these picks.'; }
-    else if (a === 'auto-open') { await C.openEV(slip); A.msg[id] = 'Current offers checked. Review the app before submitting.'; }
+    if (a === 'auto-add') { await C.useGenerated(slip); A.msg[k] = 'Added. Your ' + (slip.platform === 'prizepicks' ? 'PrizePicks' : 'Underdog') + ' slip now holds these picks.'; }
+    else if (a === 'auto-open') { await C.openEV(slip); A.msg[k] = 'Current offers checked. Review the app before submitting.'; }
     else {
       await C.checkEV(slip);
       const text = [`${slip.platform === 'prizepicks' ? 'PrizePicks' : 'Underdog'} ${ENTRY[slip.entry_type] || slip.entry_type} · ${slip.legs.length} picks`,
         ...slip.legs.map(l => `${l.player}: ${side(l.side)} ${l.line} ${l.stat_label} · ${l.period_label} · ${l.event_label}`)].join('\n');
-      await navigator.clipboard.writeText(text); A.msg[id] = 'Rechecked and copied. No entry has been placed.';
+      await navigator.clipboard.writeText(text); A.msg[k] = 'Rechecked and copied. No entry has been placed.';
     }
-  } catch (e) { A.msg[id] = (e && (e.doc && e.doc.error || e.message)) || 'A line changed. A new slip is built within a minute.'; fetchAuto(); }
+  } catch (e) { A.msg[k] = (e && (e.doc && e.doc.error || e.message)) || 'A line changed. A new slip is built within a minute.'; fetchAuto(); }
   finally { A.busy = ''; render(); }
 }
 function generatorHtml() {
@@ -291,7 +294,7 @@ function paintBox() {
   if (!d) { box.innerHTML = head() + generatorHtml() + `<p class="ev-state" role="status">${S.error ? esc(S.error) + ' Use Refresh to try again.' : 'Checking current prices…'}</p>`; return; }
   const sports = (d.sports || []).length, rows = d.rows.filter(r => keep(r) && (!S.f.evOnly || (typeof r.ev === 'number' && r.ev > 0)));
   const model = d.model_only.filter(keep), entries = d.options.entries.filter(e => e.app === d.app);
-  const nextKey = JSON.stringify([S.f, d.as_of, d.app, d.entry, d.n]);
+  const nextKey = JSON.stringify([S.f, d.app, d.entry, d.n]);   /* not as_of: the minute re-read keeps the page a member is on */
   if (nextKey !== pageKey) { pageKey = nextKey; marketPage = modelPage = 0; }
   marketPage = Math.min(marketPage, Math.max(0, Math.ceil(rows.length / PAGE_SIZE) - 1));
   modelPage = Math.min(modelPage, Math.max(0, Math.ceil(model.length / PAGE_SIZE) - 1));

@@ -13,7 +13,8 @@ Load (700 members at once): a member's request never builds while a current answ
 request, only with SCOUT_PICKEM_EV or SCOUT_MARKET_TOOLS on) rebuilds each sport set a member asked for in the last IDLE_S seconds
 every CYCLE_S seconds. A request with no answer younger than SERVE_MAX_S joins one single-flight build (srv.shared). A failed build
 keeps the last good answer with its own as_of (the page drops prices past their age limits by that time); it is never cached as an
-answer. No member id, no write to the slip or EV records (the builds the members' own screens make already log)."""
+answer. No member id, and no write to the slip or EV records: the scan builds with logging off (autobuild_log dedupes by slip
+signature without its source, so a logged scan slip would hide the member's own later record of it)."""
 import json
 import os
 import threading
@@ -27,7 +28,6 @@ SLIPS_PER_ENTRY = 2
 MIN_PICKS, MAX_PICKS = 2, 6     # the generator's own limits (workspace_api._gen_opts)
 ARB_MAX = 25
 ARB_STAKE = 100
-SOURCE = "auto-ev"      # autobuild_log source: kept apart from member-generated slips
 
 _LOCK = threading.Lock()
 _STORE = {}             # sport set -> (built_at, body bytes)
@@ -87,11 +87,14 @@ def _entry_slips(srv, e, allowed, sports, known):
                             "sports": ",".join(sports), "games": "spread", "lines": "standard", "repeats": "none"}, allowed)
     if o is None:
         return head, d
-    st, body = wa._generate(srv, o, d, source=SOURCE)
+    st, body = wa._generate(srv, o, d, log=False)
     if st != 200:
         return head, d
     rows = {(r["key"], r["side"]): r for r in pos}
-    for s in json.loads(body).get("slips") or ():
+    gen = json.loads(body)
+    if not gen.get("slips"):
+        head["shortage"] = gen.get("shortage")
+    for s in gen.get("slips") or ():
         legs = []
         for l in s.get("legs") or ():
             row = rows.get(("|".join((l["sport"], l["book"], str(l["row_id"]))), l["side"]))

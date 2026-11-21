@@ -1,6 +1,6 @@
 """EV and Arbitrage automatic (owner 2026-11-20): ready slips appear with no press, one tap adds / copies them (rechecked), the
 Arbitrage sheet carries a one-tap copy of the best pair, and both screens re-read their prices every minute while on screen.
-390 and 1280, v3 on and off, light/dark through v3. Fixture data only."""
+390 and 1440 (DESK), v3 on and off, light theme. Fixture data only."""
 import json
 import os
 from pathlib import Path
@@ -60,6 +60,8 @@ def _auto_doc(board, as_of):
 def test_ready_ev_slips_need_no_press_and_add_in_one_tap(browser, env, monkeypatch, size, v3):
     monkeypatch.setenv("SCOUT_PICKEM_EV", "1")
     monkeypatch.setenv("SCOUT_UI_V3", v3)
+    import server
+    monkeypatch.setattr(server, "PP_OPEN_LINK", True)                              # "Open in PrizePicks" (pre-fill link) on
     wa_auto.reset()
     c = context(browser, env, size)
     c.grant_permissions(["clipboard-read", "clipboard-write"])
@@ -100,6 +102,12 @@ def test_ready_ev_slips_need_no_press_and_add_in_one_tap(browser, env, monkeypat
         p.wait_for_function("document.querySelector('.ev-ready-card [role=status]')?.textContent.includes('Rechecked and copied')", timeout=30000)
         copied = p.evaluate("navigator.clipboard.readText()")
         assert copied.startswith("PrizePicks Power · 2 picks") and copied.count("\n") == 2
+        # one tap: open in PrizePicks through the recheck (its own ?projections= pre-fill link)
+        card.locator('[data-ev="auto-open"]').click()
+        p.wait_for_selector("#u-book-open[open] a", timeout=30000)
+        href = p.locator("#u-book-open a").first.get_attribute("href")
+        assert "prizepicks.com" in href and "projections=" in href, href
+        p.locator("#u-book-open form button").click()
         # a line that fails recheck is refused, with no copy
         p.route("**/api/upgrade/recheck", lambda r: r.fulfill(status=409, json={"error": "A line changed. Generate again."}))
         card.locator('[data-ev="auto-copy"]').click()
@@ -131,7 +139,7 @@ def test_ready_ev_empty_state_says_what_was_checked(browser, env, monkeypatch, s
         p = open_page(c, env, "/#/ev", size)
         p.wait_for_function("document.querySelector('.ev-ready')?.textContent.includes('Checked 37 priced legs')", timeout=30000)
         t = p.locator(".ev-ready").inner_text()
-        assert "BetRivers, FanDuel" in t and "No PrizePicks entry" in t
+        assert "BetRivers, FanDuel" in t and "No PrizePicks slip can be built" in t
         assert p.locator(".ev-ready-card").count() == 0
         no_h_scroll(p)
         assert not p.errors

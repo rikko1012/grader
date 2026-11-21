@@ -231,3 +231,57 @@ def test_700_members_at_once_one_build(big_queue, env, monkeypatch):
     assert codes.count(200) == 700, {c: codes.count(c) for c in set(codes)}
     assert builds[0] <= 2, builds                                        # one single-flight build (the thread may add one)
     assert took < 120, took
+
+
+# ---------------------------------------------------------------------------------------------- end to end on an NBA board
+
+def test_end_to_end_nba_board_real_ev_build_and_slip_builder(monkeypatch):
+    """No stand-ins for the engines: a fake NBA snapshot (records + their book rows) -> workspace_ev.build (exact line, 2 families)
+    -> workspace_api._generate (positive_pool + slip_quality) -> ready slips. Legs that rest on one book or a stale price never enter."""
+    import server
+    import workspace_api as wapi
+    import workspace_books as wb
+    from tests.book_rules_fixture import like_the_app
+    from tests.test_pickem_ev import rec, book
+    like_the_app(monkeypatch)
+    monkeypatch.setenv("SCOUT_PICKEM_EV", "1")
+    monkeypatch.delenv("SCOUT_MARKET_TOOLS", raising=False)
+    monkeypatch.setenv("AUTOBUILD_LOG", "1")
+    monkeypatch.setattr(server, "_RESULTS", {})
+    monkeypatch.setattr(server, "_INFLIGHT", {})
+    wb.reset(); we._FAIR.clear(); we._LEGS.clear(); wapi.reset()
+    start = _iso(time.time() + 6 * 3600)
+    items = []
+    for i in range(5):
+        r = rec(f"p{i}", 20.5 + i, start=start, p_over=0.6, p_under=0.4)
+        r["event"] = dict(r["event"], id=f"e{i}", label=f"Team{i} at Home{i}")
+        r["key"] = r["key"].replace("e1", f"e{i}")
+        r["scout"] = dict(r["scout"], side="over", p_side=0.6, grade="B", projection=25.0 + i)
+        r["player"] = dict(r["player"], team=f"T{i}")
+        rows = [book("fanduel", 20.5 + i, 1.45, 2.90, 60), book("betrivers", 20.5 + i, 1.47, 2.80, 60)]
+        if i == 3:
+            rows = rows[:1]                                                   # one book: never a leg
+        if i == 4:
+            rows = [book("fanduel", 24.5, 1.45, 2.90, 5000), book("betrivers", 24.5, 1.47, 2.80, 5000)]    # stale
+        items.append((r, rows))
+    index = {(r["offer"]["platform"], r["offer"]["offer_id"]): {"books": (rows, []), "st": r["market"]["stat"], "rec": json.dumps(r)} for r, rows in items}
+    snap = {"body": json.dumps({"records": [r for r, _ in items]}).encode(), "index": index, "feeds": {"prizepicks": {"state": "ok"}}}
+    monkeypatch.setattr(wb, "records", lambda srv, sport: ([r for r, _ in items], snap) if sport == "nba" else (None, None))
+    monkeypatch.setattr(wapi, "_sport_snap", lambda srv, sport: snap if sport == "nba" else None)
+    logged = []
+    monkeypatch.setattr(wapi, "_log_generated", lambda *a, **k: logged.append(a))
+    t0 = time.time()
+    ev = wa_auto.ev_part(server, {"cs2": True, "nba": True})
+    took = time.time() - t0
+    assert ev["state"] == "ok" and ev["sports"] == ["nba"], ev
+    made = [e for e in ev["entries"] if e["slips"]]
+    assert made, [(e["entry"], e["n"], e["positive_legs"]) for e in ev["entries"]]
+    for e in made:
+        assert e["app"] == "prizepicks" and e["positive_legs"] == 3                 # p0-p2 only: p3 one book, p4 stale
+        for s in e["slips"]:
+            ids = {l["row_id"] for l in s["legs"]}
+            assert ids <= {"pr-p0", "pr-p1", "pr-p2"} and len({l["event"] for l in s["legs"]}) == e["n"]
+            assert all(l["side"] == "over" and l["p_market"] > e["break_even"] and l["ev"] > 0 for l in s["legs"])
+    assert {e["n"] for e in made} <= {2, 3}                                         # 3 legs that beat it: no 4-6 pick slip
+    assert not logged                                                              # the scan never writes the slip record
+    assert took < 10, took

@@ -2230,7 +2230,7 @@ def _log_generated(srv, o, slips, now, source):
         traceback.print_exc()
 
 
-def _generate(srv, o, ev_doc=None, source=None):
+def _generate(srv, o, ev_doc=None, log=True):
     now = datetime.now(timezone.utc)
     table = _slip_table(srv)
     legs, why, missing = [], {}, []
@@ -2265,7 +2265,8 @@ def _generate(srv, o, ev_doc=None, source=None):
            "pool": {"legs": len(mine), "matches": len({(l["sport"], l["event"]) for l in mine}), "excluded": why, "unavailable": missing,
                     "banded": bool(table and table.get("cells"))},
            "slips": [_wire_slip(s, srv, now) for s in b["slips"]], "shortage": b["shortage"], "search": b["search"]}
-    _log_generated(srv, o, b["slips"], now, source or ("ev-slips" if ev_doc is not None else "generate"))
+    if log:                                 # workspace_auto's background scan builds unlogged: the record keeps member-generated slips only
+        _log_generated(srv, o, b["slips"], now, "ev-slips" if ev_doc is not None else "generate")
     if ev_doc is not None:
         doc['version'] = 'ev-slips-1'
         for slip in doc['slips']:
