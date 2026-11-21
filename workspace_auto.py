@@ -249,15 +249,35 @@ def part_keys(seen):
     return out
 
 
+_RATE = {}                 # id(srv) -> {"c": count, "t": time, "busy": bool}
+_RATE_LOCK = threading.Lock()
+
+
 def _busy(srv):
-    """True while members are being served in a burst: more than BURST_RPS requests a second over a short window
-    (srv.REQUESTS_SEEN, counted in server.Handler)."""
+    """True while members are being served in a burst: more than BURST_RPS requests a second (srv.REQUESTS_SEEN, counted in
+    server.Handler). Review 2026-11-21: the old version slept BURST_WINDOW_S on EVERY call to sample, making a quiet cycle ~60x
+    slower than its CPU. Now the rate is the count moved since the previous sample, re-sampled at most every BURST_WINDOW_S
+    (in between the last answer stands); only the very first sample for a server waits one window to get a baseline."""
     seen = getattr(srv, "REQUESTS_SEEN", None)
     if not seen:
         return False
-    c0, t = seen[0], time.perf_counter()
-    time.sleep(BURST_WINDOW_S)
-    return (seen[0] - c0) / (time.perf_counter() - t) > BURST_RPS
+    key = id(srv)
+    with _RATE_LOCK:
+        st = _RATE.get(key)
+    if st is None:
+        c0, t0 = seen[0], time.perf_counter()
+        time.sleep(BURST_WINDOW_S)                       # one baseline window per server, ever
+        now, c = time.perf_counter(), seen[0]
+        st = {"c": c, "t": now, "busy": (c - c0) / (now - t0) > BURST_RPS}
+        with _RATE_LOCK:
+            _RATE[key] = st
+        return st["busy"]
+    now, c = time.perf_counter(), seen[0]
+    with _RATE_LOCK:
+        dt = now - st["t"]
+        if dt >= BURST_WINDOW_S:
+            st.update(busy=(c - st["c"]) / dt > BURST_RPS, c=c, t=now)
+        return st["busy"]
 
 
 def _pacer(srv=None, defer_until=0.0):
@@ -271,8 +291,10 @@ def _pacer(srv=None, defer_until=0.0):
         c = time.thread_time()
         d = max(0.0, c - st["last"])
         st["used"] += d
-        time.sleep(min(MAX_PAUSE_S, max(0.002, d * PACE)))
+        if d * PACE >= 0.001:                            # yield in proportion to real work; no fixed 2 ms floor per call
+            time.sleep(min(MAX_PAUSE_S, d * PACE))       # (thousands of floor sleeps made a 0.3 s-CPU cycle take 12 s)
         while st["deferred"] < MAX_DEFER_S and time.time() < defer_until and _busy(srv):
+            time.sleep(BURST_WINDOW_S)                   # only a real burst waits (a quiet moment is re-checked next window)
             st["deferred"] += BURST_WINDOW_S
         st["last"] = time.thread_time()
     pace.state = st
