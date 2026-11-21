@@ -22,9 +22,10 @@ import time
 from . import net
 
 RESERVE_S = 45
-# sg-squads (soccer-grades-1120 fair): identity links for offered players ESPN's current roster leaves out - last, so it
-# only uses time the other phases left; 0 requests when every offered player resolves (expansion_squads).
-PHASES = {'soccer': (('fotmob', 6, 20), ('football_data', 1, 10), ('exchanges', 12, 15), ('squads', 6, 12)),
+# sg-squads (soccer-grades-1120 fair): identity links for offered players ESPN's current roster leaves out - right after
+# the graded FotMob phase (identities unlock letters; football-data / exchanges are weight-0 research rows); 0 requests
+# and well under a second when every offered player resolves (expansion_squads).
+PHASES = {'soccer': (('fotmob', 6, 20), ('squads', 6, 12), ('football_data', 1, 10), ('exchanges', 12, 15)),
           'tennis': (('thescore', 10, 25), ('exchanges', 6, 15))}
 
 

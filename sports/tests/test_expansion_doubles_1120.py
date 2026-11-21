@@ -116,10 +116,12 @@ def test_doubles_forecast_letters_at_0u_with_its_tier_reason():
     f, reason = model.make_forecast(offer, _facts(fx, offer), NOW)
     assert reason is None and f['distribution'] == 'doubles-population-prior' and f['units'] == 0.0
     assert f['grade'] and f['doubles_model']['group'] == 'atp|0' and f['identity']['player_id'] == 'atp:pair:espn:2293+2699'
+    assert doubles.DOUBLES_TIERS['atp|0']['games_played'] == 'failed'                 # failed test: capped at Lean
+    assert f['grade'] == 'Lean' and f['lean_cap']['model_letter'] not in (None, 'Lean')
     assert f['stake_reason'] == doubles.REASONS[doubles.DOUBLES_TIERS['atp|0']['games_played']]
     assert abs(f['p_over'] + f['p_under'] + f['p_push'] - 1) < 1e-9 and f['p_push'] > 0      # 22.0 can push
     s, _ = model.make_forecast(_offer(stat='sets_played', line=2.5), _facts(fx, _offer(stat='sets_played', line=2.5)), NOW)
-    assert s['stake_reason'] == doubles.REASONS['passed'] and s['p_push'] == 0
+    assert s['stake_reason'] == doubles.REASONS['passed'] and s['p_push'] == 0 and 'lean_cap' not in s
     for stat in ('fantasy_tennis', 'breakpoints_won'):
         o = _offer(stat=stat, line=13.5)
         assert model.make_forecast(o, _facts(fx, o), NOW) == (None, 'doubles_stat_not_modelled')
@@ -137,3 +139,30 @@ def test_settlement_value_from_the_stored_final(tmp_path):
     f = {'identity': {'event_id': 'atp:espn:atp_doubles:850:187517'}, 'stat': 'games_played'}
     assert doubles.actual(f, tmp_path) == (22, ['atp:espn:atp_doubles:850:187517'])
     assert doubles.actual(dict(f, identity={'event_id': 'atp:espn:atp_doubles:850:187530'}), tmp_path) == (None, [])
+
+
+def test_settle_reviews_a_doubles_forecast_from_the_stored_final(tmp_path, monkeypatch):
+    from contextlib import closing
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    monkeypatch.setenv('SCOUT_TENNIS_ENABLED', '1')
+    root = tmp_path / 'tennis'
+    root.mkdir()
+    fx = _fixtures()
+    offer = dict(_offer('Luz O / Matos R', 'Heliovaara H / Patten H'), start='2026-11-15T10:40:00Z')
+    entry = doubles.facts(offer, fx, '2026-11-15T09:00:00Z')
+    entry['event']['status'] = 'scheduled'                                           # as it was before the match
+    f, reason = model.make_forecast(offer, entry, '2026-11-15T09:00:00Z')
+    assert reason is None and f['identity']['event_id'] == 'atp:espn:atp_doubles:850:187517'
+    with closing(model.connect('tennis')) as c:
+        c.execute('INSERT INTO forecasts VALUES (?,?,?,?,?,?)', (f['id'], model.offer_key(offer), 'atp',
+                  f['identity']['event_id'], offer['start'], model.encode(f)))
+        c.commit()
+    assert model.settle('tennis', now='2026-11-16T00:00:00Z')['added'] == 0           # no stored final yet
+    doubles.absorb(root, list(fx.values()), now=doubles.parse_utc(NOW))
+    with closing(model.connect('tennis')) as c:
+        c.execute('DELETE FROM checked')
+        c.commit()
+    assert model.settle('tennis', now='2026-11-16T00:00:00Z')['added'] == 1
+    with closing(model.connect('tennis')) as c:
+        review = json.loads(c.execute('SELECT payload FROM reviews').fetchone()[0])
+    assert review['actual'] == 22 and review['outcome'] == 'push' and review['won'] is None

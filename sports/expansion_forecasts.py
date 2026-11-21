@@ -445,6 +445,11 @@ def make_forecast(offer, facts, now):
         # starter-like, league starter-like, league all-minutes). Kept as a letter, capped at Lean; chance unchanged.
         result.update(grade=policy.LEAN, lean_cap={'version': LEAN_CAP_VERSION, 'model_letter': result['grade']},
                       grade_reason=[*result['grade_reason'], 'Lean: no past games at this stat.'])
+    elif fitted.get('doubles_model') and fitted['stake_tier'] == 'failed' and result['grade'] not in (None, policy.LEAN):
+        # doubles-1: no pair input at all, and the population pmf missed its walk-forward (ATP total games: holdout
+        # matches ran longer than the tune window, so the prior leans Under) - same rule as thin-3: letter capped at Lean
+        result.update(grade=policy.LEAN, lean_cap={'version': LEAN_CAP_VERSION, 'model_letter': result['grade']},
+                      grade_reason=[*result['grade_reason'], 'Lean: population model missed its test.'])
     result['id'] = digest({k:v for k,v in result.items() if k != 'made_at'})
     return result, None
 
