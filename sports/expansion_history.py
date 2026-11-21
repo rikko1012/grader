@@ -293,8 +293,8 @@ def resolve(offer, matches, links=None):
         # pair, both inside the offer's own 2 h window and at most 30 min apart, is one match; an hour apart stays refused.
         (a, b) = sorted(answer.values(), key=lambda x: x['competition'])
         same = {a['competition'], b['competition']} in ({'atp', 'atp_challenger'}, {'wta', 'wta125'})
-        starts = [parse_utc(m['start']) for m in matches if m.get('event_id') in (a['event_id'], b['event_id'])]
-        if same and len(starts) == 2 and abs((starts[0] - starts[1]).total_seconds()) <= TWO_STORE_GAP_S:
+        starts = {m['event_id']: parse_utc(m['start']) for m in matches if m.get('event_id') in (a['event_id'], b['event_id'])}
+        if same and len(starts) == 2 and abs((starts[a['event_id']] - starts[b['event_id']]).total_seconds()) <= TWO_STORE_GAP_S:
             return a if a['competition'] in ('atp', 'wta') else b
     return next(iter(answer.values())) if len(answer) == 1 else None
 

@@ -535,6 +535,7 @@ def test_prizepicks_tennis_pair_listed_by_tour_and_125_stores_takes_the_tour_sto
     other = _tennis_match('wta125', 'wta:365:2', ['Rebeka Masarova', 'Someone Else'], ['wta:player:365:2', 'wta:player:365:9'],
                           '2026-11-20T22:10:00Z')
     assert history.resolve(o, [wta, other]) == {'competition': 'wta', 'event_id': 'wta:espn:1', 'player_id': 'wta:player:espn:1'}
+    assert history.resolve(o, [wta, near, dict(near)]) == history.resolve(o, [wta, near])   # a store listing it twice
 
 
 def test_prizepicks_set_line_opponent_from_the_exact_period_suffix():
