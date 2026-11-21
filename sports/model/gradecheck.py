@@ -502,15 +502,20 @@ def league_report(rows, league, cal_info):
     days = sorted({game_day(r.get("start_utc"), r["forecast_at"]) for r in scored})
     rep = {"counts": counts, "games": len({r["event"] for r in scored}), "game_days": len(days),
            "first_day": days[0] if days else None, "last_day": days[-1] if days else None}
-    # max-p side (the scorecard's chosen side) for comparison only
-    maxp = []
+    # max-p side for comparison only. The scorecard's chosen side is the max over the OFFERED sides, so an Over-only
+    # offer records Over even when P(Under) is larger (audit_1121 nfl r2: 143 NFL rows, hit 45.7%). The max-p
+    # scorecard uses the model's own larger side; offer_forced counts the rows where the two differ.
+    maxp, forced = [], 0
     for r in rows:
         if r["status"] in ("win", "loss") and r.get("chosen") in ("over", "under"):
             o = _outcome(r["value"], r["line"])
             if o in ("over", "under"):
-                pch = r["po"] if r["chosen"] == "over" else r["pu"]
-                maxp.append({"event": r["event"], "hit": 1.0 if o == r["chosen"] else 0.0, "lean": r["chosen"],
+                side = "over" if r["po"] >= r["pu"] else "under"
+                forced += side != r["chosen"]
+                pch = r["po"] if side == "over" else r["pu"]
+                maxp.append({"event": r["event"], "hit": 1.0 if o == side else 0.0, "lean": side,
                              "outcome": o, "p": pch / max(1 - r["pp"], 1e-9)})
+    counts["scorecard_side_offer_forced"] = forced
     rep["overall"] = {"all_leans": stat_of(leans, full=True), "as_shown": stat_of(shown, full=True),
                       "scorecard_max_p_side": stat_of(maxp, full=True)}
     s_all = rep["overall"]["as_shown"]
