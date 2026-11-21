@@ -21,7 +21,7 @@ import numpy as np
 from .. import capabilities, config, identity, store
 from ..contracts import ContractError, Forecast, now_utc, parse_utc
 from . import (GRADE_POLICY_VERSION, MARKET_INFORMED_VERSION, MODEL_VERSION, STAKE_POLICY_VERSION, datasets, dists,
-               featurize, grade_policy, market, model, study)
+               featurize, grade_policy, market, model, nflfix, study)
 from .frame import Frame
 
 ART_DIR = Path(__file__).resolve().parent / "artifacts"
@@ -340,6 +340,9 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     rec3 = _sn1_recorder(league, forecast_at)                                  # sn-1 SHADOW (REGISTER A11 2)
     rec4 = _nrm1_recorder(league, forecast_at)                                 # nrm-1 SHADOW (REGISTER A12 2)
     tw = _tw1(league, art["sha"])                                             # tw-1 per-market layer (REGISTER A7 8)
+    f12 = (nflfix.F12Recorder(forecast_at) if league == "nfl" and (nflfix.f12_on() or nflfix.rush1_on())
+           else None)                                                         # F12 / rush-1 SHADOW log (both off)
+    cap = league == "nfl" and nflfix.cap_on()                                  # pc-cap (audit_1121 r2)
     if tw is not None:
         out["tw1"] = {"sha": tw["sha"], "markets": sorted(tw["markets"])}
     cur_hl, df = None, None
@@ -404,12 +407,19 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
             if tw_m:                                     # tw-1 switched market (A7 8): exact version in the record
                 av, cv = f"{av}+tw-1:{tw['sha']}", _tw1_layer(tw, mk, base_of[gk], lo)[1]["calibration_version"]
                 codes.append("tw-1")
-            shown_mean, code = shown_projection_mean(pmf, ks, mean, bool(tw_m))
+            pmf_o = pmf                                  # pc-cap repairs only this offer's sm-1 PMF (mi-1 keeps pmf)
+            if cap:
+                pmf_o, w_cap = nflfix.cap_repair(pmf, lo, o.line)
+                if w_cap > 0:
+                    codes.append(nflfix.CAP_CODE)
+            shown_mean, code = shown_projection_mean(pmf_o, ks, mean, bool(tw_m))
             if code:
                 codes.append(code)
-            fc, pol = build_forecast(o, rid, forecast_at, MODEL_VERSION, av, pmf, lo, shown_mean, (rid,),
+            fc, pol = build_forecast(o, rid, forecast_at, MODEL_VERSION, av, pmf_o, lo, shown_mean, (rid,),
                                      codes, data_version, cv, (("family_fit", am["family"]),))
-            written.append(("sm-1", fc, pol, pmf, {"row": row}))
+            written.append(("sm-1", fc, pol, pmf_o, {"row": row}))
+            if f12 is not None:
+                f12.add(fc, o, row, pmf, lo)
             sh_items.append((rid, o, gk, pol.get("chosen_p")))
             sm1_probs[rid] = (fc.p_over, fc.p_under, fc.p_push) if not tw_m else dists.line_probs(base_of[gk], lo,
                                                                                                     o.line)
@@ -479,6 +489,8 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
             rec4.market(mk, df, hl, rowpos, sh_items, events, base_of, pmf_of)
         log({"league": league, "market": mk, "written": out["written"]})
     icon.close()
+    if f12 is not None:
+        out["shadow_f12"] = f12.close()
     if rec is not None:
         out["shadow"] = rec.close()
     if rec2 is not None:
@@ -626,6 +638,8 @@ def replay(forecast_id, scon=None):
         mean = float(dists.mean_of(pmf[None, :], ks)[0])
         av, cv = f"{av}+tw-1:{tw['sha']}", meta["calibration_version"]
     if r["model_version"] == MODEL_VERSION:
+        if nflfix.CAP_CODE in (orig.reason_codes or ()):             # pc-cap repaired this offer (audit_1121 r2)
+            pmf, _ = nflfix.cap_repair(pmf, lo, offer.line)
         shown_mean = mean
         if PROJ_MEAN_CODE in (orig.reason_codes or ()) and "+tw-1:" not in (orig.artifact_version or ""):
             shown_mean = float(dists.mean_of(pmf[None, :], ks)[0])      # written under SPORTS_FIX_PROJ_MEAN (#10)

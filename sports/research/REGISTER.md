@@ -855,3 +855,24 @@ forward.injury_absences judged an ESPN injury entry fresh by its FIRST sighting,
 and count only entries in the newest report read (sports/availability.py current()). Shadow forward rows recorded
 before the release under-count long-standing absences; label evidence windows as before / after the release when
 these shadows are reviewed. No shadow definition, artifact or decision rule changes.
+
+## Amendment A13 - NFL audit_1121 round 2: pc-cap, rush-1 shadow, F12_freshcap1 shadow (registered 2026-11-21)
+
+Code: `sports/model/nflfix.py`, wired in `forward.forecast_league` (NFL only) and `forward.replay`. Evidence:
+`C:/Users/tikic/cs2_scout_ops/logs/audit_1121/round2/nfl/` (cap/, rush/ with PREREG.md written before scoring, f12/).
+
+1. **pc-cap** (`SPORTS_NFL_PMF_CAP`, default ON, rollback `=0`). When the larger side of an NFL sm-1 PMF at the
+   offered line is above 0.90 given no push, the offer's PMF is mixed with the same PMF shifted onto the line, with
+   the smallest weight that brings that side to exactly 0.90. Side and letter never move (0.90 >= A band); mi-1 keeps
+   the unrepaired PMF. Reason code `pmf_cap:0.9`; replay re-applies it. Walk-forward (cap picked on earlier days by
+   log loss): 0.90 in 9/9 folds, paired log loss -0.048 per row, game CI [-0.101, -0.013] (6,710 rows, 43 games).
+   Calibration objective only; hit rate cannot change.
+2. **rush-1** (`SPORTS_NFL_RUSH1`, default OFF, shadow). Two PMF layers for RB rush_att / rush_yds were fitted
+   walk-forward by CRPS and scored at the real lines (R1 scale/spread, R2 line-anchored mean). Neither passed
+   (R1 +0.19 pt, game CI [-3.25, +3.64]; R2 +2.66 pt, CI [-6.69, +11.55]). R2's last-fold layer is logged as
+   `rush1_p_over` for forward evaluation; it never enters a forecast.
+3. **F12_freshcap1** (`SPORTS_NFL_F12_SHADOW`, default OFF, shadow). The audit's frozen rule (sha256
+   a6d73d01...b4de), ported unchanged (identical decisions on all 8,630 audit rows), applied to each forward run's
+   NFL slate and logged to `<SPORTS_DATA_DIR>/model/shadow_f12.db` table `f12_shadow`. In a live run every forecast
+   shares one forecast_at, so "fresh" reduces to the variant test. Promotion needs settled forward rows over several
+   Sundays (the confirmation rests on 11-15: 152 of 179 kept rows) and an owner decision on the 17% volume.
