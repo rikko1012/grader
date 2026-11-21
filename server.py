@@ -148,6 +148,7 @@ _SEARCH = {}                                  # query -> (time, body, n_results,
 _PLAYER_LOCKS, _PLAYER_LOCKS_GUARD = {}, threading.Lock()
 RATE_LIMIT = int(os.environ.get("RATE_LIMIT", 60))   # grades per minute per IP (phone carriers share IPs)
 _HITS, _HITS_GUARD = {}, threading.Lock()
+REQUESTS_SEEN = [0]     # requests started (approximate, unlocked): background work (workspace_auto) waits out member bursts
 
 
 _STORE = {"at": 0.0, "data": {}, "lock": threading.Lock()}
@@ -4969,6 +4970,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self._t0 = time.time()
+        REQUESTS_SEEN[0] += 1
         self._sess, self._renew = False, None           # per request (a kept-alive connection reuses this handler)
         self._sent = False
         u = urlparse(self.path)
@@ -6572,6 +6574,7 @@ class Handler(BaseHTTPRequestHandler):
         """Same failure handling as do_GET (audit 54: an exception here dropped the connection with no response)."""
         self._t0 = time.time()                          # bug sweep 2026-11-06 #26: per request, as do_GET (kept-alive
         self._sent = False                              # handler: server time was measured from the previous request)
+        REQUESTS_SEEN[0] += 1
         try:
             return self._do_post()
         except CLIENT_GONE:

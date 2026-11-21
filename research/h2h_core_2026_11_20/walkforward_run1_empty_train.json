@@ -1,0 +1,127 @@
+{
+ "rows": 101380,
+ "train": 0,
+ "valid": 40189,
+ "test": 61191,
+ "test_matches": 6285,
+ "baseline_test_mae": 6.095548836675613,
+ "defs": {
+  "N": {
+   "b_train": 0.0,
+   "b_valid": 0.06096856324446533,
+   "sign_agrees": false,
+   "test_dmae": 0.0,
+   "ci": [
+    0.0,
+    0.0
+   ],
+   "pass": false,
+   "share_with_meeting": {
+    "train": NaN,
+    "test": 0.38417414325636123
+   },
+   "test_rows_with_meeting": 23508,
+   "dmae_on_rows_with_meeting": 0.0,
+   "ci_on_rows_with_meeting": [
+    0.0,
+    0.0
+   ],
+   "mean_r_with_meeting_test": 0.0025106497274975984
+  },
+  "C": {
+   "b_train": 0.0,
+   "b_valid": 0.04305910665595855,
+   "sign_agrees": false,
+   "test_dmae": 0.0,
+   "ci": [
+    0.0,
+    0.0
+   ],
+   "pass": false,
+   "share_with_meeting": {
+    "train": NaN,
+    "test": 0.3897305159255446
+   },
+   "test_rows_with_meeting": 23848,
+   "dmae_on_rows_with_meeting": 0.0,
+   "ci_on_rows_with_meeting": [
+    0.0,
+    0.0
+   ],
+   "mean_r_with_meeting_test": 0.004072436692327027
+  },
+  "U": {
+   "b_train": 0.0,
+   "b_valid": 0.04934879050952548,
+   "sign_agrees": false,
+   "test_dmae": 0.0,
+   "ci": [
+    0.0,
+    0.0
+   ],
+   "pass": false,
+   "share_with_meeting": {
+    "train": NaN,
+    "test": 0.4152244611135624
+   },
+   "test_rows_with_meeting": 25408,
+   "dmae_on_rows_with_meeting": 0.0,
+   "ci_on_rows_with_meeting": [
+    0.0,
+    0.0
+   ],
+   "mean_r_with_meeting_test": 0.0038157173538266066
+  }
+ },
+ "c_only": {
+  "test_rows": 1900,
+  "share_test": 0.031050317857201224,
+  "train_rows": 0,
+  "mean_r": 0.01996283828000678,
+  "corr_f_r": 0.04331981408404397,
+  "dmae": 0.0,
+  "ci": [
+   0.0,
+   0.0
+  ]
+ },
+ "real_lines": {
+  "decided_rows": 5604,
+  "joined": 5601,
+  "N": {
+   "rows": 3102,
+   "hit": 0.4706640876853643,
+   "ci": [
+    0.4465913547810604,
+    0.49482636860001816
+   ],
+   "overs_pointed": 1565
+  },
+  "C": {
+   "rows": 2998,
+   "hit": 0.4666444296197465,
+   "ci": [
+    0.44341709301597476,
+    0.49023041341700385
+   ],
+   "overs_pointed": 1475
+  },
+  "U": {
+   "rows": 3231,
+   "hit": 0.46920458062519343,
+   "ci": [
+    0.4469879749334581,
+    0.4915299785532836
+   ],
+   "overs_pointed": 1625
+  },
+  "c_only": {
+   "rows": 129,
+   "hit": 0.4418604651162791,
+   "ci": [
+    0.3309721371708512,
+    0.556339351900879
+   ]
+  }
+ }
+}

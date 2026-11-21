@@ -780,6 +780,36 @@
     return n;
   }
   function drop(box, cls) { var n = box.querySelector(':scope > .' + cls); if (n) n.remove(); }
+  /* hc-1 roster-core H2H (h2h_core.py, owner 2026-11-20 "3 people = a team's core"): the doc's h2h counts every series in which he
+     faced 3+ of tonight's opponent's current HLTV players, under any team name, plus the same-team meetings. This block, appended
+     inside the hub's own H2H section (nothing of the hub's moved or removed), says for each meeting how it counts: the team name
+     then, which of tonight's players he faced, the maps, his number per map vs the line. Then his current core's meetings with
+     tonight's core that he did not play (score only; his number is "—"). Display only. */
+  var mapName = function (m) { var s = String(m || '').replace(/^de_/, ''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—'; };
+  function h2hCoreHtml(r, hh) {
+    if (!hh || !hh.core || !(hh.core.players || []).length) return '';
+    var line = +r.offer.line, stat = isHsProp(r) ? 'Headshots' : 'Kills';
+    var at = function (v) { return !num(v) || !num(line) ? '—' : v > line ? 'Over' : v < line ? 'Under' : 'Push'; };
+    var rows = (hh.series || []).map(function (g) {
+      var who = g.via === 'roster' ? (g.faced || []).join(', ') : 'Same team';
+      var vals = '<b>' + esc(g.value) + '</b>' + ((g.values || []).length ? '<small class="v3p-h2hmaps">' + esc(g.values.join(' + ')) + '</small>' : '');
+      return '<tr><td>' + esc(g.date || '—') + '</td><td><b>' + esc(g.opponent || '—') + '</b><small class="v3p-h2hmaps">' + esc((g.maps || []).map(mapName).join(', ') || '—')
+        + '</small></td><td>' + esc(who) + '</td><td class="sc-num">' + vals + '</td><td class="sc-num h-at-' + at(g.value).toLowerCase() + '">' + at(g.value) + '</td></tr>';
+    }).join('');
+    var tc = (hh.team_core || []).map(function (m) {
+      var sc = num(m.maps_won) && num(m.maps_lost) ? m.maps_won + '–' + m.maps_lost : '—';
+      return '<tr><td>' + esc(m.date || '—') + '</td><td><b>' + esc((m.team || '—') + ' vs ' + (m.opponent || '—')) + '</b></td><td>' + esc((m.faced || []).join(', ')) + '</td><td class="sc-num">' + esc(sc) + '</td><td class="sc-num">—</td></tr>';
+    }).join('');
+    var head = function (cols) { return '<thead><tr>' + cols.map(function (c, i) { return '<th scope="col"' + (i >= cols.length - 2 ? ' class="sc-num"' : '') + '>' + esc(c) + '</th>'; }).join('') + '</tr></thead>'; };
+    return '<p class="h-history-note">A meeting counts when he faced 3 or more of tonight’s ' + esc(hh.opponent) + ' players (' + esc(hh.core.players.join(', ')) + '), under any team name, or the same team.</p>'
+      + (rows ? '<div class="v3p-tablewrap"><table class="v3p-h2htable">' + head(['Date', 'Opponent then · maps', 'Faced', stat, 'At ' + r.offer.line]) + '<tbody>' + rows + '</tbody></table></div>' : '')
+      + (tc ? '<p class="h-history-note">His current team’s core against tonight’s core, without him:</p><div class="v3p-tablewrap"><table class="v3p-h2htable">' + head(['Date', 'Teams then', 'Faced', 'Maps won', stat]) + '<tbody>' + tc + '</tbody></table></div>' : '');
+  }
+  function h2hCore(box, r, doc) {
+    var sec = box.querySelector('#hub-card-body .h-h2h') || box.querySelector('.h-h2h');
+    if (!sec) return;
+    addIn(sec, 'v3p-h2hcore', h2hCoreHtml(r, doc && doc.h2h), null);
+  }
   /* HLTV only (owner 2026-11-20): the hub's Stats tab panels that print BO3.gg numbers are hidden on the v3 card (the HLTV ones stay):
      "Stats · Maps 1–2 · BO3.gg" whole, and in "Map pool" the BO3.gg table + its note (the HLTV prop-map table stays). The hub's
      nodes are only hidden (class), never moved or removed; the classic card (v3 off) is untouched. */
@@ -907,6 +937,7 @@
     } else drop(box, 'v3p-maps');
     try { paintLine(box, r, doc, st); } catch (e) { /* the hub's own strip stays as it is */ }
     if (r.sport === 'cs2') { try { hideBo3(box); } catch (e) { /* the hub's panels stay as they are */ } }
+    if (r.sport === 'cs2') { try { h2hCore(box, r, doc); } catch (e) { /* the hub's own H2H section stays as it is */ } }
     try { likelyMaps(box, r, doc); } catch (e) { /* the hub's own line stays */ }
     try { linesTab(box); } catch (e) { /* the hub's own table stays */ }
     put(box, 'v3p-dock sc-dock', dockHtml(r, doc, st, id), null);

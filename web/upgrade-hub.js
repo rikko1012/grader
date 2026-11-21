@@ -2139,7 +2139,7 @@ export function mount(C) {
     const ready=!!row&&!H.marketLoading&&!H.marketError;
     const control=document.createElement('section');control.className='h-mt-state';
     control.setAttribute('aria-label',arb?'Arbitrage slip generator':'Sportsbook slip generator');
-    control.innerHTML=`<h3>${arb?'Arbitrage slip generator':'Sportsbook slip generator'}</h3><button data-hub="price-draft" data-id="${esc(row?.dataset.id||'')}"${ready?'':' disabled'}>${arb?'Generate best paired slips':'Generate best bet slip'}</button><p>${H.marketLoading?'Checking current prices…':H.marketError?'Refresh prices to restore generation.':ready?(arb?'Creates two separate bets at matched odds. Set total stake below, or use Generate paired slips on any row.':'Creates one straight bet from the best qualifying row below. Each price is checked again before copying.'):(arb?'No qualifying pair matches these filters. Refresh prices to check again. Two fresh, compatible opposing prices are required.':'No positive-EV sportsbook price matches these filters. Current reference prices are listed below when available.')}</p>`;
+    control.innerHTML=`<h3>${arb?'Arbitrage slip generator':'Sportsbook slip generator'}</h3><button data-hub="price-draft" data-id="${esc(row?.dataset.id||'')}"${ready?'':' disabled'}>${arb?'Generate best paired slips':'Generate best bet slip'}</button>${ready?`<button data-hub="price-draft-copy" data-id="${esc(row.dataset.id)}">${arb?'Copy both bets':'Copy this bet'}</button>`:''}<p>${H.marketLoading?'Checking current prices…':H.marketError?'Refresh prices to restore generation.':ready?(arb?'Creates two separate bets at matched odds. Set total stake below, or use Generate paired slips on any row.':'Creates one straight bet from the best qualifying row below. Each price is checked again before copying.'):(arb?'No qualifying pair matches these filters. Refresh prices to check again. Two fresh, compatible opposing prices are required.':'No positive-EV sportsbook price matches these filters. Current reference prices are listed below when available.')}</p>`;
     box.prepend(control);
   }
   /* N14: bring Tools' Alerts section to the top of the screen. The Price check above it fills in after its prices load and would
@@ -2173,6 +2173,8 @@ export function mount(C) {
     /* QOL 2026-11-07: while a refresh is out the button says so and does nothing (a second press sent a second request) */
     const rb=document.querySelector('#hub-market-tools [data-hub="refresh-markets"]');
     if(rb){rb.disabled=!!H.marketLoading;rb.textContent=H.marketLoading?'Checking prices…':'Refresh prices';}
+    if(rb&&mode!=='all'){let ck=$('hub-mt-clock');if(!ck){ck=document.createElement('small');ck.id='hub-mt-clock';ck.className='h-mt-clock';rb.after(ck);}
+      const t=Date.parse(H.marketDoc?.as_of);ck.textContent=Number.isFinite(t)?'Checked '+new Date(t).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})+' · updates every minute':'';}
     const box=$('hub-market-filters'),had=box.contains(document.activeElement)?document.activeElement.id:null;
     box.innerHTML=H.marketDoc?marketFilters():'';
     if(had)$(had)?.focus({preventScroll:true});
@@ -2206,9 +2208,18 @@ export function mount(C) {
       return batch;
     }finally{H.generating=false;}
   }
+  /* owner 2026-11-20 (EV automatic): a ready slip from /auto-slips names its board rows; they become tray legs here (the board copy
+     is read first), so Add / Copy / Open go through the same recheck as every other slip */
+  async function autoSlip(s){
+    const sports=[...new Set(s.legs.map(l=>l.sport))];
+    await Promise.all(sports.map(sp=>C.loadBoard(sp)));
+    const legs=s.legs.map(l=>{const r=R.boards[l.sport]?.recs?.get(C.offerKey(l.book,l.row_id));return r&&!C.started(r)?C.makeLeg(r,l.side):null;});
+    if(legs.some(x=>!x))throw new Error('A line in this slip just changed. A new slip is built within a minute.');
+    return {platform:s.platform,entry_type:s.entry_type,legs};
+  }
   async function paintEv(){
     const box=$('hub-ev-body');if(!box||H.section!=='ev'||!EVB)return;
-    try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,generateEV,checkEV:C.checkGenerated,openEV:C.openGenerated,bookLinks:!!R.me.features?.book_links,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
+    try{(await import('/upgrade/ev.js')).paint(box,{api,esc,when,SPORTS,generateEV,checkEV:C.checkGenerated,openEV:C.openGenerated,bookLinks:!!R.me.features?.book_links,autoOn:EVB,autoSlip,useGenerated:C.useGenerated,addLeg(id,side){const r=rec(id);if(!r)return C.say('Open the board first, then add this line.');if(unavailableReason(r)||C.started(r))return C.say('This offer needs a fresh source check. Refresh the board.');if(C.onSlip(r))return revealSlip(r);if(!r.offer[side]?.offered)return openCard(id,'overview');C.addLeg(r,side);refreshSlip();C.say('Added to your slip.');}});}
     catch(e){box.innerHTML=`<p class="h-mt-state">EV could not be loaded. Use Refresh to try again.</p>`;}
   }
   function section(name,navigate=true) {
@@ -2311,7 +2322,7 @@ export function mount(C) {
     quick(id){if(!V2||!['freshOnly','soonOnly','movedOnly'].includes(id))return;H[id]=!H[id];H.page=0;paintBoard();},
     // By game keeps the board's filters: the games listed are the ones those filters show
     'game-board'(id){H.game=id;H.view='list';H.page=0;section('board');$('hub-center').scrollTop=0;},
-    'price-draft':id=>priceDraft(id), 'copy-price-draft':()=>priceDraft(priceDraftRequest,true),
+    'price-draft':id=>priceDraft(id), 'copy-price-draft':()=>priceDraft(priceDraftRequest,true), 'price-draft-copy':id=>priceDraft(id,true),
     generate, 'use-generated':useGenerated, 'open-generated':i=>C.openGenerated(H.batch?.slips?.[Number(i)]), 'open-line':()=>C.openLine(rec(H.detail),H.histSide), 'save-batch':saveBatch,
     'player-market'(id){if(rec(id))openCard(id,H.cardTab);},
     /* QOL 2026-11-07: Done inside the pop-over hands focus back to the Filters button (it stayed on the hidden Done button) */
@@ -2661,7 +2672,9 @@ export function mount(C) {
      request) so a price or both-sides pair past the server's age limit drops off even if nobody touches the page */
   const mtOld=()=>{const t=Date.parse(H.marketDoc?.as_of);return !Number.isFinite(t)||Date.now()-t>120000;};
   document.addEventListener('visibilitychange',()=>{if(isOpen()&&!document.hidden&&mtSection()&&H.marketDoc&&!H.marketLoading&&mtOld())actions['refresh-markets']();});
-  setInterval(()=>{const box=$('hub-market-results');if(!document.hidden&&mtSection()&&H.marketDoc&&box&&!box.contains(document.activeElement))paintMarketResults();},60000);
+  setInterval(()=>{const box=$('hub-market-results'),tools=$('hub-market-tools');if(document.hidden||!mtSection()||!H.marketDoc||!box)return;
+    if(tools&&tools.contains(document.activeElement)&&/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName))return;
+    const t=Date.parse(H.marketDoc.as_of);if(isOpen()&&!H.marketLoading&&(!Number.isFinite(t)||Date.now()-t>55000))actions['refresh-markets']();else if(!box.contains(document.activeElement))paintMarketResults();},60000);
   restoreBoard();
   route();
   loadPreferences().then(()=>{if(H.section==='board')paintBoard();else if(H.section==='alerts'||H.section==='tools')paintAlerts();});
