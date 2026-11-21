@@ -249,6 +249,9 @@ def test_line_moves_view_is_the_board_with_the_hubs_filter(browser, env, monkeyp
         assert "moved from where they opened" in p.locator("#v3x-view-note").inner_text()
         assert "v3=moves" not in p.evaluate("location.hash")
         chip = p.locator("#hub-chips [data-id=movedOnly]")
+        # the hub may repaint its chips between two reads; views.js relabels them on the next frame
+        p.wait_for_function("(c => c && c.getAttribute('aria-label') === 'Remove Line moved filter')"
+                            "(document.querySelector('#hub-chips [data-id=movedOnly]'))")
         assert chip.inner_text().replace("×", "").strip() == "Line moved"
         assert chip.get_attribute("aria-label") == "Remove Line moved filter"
         rows = rows_text(p)
