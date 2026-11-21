@@ -210,3 +210,34 @@ def test_next_build_is_timed_from_build_end_and_paced(monkeypatch):
         pass
     e = wa_auto._build_part(server, ("arb", ("nba",)), burn)
     assert e["next"] > time.time() + wa_auto.CYCLE_S * 10                           # over its CPU budget: waits longer
+
+
+def test_the_scan_waits_out_a_member_burst_but_never_forever(monkeypatch):
+    import threading
+    import types
+    srv = types.SimpleNamespace(REQUESTS_SEEN=[0])
+    stop = threading.Event()
+
+    def burst():                                                                     # ~1,000 requests a second
+        while not stop.is_set():
+            srv.REQUESTS_SEEN[0] += 1
+            time.sleep(0.001)
+    t = threading.Thread(target=burst, daemon=True)
+    t.start()
+    monkeypatch.setattr(wa_auto, "MAX_DEFER_S", 0.6)
+    try:
+        pace = wa_auto._pacer(srv)
+        t0 = time.time()
+        pace()
+        waited = time.time() - t0
+        assert 0.5 <= waited < 2.0 and pace.state["deferred"] >= 0.5, waited          # waited, up to the cap
+        t0 = time.time()
+        pace()
+        assert time.time() - t0 < 0.3                                                  # the cap is per part: no second wait
+    finally:
+        stop.set()
+        t.join()
+    quiet = wa_auto._pacer(types.SimpleNamespace(REQUESTS_SEEN=[0]))
+    t0 = time.time()
+    quiet()
+    assert time.time() - t0 < 0.3 and quiet.state["deferred"] == 0

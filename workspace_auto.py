@@ -13,8 +13,9 @@ Load (700 members at once): a member's request never builds while a current answ
 part is keyed by the market sports a member sees (NBA / NFL; a CS2 + LoL + NBA member and an NBA-only member share one), the
 arbitrage part by the sports the market sheet holds. One daemon thread (started on the first request, only with SCOUT_PICKEM_EV
 or SCOUT_MARKET_TOOLS on) rebuilds each part some member asked for in the last IDLE_S seconds, CYCLE_S seconds after its last
-build ENDED, and yields between entries (it sleeps PACE x the CPU each entry used, so it takes at most about half a core, and a
-part that used more than CYCLE_CPU_S of CPU waits proportionally longer). A request whose part is older than SERVE_MAX_S joins
+build ENDED, and yields between entries and between chunks of the shared pricing (it sleeps PACE x the CPU it used, so it takes
+at most about half a core; while member requests compete for the CPU it waits for a quiet moment, up to MAX_DEFER_S per part;
+a part that used more than CYCLE_CPU_S of CPU waits proportionally longer before its next build). A request whose part is older than SERVE_MAX_S joins
 one single-flight build. The served document is assembled once per part change, never per request.
 
 Age (2026-11-20 review): every part carries its own as_of (its build start), and every slip / pair its expires_at - the time its
@@ -30,12 +31,17 @@ import threading
 import time
 
 CYCLE_S = 30            # a part is rebuilt this long after its last build ENDED
-SERVE_MAX_S = 60        # a part built (or tried) this recently is served; older -> one single-flight build
+SERVE_MAX_S = 90        # a part built (or tried) this recently is served; older -> one single-flight build (age is
+                        # enforced per slip / pair by expires_at, not by this)
 IDLE_S = 600            # a sport set nobody asked for in this long is no longer rebuilt
 MAX_SETS = 8            # sport sets kept warm (member access gives only a handful)
 PACE = 1.0              # background scan: sleep PACE x the CPU each entry used (about half a core at most)
 MAX_PAUSE_S = 0.5
 CYCLE_CPU_S = 3.0       # a part that used more CPU than this waits CYCLE_S x (used / this) before its next build
+BUSY_LAG_S = 0.006      # a short sleep that comes back this much late = other threads want the CPU
+BURST_RPS = 60          # more requests a second than this = a member burst (700 members polling once a minute ~ 12/s)
+BURST_WINDOW_S = 0.05
+MAX_DEFER_S = 15        # the scan waits for a quiet moment at most this long per part, then finishes regardless
 SLIPS_PER_ENTRY = 2
 MIN_PICKS, MAX_PICKS = 2, 6     # the generator's own limits (workspace_api._gen_opts)
 ARB_MAX = 25
@@ -47,7 +53,7 @@ _PARTS = {}             # (kind, sports) -> {"t0": build start, "tried": last at
 _STORE = {}             # sport set -> {"stamp", "body", "expires"}
 _DEMAND = {}            # sport set -> last request time
 _THREAD = {"t": None, "srv": None, "cycles": 0, "errors": 0, "last_error": None, "last_cycle_s": None, "last_cycle_cpu_s": None,
-           "scanning": False}
+           "last_deferred_s": None, "scanning": False}
 
 
 def ev_on():
@@ -242,15 +248,31 @@ def part_keys(seen):
     return out
 
 
-def _pacer():
-    """Called between units of background work: sleeps PACE x the CPU this thread used since the last call."""
-    st = {"last": time.thread_time(), "used": 0.0}
+def _busy(srv):
+    """True while members are being served in a burst: more than BURST_RPS requests a second over a short window
+    (srv.REQUESTS_SEEN), or other threads competing for the CPU (a 2 ms sleep comes back late)."""
+    seen = getattr(srv, "REQUESTS_SEEN", None)
+    c0, t = (seen[0] if seen else 0), time.perf_counter()
+    time.sleep(BURST_WINDOW_S)
+    dt = time.perf_counter() - t
+    if seen and (seen[0] - c0) / dt > BURST_RPS:
+        return True
+    return dt - BURST_WINDOW_S > BUSY_LAG_S
+
+
+def _pacer(srv=None):
+    """Called between units of background work (entries; every workspace_ev.YIELD_EVERY legs inside the shared pricing): sleeps
+    PACE x the CPU this thread used since the last call, then, while member requests are competing for the CPU, waits for a
+    quiet moment (at most MAX_DEFER_S per part in all)."""
+    st = {"last": time.thread_time(), "used": 0.0, "deferred": 0.0}
 
     def pace():
         c = time.thread_time()
         d = max(0.0, c - st["last"])
         st["used"] += d
         time.sleep(min(MAX_PAUSE_S, max(0.002, d * PACE)))
+        while st["deferred"] < MAX_DEFER_S and _busy(srv):
+            st["deferred"] += BURST_WINDOW_S
         st["last"] = time.thread_time()
     pace.state = st
     return pace
@@ -262,10 +284,14 @@ def _build_part(srv, key, pace=None):
     kind, sports = key
     t0, c0 = time.time(), time.thread_time()
     allowed = dict.fromkeys(sports, True)
+    import workspace_ev as we
+    we._PACE.fn = pace                                   # this thread only: the shared pricing yields too
     try:
         part = ev_part(srv, allowed, pace) if kind == "ev" else arb_part(srv, allowed, t0, pace)
     except Exception as e:                               # noqa: BLE001
         part = {"state": "unavailable", "error": type(e).__name__, ("entries" if kind == "ev" else "pairs"): []}
+    finally:
+        we._PACE.fn = None
     if pace is not None:
         pace()
     cpu = pace.state["used"] if pace is not None else time.thread_time() - c0
@@ -282,6 +308,7 @@ def _build_part(srv, key, pace=None):
         _PARTS[key] = entry
         _THREAD["last_cycle_s"] = round(t1 - t0, 3)
         _THREAD["last_cycle_cpu_s"] = round(cpu, 3)
+        _THREAD["last_deferred_s"] = round(pace.state["deferred"], 2) if pace is not None else 0.0
     return entry
 
 
@@ -391,7 +418,7 @@ def _loop():
         for key in due:
             try:
                 _THREAD["scanning"] = True
-                _ensure(srv, key, force=True, pace=_pacer())
+                _ensure(srv, key, force=True, pace=_pacer(srv))
                 _THREAD["cycles"] += 1
             except Exception as e:                       # noqa: BLE001 - the loop never dies on one bad build
                 _THREAD["errors"] += 1
@@ -454,7 +481,7 @@ def serve(srv, allowed, now=None):
 def status():
     with _LOCK:
         return {"sets": len(_STORE), "parts": len(_PARTS), "demand": len(_DEMAND), "alive": bool(_THREAD["t"] and _THREAD["t"].is_alive()),
-                **{k: _THREAD[k] for k in ("cycles", "errors", "last_error", "last_cycle_s", "last_cycle_cpu_s", "scanning")}}
+                **{k: _THREAD[k] for k in ("cycles", "errors", "last_error", "last_cycle_s", "last_cycle_cpu_s", "last_deferred_s", "scanning")}}
 
 
 def reset():

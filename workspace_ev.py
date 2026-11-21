@@ -41,6 +41,18 @@ PREDICTION = ("kalshi", "polymarket")
 MAX_REQUIRED = 2
 _LOCK = threading.Lock()
 _FAIR = {}                          # (board token, fair params) -> {(sport, app, offer id, side): leg}
+_PACE = threading.local()           # workspace_auto's background scan sets .fn on its own thread: called every YIELD_EVERY legs
+
+
+YIELD_EVERY = 200
+
+
+def _yield(i):
+    """Let the background scan give the CPU back between chunks of legs. A member's build (any other thread) never waits."""
+    if i % YIELD_EVERY == 0:
+        fn = getattr(_PACE, "fn", None)
+        if fn is not None:
+            fn()
 
 
 def enabled():
@@ -231,6 +243,7 @@ def _legs(srv):
         if hit and hit[0] == token and now - hit[1] < TTL:
             return token, hit[2]
     legs = []
+    i = 0
     for sport, recs, s in boards:
         books = {}
         if sport in MARKET_SPORTS:
@@ -239,6 +252,8 @@ def _legs(srv):
                     same, other = x.get("books") or ([], [])
                     books[(p, rid)] = (list(same) + list(other), x.get("st"), x.get("scope"))
         for r in recs:
+            i += 1
+            _yield(i)
             o, m, sc = r.get("offer") or {}, r.get("market") or {}, r.get("scout") or {}
             app = o.get("platform")
             if app not in APPS or (m.get("line_type") or "standard") != "standard" or o.get("line") is None:
@@ -281,7 +296,8 @@ def _priced(srv, p, now):
             return legs, hit[1]
     opts = dict(_fair_opts(p), freshness=price_limits(), exact=True)
     out = {}
-    for leg in legs:
+    for i, leg in enumerate(legs, 1):
+        _yield(i)
         if leg["sport"] not in MARKET_SPORTS or not leg["book_rows"]:
             continue
         res = ev_board.price_leg(quotes_of(leg["book_rows"], leg["sport"]), leg["side"], leg["line"], now, be=None, p_model=None,
