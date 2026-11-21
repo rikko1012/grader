@@ -1509,7 +1509,7 @@
       await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
       HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, hitsPending, tallies, siblings, started, priceText, lineLabel, offerKey,
-        research, researchDoc, chartSvg, addLeg, generateBatch, checkGenerated, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, moveHtml, movesOf, moveRow, resultsInto, say, chanceOf, verdictText, oneSided, oneSidedNote, shareSlip, faceHtml, lineKind, lineKindHtml });
+        research, researchDoc, chartSvg, addLeg, makeLeg, generateBatch, checkGenerated, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, moveHtml, movesOf, moveRow, resultsInto, say, chanceOf, verdictText, oneSided, oneSidedNote, shareSlip, faceHtml, lineKind, lineKindHtml });
     } catch (e) { window.scoutClassicMount?.(); console.warn("Research hub unavailable; original tools remain available"); }
     window.scoutBootDone?.();
     await loadState();

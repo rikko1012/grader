@@ -85,6 +85,14 @@ def test_only_explicit_forecast_capture_boundaries_import_core():
                 assert nodes and all(n.module == 'gradecore' and {a.name for a in n.names} <= {'market_tools', 'devig', 'containment', 'book_rules'} for n in nodes)
                 assert not any(isinstance(n, ast.Import) and any(a.name.startswith('gradecore') for a in n.names) for n in ast.walk(tree))
                 continue
+            if p.relative_to(ROOT).as_posix() == 'workspace_auto.py':
+                # auto EV / arbitrage slips (owner 2026-11-20): price freshness, settlement rules and market tools only;
+                # never grades, logs or stakes (slips come from workspace_ev / workspace_api's generator).
+                tree = ast.parse(p.read_text(encoding='utf-8'))
+                nodes = [n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and (n.module or '').startswith('gradecore')]
+                assert nodes and all(n.module == 'gradecore' and {a.name for a in n.names} <= {'fair', 'book_rules', 'market_tools'} for n in nodes)
+                assert not any(isinstance(n, ast.Import) and any(a.name.startswith('gradecore') for a in n.names) for n in ast.walk(tree))
+                continue
             if p.relative_to(ROOT).as_posix() == 'workspace_ev.py':
                 # SCOUT_PICKEM_EV board: prices pick'em legs (fair, line shift, verified payouts); never grades, logs or stakes.
                 tree = ast.parse(p.read_text(encoding='utf-8'))

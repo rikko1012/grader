@@ -2288,7 +2288,7 @@ def _log_generated(srv, o, slips, now, source):
         traceback.print_exc()
 
 
-def _generate(srv, o, ev_doc=None):
+def _generate(srv, o, ev_doc=None, log=True):
     now = datetime.now(timezone.utc)
     table = _slip_table(srv)
     legs, why, missing = [], {}, []
@@ -2323,7 +2323,8 @@ def _generate(srv, o, ev_doc=None):
            "pool": {"legs": len(mine), "matches": len({(l["sport"], l["event"]) for l in mine}), "excluded": why, "unavailable": missing,
                     "banded": bool(table and table.get("cells"))},
            "slips": [_wire_slip(s, srv, now) for s in b["slips"]], "shortage": b["shortage"], "search": b["search"]}
-    _log_generated(srv, o, b["slips"], now, "ev-slips" if ev_doc is not None else "generate")
+    if log:                                 # workspace_auto's background scan builds unlogged: the record keeps member-generated slips only
+        _log_generated(srv, o, b["slips"], now, "ev-slips" if ev_doc is not None else "generate")
     if ev_doc is not None:
         doc['version'] = 'ev-slips-1'
         for slip in doc['slips']:
@@ -2362,6 +2363,19 @@ def get_ev_slips(h, srv, q, member, scratch, name):
     except Exception:
         return h.send(503, {'error': 'Scout could not build slips just now. Try again.'})
     return h.send(st, body)
+
+
+def get_auto_slips(h, srv, q, member, scratch, name):
+    """SCOUT_PICKEM_EV / SCOUT_MARKET_TOOLS: ready-made EV slips and arbitrage pairs, kept current in the background
+    (workspace_auto). A read of the shared answer: no per-member build, no generate limit."""
+    import workspace_auto
+    if not workspace_auto.enabled():
+        return h.send(404, {'error': 'not found'})
+    try:
+        st, body = workspace_auto.serve(srv, access(h, srv, q))
+    except Exception:
+        return h.send(503, {'error': 'Prices are unavailable just now.'})
+    return h.send(st if st == 200 else 503, body if st == 200 else {'error': 'Prices are unavailable just now.'})
 
 
 def get_market_slips(h, srv, q, member, scratch, name):
@@ -2711,7 +2725,7 @@ def post_report_problem(h, srv, q, member, scratch, name, n):
 
 GET = {"game-books": get_game_books, "me": get_me, "board": get_board, "line": get_line, "mine": get_mine, "results": get_results, "state": get_state, "rules": get_rules,
        "diagnostics": get_diagnostics, "hits": get_hits, "stated": get_stated, "alert-delivery":get_alert_delivery,
-       "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "ev-slips": get_ev_slips, "market-slips": get_market_slips, "book-board": get_book_board,
+       "market-tools":get_market_tools, "grade-review":get_grade_review, "generate": get_generate, "ev-slips": get_ev_slips, "auto-slips": get_auto_slips, "market-slips": get_market_slips, "book-board": get_book_board,
        "book-lines": get_book_lines, "pickem-ev": get_pickem_ev, "market-edge": get_market_edge}
 POST = {"recheck": post_recheck, "track": post_track, "state": post_state, "alert-delivery":post_alert_delivery,
         "book-line":post_book_line, "slip-advice": post_slip_advice}

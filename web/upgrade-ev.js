@@ -13,6 +13,27 @@ let C = null, box = null;
 let generatedBatch = null, draftBusy = false, draftMessage = '';
 let generating = false, generateMessage = '', slipCount = 4, noRepeats = true;
 const PAGE_SIZE = 50;
+/* owner 2026-11-20 ("make EV and arbitrage automatic, people shouldn't have to work that hard to get slips"): ready slips come from
+   the server's background scan (workspace_auto.py: every verified entry, built from legs that beat it on 2 independent books), and
+   the page re-reads both the prices and the ready slips once a minute while it is on screen. Nothing needs pressing. */
+const AUTO_MS = 60000;
+const A = {doc: null, error: false, busy: '', msg: {}};
+let autoTimer = 0;
+/* a card's message follows its slip (book rows + sides), not its position, so a re-read never shows it under another slip */
+const sigOf = s => s.platform + ':' + s.entry_type + ':' + s.legs.map(l => l.book + '|' + l.row_id + '|' + l.side).join(',');
+async function fetchAuto() {
+  if (!C.autoOn) return;
+  try { A.doc = await C.api('auto-slips'); A.error = false; }
+  catch (e) { A.error = true; }
+  render();
+}
+const onScreen = () => !!box && box.isConnected && !box.closest('[hidden]') && !document.hidden;
+const typing = () => { const a = document.activeElement; return !!a && box.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName); };
+function tick() {
+  if (!onScreen() || typing()) return;
+  if (!S.loading && !generating && !draftBusy) fetchDoc();
+  fetchAuto();
+}
 let pageKey = '', marketPage = 0, modelPage = 0;
 function pager(kind, page, count) {
   if (count <= PAGE_SIZE) return '';
@@ -207,6 +228,75 @@ function render() {
   paintBox();
   if (fk && !box.contains(document.activeElement)) { const el = box.querySelector(fk); if (el && !el.disabled) el.focus({preventScroll: true}); }
 }
+/* review 2026-11-20: the ready slips carry their own build time (ev.as_of) and each slip the time its oldest book price passes the
+   price-age rule (expires_at). A copy older than ev.max_age_s, or a slip past expires_at, is never shown - also when the minute
+   re-read failed and the page still holds the last answer. */
+const past = t => !!t && Date.parse(t) <= Date.now();
+function autoPart() {
+  const ev = A.doc && A.doc.ev;
+  if (!ev || ev.state !== 'ok') return null;
+  if (ev.as_of && ev.max_age_s && Date.now() - Date.parse(ev.as_of) > ev.max_age_s * 1000) return null;
+  return ev;
+}
+function autoSlips(d) {
+  const ev = autoPart();
+  if (!ev) return null;
+  const out = [];
+  ev.entries.forEach((e, ei) => {
+    if (e.app !== d.app) return;
+    e.slips.forEach((s, si) => {
+      if (past(s.expires_at)) return;
+      if (S.f.sport !== 'all' && s.legs.some(l => l.sport !== S.f.sport)) return;
+      out.push({e, s, id: ei + ':' + si, nth: si});
+    });
+  });
+  return out.slice(0, 8);
+}
+function readyLeg(l, sports) {
+  return `<li><strong>${esc(l.player)}</strong><span>${esc(side(l.side))} ${esc(l.line)} ${esc(l.stat_label || '')}${l.period_label ? ' · ' + esc(l.period_label) : ''}</span>`
+    + `<small>${esc(l.event || '')}${l.start_utc ? ' · ' + esc(C.when(l.start_utc)) : ''}${sports > 1 ? ' · ' + esc(C.SPORTS[l.sport] || l.sport) : ''}</small>`
+    + `<small class="ev-ready-num">Books ${pct(l.p_market)} · <b class="${evClass(l.ev).trim()}">${evText(l.ev)}</b> average return${l.books_label ? ' · ' + esc(l.books_label) : ''}</small></li>`;
+}
+function readyHtml(d) {
+  if (!C.autoOn) return '';
+  const list = autoSlips(d), app = d.app_label || (d.app === 'prizepicks' ? 'PrizePicks' : 'Underdog');
+  const ev = autoPart(), sports = (d.sports || []).length, at = ev && ev.as_of ? C.when(ev.as_of) : '';   /* the part's own build time */
+  let body;
+  if (!A.doc) body = `<p class="ev-state" role="status">${A.error ? 'Ready slips could not be read. Scout tries again in a minute.' : 'Building ready slips from current prices…'}</p>`;
+  else if (!list) body = `<p class="ev-state" role="status">Ready slips could not be built just now. Scout tries again in a minute.</p>`;
+  else if (!list.length) body = `<p class="ev-state" role="status">No ${esc(app)} slip can be built right now from legs that beat each entry${S.f.sport !== 'all' ? ' in ' + esc(C.SPORTS[S.f.sport] || S.f.sport) : ''}. Checked ${ev.priced_legs || 0} priced legs${ev.books && ev.books.length ? ' at ' + esc(ev.books.join(', ')) : ''}${at ? ' · ' + esc(at) : ''}. New slips appear here as prices change.</p>`;
+  else body = `<div class="ev-ready-grid">${list.map(({e, s, id, nth}) => {
+    const m = A.msg[sigOf(s)] || '', busy = !!A.busy;
+    return `<article class="ev-ready-card" data-auto="${esc(id)}"><div class="ev-ready-top"><h4>${esc(e.entry_label)} ${e.n}-pick${nth ? ' · option ' + (nth + 1) : ''}</h4>`
+      + `<small>each pick needs ${pct(e.break_even)} · ${e.positive_legs} legs beat it</small></div><ol>${s.legs.map(l => readyLeg(l, sports)).join('')}</ol>`
+      + `<div class="ev-ready-foot"><button data-ev="auto-add" data-id="${esc(id)}"${busy ? ' disabled' : ''}>Add to slip</button><button data-ev="auto-copy" data-id="${esc(id)}"${busy ? ' disabled' : ''}>Copy</button>`
+      + (C.bookLinks ? `<button data-ev="auto-open" data-id="${esc(id)}"${busy ? ' disabled' : ''}>Open in ${esc(app)}</button>` : '')
+      + `</div><p role="status">${esc(m)}</p></article>`;
+  }).join('')}</div>`;
+  return `<section class="ev-ready" aria-label="Ready slips"><div class="ev-ready-head"><h3>Ready slips <small>${esc(app)} · best first${at ? ' · built ' + esc(at) : ''}</small></h3>`
+    + `<p>Built for you from legs that beat each entry on at least two independent books at the app's exact line. Each slip is rechecked when you add, copy or open it. The chance beside each leg is the books' chance; Scout's own chance stays on the board.</p></div>${body}</section>`;
+}
+function autoFind(id) {
+  const [ei, si] = String(id).split(':').map(Number), ev = autoPart(), e = ev && ev.entries[ei];
+  return e && e.slips[si] && !past(e.slips[si].expires_at) ? e.slips[si] : null;
+}
+async function autoAct(a, id) {
+  const s = autoFind(id); if (!s || A.busy) return;
+  const k = sigOf(s);
+  A.busy = id; A.msg[k] = 'Checking current offers…'; render();
+  try {
+    const slip = await C.autoSlip(s);
+    if (a === 'auto-add') { await C.useGenerated(slip); A.msg[k] = 'Added. Your ' + (slip.platform === 'prizepicks' ? 'PrizePicks' : 'Underdog') + ' slip now holds these picks.'; }
+    else if (a === 'auto-open') { await C.openEV(slip); A.msg[k] = 'Current offers checked. Review the app before submitting.'; }
+    else {
+      await C.checkEV(slip);
+      const text = [`${slip.platform === 'prizepicks' ? 'PrizePicks' : 'Underdog'} ${ENTRY[slip.entry_type] || slip.entry_type} · ${slip.legs.length} picks`,
+        ...slip.legs.map(l => `${l.player}: ${side(l.side)} ${l.line} ${l.stat_label} · ${l.period_label} · ${l.event_label}`)].join('\n');
+      await navigator.clipboard.writeText(text); A.msg[k] = 'Rechecked and copied. No entry has been placed.';
+    }
+  } catch (e) { A.msg[k] = (e && (e.doc && e.doc.error || e.message)) || 'A line changed. A new slip is built within a minute.'; fetchAuto(); }
+  finally { A.busy = ''; render(); }
+}
 function generatorHtml() {
   return `<section class="ev-bar" aria-label="Generate EV slips"><label>Slips<select id="ev-slip-count">${[1,2,4,8,12].map(n=>`<option value="${n}"${n===slipCount?' selected':''}>${n} slips</option>`).join('')}</select></label><label><input type="checkbox" id="ev-no-repeats"${noRepeats?' checked':''}> No repeat props</label><button data-ev="generate"${generating||S.loading||S.error||!S.doc?' disabled':''}>${generating?'Checking slips…':'Generate EV slips'}</button><p>Uses this app, entry size, sport and book settings. Only positive-EV standard lines that meet the entry rules; different players and games in each slip.</p><p role="status">${esc(generateMessage)}</p></section>`;
 }
@@ -215,7 +305,7 @@ function paintBox() {
   if (!d) { box.innerHTML = head() + generatorHtml() + `<p class="ev-state" role="status">${S.error ? esc(S.error) + ' Use Refresh to try again.' : 'Checking current prices…'}</p>`; return; }
   const sports = (d.sports || []).length, rows = d.rows.filter(r => keep(r) && (!S.f.evOnly || (typeof r.ev === 'number' && r.ev > 0)));
   const model = d.model_only.filter(keep), entries = d.options.entries.filter(e => e.app === d.app);
-  const nextKey = JSON.stringify([S.f, d.as_of, d.app, d.entry, d.n]);
+  const nextKey = JSON.stringify([S.f, d.app, d.entry, d.n]);   /* not as_of: the minute re-read keeps the page a member is on */
   if (nextKey !== pageKey) { pageKey = nextKey; marketPage = modelPage = 0; }
   marketPage = Math.min(marketPage, Math.max(0, Math.ceil(rows.length / PAGE_SIZE) - 1));
   modelPage = Math.min(modelPage, Math.max(0, Math.ceil(model.length / PAGE_SIZE) - 1));
@@ -226,6 +316,7 @@ function paintBox() {
     + `<div class="ev-bar"><label>Entry<select id="ev-entry">${entries.map(e => `<option value="${e.entry}-${e.n}"${e.entry === d.entry && e.n === d.n ? ' selected' : ''}>${ENTRY[e.entry] || e.entry} ${e.n}-pick · each leg needs ${pct(e.break_even)} (${odds(Math.round(e.american))})</option>`).join('')}</select></label>`
     + `<label class="ev-search">Search<input id="ev-q" type="search" value="${esc(S.f.q)}" placeholder="Player, team or market"></label>`
     + (sports > 1 ? `<label>Sport<select id="ev-sport">${sportOpts.map(([k, t]) => `<option value="${k}"${S.f.sport === k ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>` : '') + `</div>`
+    + readyHtml(d)
     + generatorHtml()
     + (S.error ? `<p class="ev-banner ev-err" role="alert">${esc(S.error)} Showing the prices checked at ${esc(C.when(d.as_of))}. Use Refresh to try again.</p>` : '')   // bug #54
     + (S.notice ? `<p class="ev-banner" role="status">${esc(S.notice)}</p>` : '')
@@ -243,10 +334,18 @@ function paintBox() {
 function head() {
   const d = S.doc;
   return `<div class="h-section-head ev-headline"><div><span class="h-eyebrow">PICK'EM PRICES</span><h2 tabindex="-1">Best prices</h2><p>Pick'em legs whose chance from the books beats what the entry needs.</p></div>`
-    + `<div class="ev-refresh"><button data-ev="refresh"${S.loading ? ' disabled' : ''}>${S.loading ? 'Checking…' : 'Refresh'}</button>${d ? `<small>Checked ${esc(C.when(d.as_of))}</small>` : ''}</div></div>`;
+    + `<div class="ev-refresh"><button data-ev="refresh"${S.loading ? ' disabled' : ''}>${S.loading ? 'Checking…' : 'Refresh'}</button>${d ? `<small>Checked ${esc(C.when(d.as_of))} · updates every minute</small>` : ''}</div></div>`;
 }
 
-const CSS = '#u-hub .ev-generated-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:16px}#u-hub .ev-generated-card{border:1px solid var(--u-line);border-radius:10px;padding:16px;min-width:0}#u-hub .ev-generated-card li{padding:12px 0;border-bottom:1px solid var(--u-line);overflow-wrap:anywhere}#u-hub .ev-generated-card li>*{display:block}#u-hub .ev-generated-card footer{display:flex;flex-wrap:wrap;gap:8px;padding-top:12px}#u-hub .ev-generated-card button{min-height:44px}'
+const CSS = '#u-hub .ev-ready{margin:0 0 16px}#u-hub .ev-ready-head p{color:var(--u-muted);font-size:13px;margin:0 0 10px}'
+  + '#u-hub .ev-ready-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:12px}'
+  + '#u-hub .ev-ready-card{border:1px solid var(--u-line);border-radius:10px;padding:14px;min-width:0;background:var(--u-panel)}'
+  + '#u-hub .ev-ready-card h4{margin:0;font-size:15px}#u-hub .ev-ready-top small{display:block;color:var(--u-muted);font-size:12px}'
+  + '#u-hub .ev-ready-card ol{list-style:none;margin:8px 0 0;padding:0}#u-hub .ev-ready-card li{padding:9px 0;border-top:1px solid var(--u-line);overflow-wrap:anywhere}'
+  + '#u-hub .ev-ready-card li>*{display:block}#u-hub .ev-ready-card li small{color:var(--u-muted);font-size:12px}#u-hub .ev-ready-num b.is-pos{color:var(--u-good,#16a34a)}'
+  + '#u-hub .ev-ready-foot{display:flex;flex-wrap:wrap;gap:8px;padding-top:10px}#u-hub .ev-ready-foot button{min-height:44px;flex:1 1 auto}'
+  + '#u-hub .ev-ready-card p[role=status]{margin:6px 0 0;font-size:12px;color:var(--u-muted)}#u-hub .ev-ready-card p[role=status]:empty{display:none}'
+  + '#u-hub .ev-generated-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:16px}#u-hub .ev-generated-card{border:1px solid var(--u-line);border-radius:10px;padding:16px;min-width:0}#u-hub .ev-generated-card li{padding:12px 0;border-bottom:1px solid var(--u-line);overflow-wrap:anywhere}#u-hub .ev-generated-card li>*{display:block}#u-hub .ev-generated-card footer{display:flex;flex-wrap:wrap;gap:8px;padding-top:12px}#u-hub .ev-generated-card button{min-height:44px}'
   + '#u-hub .ev-pages{display:flex;align-items:center;justify-content:center;gap:16px;padding:16px 0}#u-hub .ev-pages button{min-height:40px;padding:8px 16px}#u-hub .ev-pages button:disabled{opacity:.45}'
   + '#u-hub .ev-wrap{max-width:1180px}#u-hub .ev-headline{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}'
   + '#u-hub .ev-refresh{display:flex;flex-direction:column;align-items:flex-end;gap:4px}#u-hub .ev-refresh small{color:var(--u-muted)}'
@@ -283,6 +382,7 @@ function onClick(e) {
   const b = e.target.closest('[data-ev]'); if (!b || !box.contains(b) || b.disabled) return;
   const id = b.dataset.id, a = b.dataset.ev;
   if (a === 'page') { const step = Number(b.dataset.step); if (b.dataset.kind === 'market') marketPage = Math.max(0, marketPage + step); else modelPage = Math.max(0, modelPage + step); return render(); }
+  if (a === 'auto-add' || a === 'auto-copy' || a === 'auto-open') return autoAct(a, id);
   if (a === 'copy-generated' || a === 'open-generated') {
     const slip=generatedBatch?.slips[Number(id)];if(!slip||draftBusy)return;
     draftBusy=true;draftMessage='Checking current offers…';render();
@@ -370,4 +470,10 @@ export function paint(el, ctx) {
     load();
   }
   if (!S.doc && !S.loading) fetchDoc(); else render();
+  if (C.autoOn && (!A.doc || Date.now() - Date.parse(A.doc.as_of) > AUTO_MS)) fetchAuto();
+  if (S.doc && !S.loading && Date.now() - Date.parse(S.doc.as_of) > AUTO_MS) fetchDoc();
+  if (!autoTimer) {
+    autoTimer = setInterval(tick, AUTO_MS);
+    document.addEventListener('visibilitychange', () => { if (onScreen() && S.doc && Date.now() - Date.parse(S.doc.as_of) > AUTO_MS) tick(); });
+  }
 }
