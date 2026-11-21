@@ -739,17 +739,17 @@
     var at = function (v) { return !num(v) || !num(line) ? '—' : v > line ? 'Over' : v < line ? 'Under' : 'Push'; };
     var rows = (hh.series || []).map(function (g) {
       var who = g.via === 'roster' ? (g.faced || []).join(', ') : 'Same team';
-      var vals = (g.values || []).length ? g.values.join(' + ') + ' = ' + g.value : String(g.value);
-      return '<tr><td>' + esc(g.date || '—') + '</td><td>' + esc(g.opponent || '—') + '</td><td>' + esc(who) + '</td><td>'
-        + esc((g.maps || []).map(mapName).join(', ') || '—') + '</td><td class="sc-num">' + esc(vals) + '</td><td class="h-at-' + at(g.value).toLowerCase() + '">' + at(g.value) + '</td></tr>';
+      var vals = '<b>' + esc(g.value) + '</b>' + ((g.values || []).length ? '<small class="v3p-h2hmaps">' + esc(g.values.join(' + ')) + '</small>' : '');
+      return '<tr><td>' + esc(g.date || '—') + '</td><td><b>' + esc(g.opponent || '—') + '</b><small class="v3p-h2hmaps">' + esc((g.maps || []).map(mapName).join(', ') || '—')
+        + '</small></td><td>' + esc(who) + '</td><td class="sc-num">' + vals + '</td><td class="sc-num h-at-' + at(g.value).toLowerCase() + '">' + at(g.value) + '</td></tr>';
     }).join('');
     var tc = (hh.team_core || []).map(function (m) {
       var sc = num(m.maps_won) && num(m.maps_lost) ? m.maps_won + '–' + m.maps_lost : '—';
-      return '<tr><td>' + esc(m.date || '—') + '</td><td>' + esc((m.team || '—') + ' vs ' + (m.opponent || '—')) + '</td><td>' + esc((m.faced || []).join(', ')) + '</td><td class="sc-num">' + esc(sc) + '</td><td class="sc-num">—</td></tr>';
+      return '<tr><td>' + esc(m.date || '—') + '</td><td><b>' + esc((m.team || '—') + ' vs ' + (m.opponent || '—')) + '</b></td><td>' + esc((m.faced || []).join(', ')) + '</td><td class="sc-num">' + esc(sc) + '</td><td class="sc-num">—</td></tr>';
     }).join('');
     var head = function (cols) { return '<thead><tr>' + cols.map(function (c, i) { return '<th scope="col"' + (i >= cols.length - 2 ? ' class="sc-num"' : '') + '>' + esc(c) + '</th>'; }).join('') + '</tr></thead>'; };
     return '<p class="h-history-note">A meeting counts when he faced 3 or more of tonight’s ' + esc(hh.opponent) + ' players (' + esc(hh.core.players.join(', ')) + '), under any team name, or the same team.</p>'
-      + (rows ? '<div class="v3p-tablewrap"><table class="v3p-h2htable">' + head(['Date', 'Opponent then', 'Faced', 'Maps', stat, 'At ' + r.offer.line]) + '<tbody>' + rows + '</tbody></table></div>' : '')
+      + (rows ? '<div class="v3p-tablewrap"><table class="v3p-h2htable">' + head(['Date', 'Opponent then · maps', 'Faced', stat, 'At ' + r.offer.line]) + '<tbody>' + rows + '</tbody></table></div>' : '')
       + (tc ? '<p class="h-history-note">His current team’s core against tonight’s core, without him:</p><div class="v3p-tablewrap"><table class="v3p-h2htable">' + head(['Date', 'Teams then', 'Faced', 'Maps won', stat]) + '<tbody>' + tc + '</tbody></table></div>' : '');
   }
   function h2hCore(box, r, doc) {
