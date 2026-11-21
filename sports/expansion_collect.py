@@ -22,7 +22,9 @@ import time
 from . import net
 
 RESERVE_S = 45
-PHASES = {'soccer': (('fotmob', 6, 20), ('football_data', 1, 10), ('exchanges', 12, 15)),
+# sg-squads (soccer-grades-1120 fair): identity links for offered players ESPN's current roster leaves out - last, so it
+# only uses time the other phases left; 0 requests when every offered player resolves (expansion_squads).
+PHASES = {'soccer': (('fotmob', 6, 20), ('football_data', 1, 10), ('exchanges', 12, 15), ('squads', 6, 12)),
           'tennis': (('thescore', 10, 25), ('exchanges', 6, 15))}
 
 
@@ -76,6 +78,12 @@ def _phase(name, sport, catalogs, persist, directory, get, get_text):
     if name == 'football_data':
         from .expansion_footballdata import collect
         return collect(get_text, directory, catalogs)
+    if name == 'squads':
+        from datetime import datetime, timedelta, timezone
+        from .expansion_squads import collect
+        earliest = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        current = [m for rows in catalogs.values() for m in rows.values() if (m.get('start') or '') >= earliest]
+        return collect(catalogs, get, directory, current)
     if name == 'exchanges':
         from .expansion_exchanges import collect
         return collect(sport, get, directory, catalogs, offered(directory) if sport == 'soccer' else None)

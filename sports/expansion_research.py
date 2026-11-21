@@ -167,6 +167,23 @@ def document(sport, players, starts, events, results_at):
     return doc
 
 
+RECHECK_S = 600          # sg-fair: a resolved, error-free entry checked within 10 minutes is carried, not re-read
+COMPONENT_SHARE = 0.35   # sg-fair: the component-model queue's share of research time while both queues have work
+
+
+def _fresh(entry, now_ts, recheck_s=None):
+    """sg-fair: True for an entry that resolved its identity, read without an error and was checked less than
+    RECHECK_S ago (an unresolved or failed entry is cheap and retried every run)."""
+    from .contracts import parse_utc
+    if not entry.get('identity') or entry.get('error') or not entry.get('checked_at'):
+        return False
+    try:
+        age = now_ts - parse_utc(entry['checked_at']).timestamp()
+    except (TypeError, ValueError):
+        return False
+    return 0 <= age < (RECHECK_S if recheck_s is None else recheck_s)
+
+
 def publish(sport, budget_s=20, results_at=None):
     from . import expansion_history as history
     from .expansion import isolated_database
@@ -183,24 +200,45 @@ def publish(sport, budget_s=20, results_at=None):
     stages = None
     for offer in board['offers']:
         unique.setdefault(key(offer), offer)
-    # Rotate pending identities without starving previously missing histories.
-    # sg-stats component-model offers after every count-model offer: they never take research budget from a line the
-    # count model already grades (both groups still rotate least-recently-checked first).
     from .expansion_stats import model_of, history_scope, games as component_games
-    order = sorted(unique, key=lambda k: (model_of(unique[k]) is not None, previous.get(k, {}).get('checked_at', '')))
+    # sg-fair (soccer-grades-1120): research is shared fairly. Before, count-model offers always went first and could
+    # use the whole budget run after run, so component-model offers (fantasy scores, shots assisted, ...) never got a
+    # research entry and never a letter. Now: (1) an entry that resolved its identity without an error and was checked
+    # less than RECHECK_S ago is carried as is (it costs nothing); (2) the rest form two queues, count and component,
+    # each least-recently-checked first (never-checked first); (3) the component queue gets COMPONENT_SHARE of the time
+    # spent while both queues have work, and either queue takes all the time when the other one is empty.
+    now_ts = parse_utc(now_utc()).timestamp()
+    queues = {False: [], True: []}
+    for k in sorted(unique, key=lambda k: (previous.get(k, {}).get('checked_at', ''), k)):
+        old = previous.get(k)
+        if old is not None and _fresh(old, now_ts):
+            players[k] = old
+            continue
+        queues[model_of(unique[k]) is not None].append(k)
+    spent = {False: 0.0, True: 0.0}
     matches_path = boards.root(sport) / 'current-matches.json'
     try:
         st = matches_path.stat()
         matches = history._matches(str(matches_path), st.st_mtime_ns, st.st_size) if st.st_size <= 3_000_000 else []
     except (OSError, ValueError):
         matches = []
-    for k in order:
+    links = None
+    if sport == 'soccer':
+        from .expansion_squads import load as load_links
+        links = load_links(boards.root(sport))          # sg-squads: {} when the file is absent -> resolve as before
+    while queues[False] or queues[True]:
+        if queues[False] and queues[True]:
+            group = spent[True] < COMPONENT_SHARE * (spent[True] + spent[False])
+        else:
+            group = bool(queues[True])
+        k = queues[group].pop(0)
         if time.monotonic() >= deadline:
             if k in previous:
                 players[k] = previous[k]
             continue
+        started = time.monotonic()
         offer = unique[k]
-        identity = history.resolve(offer, matches)
+        identity = history.resolve(offer, matches, links)
         scope = 'regulation' if sport == 'soccer' and offer['scope'] == 'full_game' else offer['scope']
         component = model_of(offer)
         if component:
@@ -288,6 +326,7 @@ def publish(sport, budget_s=20, results_at=None):
             # regulation goals feed the thinned model; the member-visible list stays empty (no 1H results stored)
             entry['model_games'], entry['games'] = entry['games'], []
         players[k] = entry
+        spent[group] += time.monotonic() - started
     try:
         events = _events(sport, players, matches)
     except (OSError, ValueError, KeyError, TypeError):

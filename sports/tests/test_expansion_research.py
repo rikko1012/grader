@@ -50,3 +50,58 @@ def test_research_fit_keeps_earliest_starts_under_the_read_limit():
     import json
     one = len(json.dumps(players['a'], separators=(',', ':'))) + 40
     assert list(research.fit(players, starts, limit=2 * one)) == ['b', 'c']
+
+
+# ---------------------------------------------------------------- sg-fair (soccer-grades-1120): research shared fairly
+
+def _fair_setup(tmp_path, monkeypatch, n_count=10, n_comp=5):
+    from sports import expansion_history as history
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    (tmp_path / 'soccer').mkdir()
+    offers = [{'sport': 'soccer', 'platform': 'prizepicks', 'event_id': f'e{i}', 'player_id': f'p{i}', 'player': f'P{i}',
+               'stat': 'shots' if i < n_count else 'fantasy_outfield', 'scope': 'full_game',
+               'start': '2026-11-21T19:00:00Z'} for i in range(n_count + n_comp)]
+    monkeypatch.setattr(boards, 'board', lambda req: (200, {'offers': offers}))
+    clock, order = [0.0], []
+
+    def slow_resolve(offer, matches, links=None):       # every research read costs 1 s of the budget
+        clock[0] += 1.0
+        order.append(offer['player'])
+        return None
+    monkeypatch.setattr(history, 'resolve', slow_resolve)
+    monkeypatch.setattr(research.time, 'monotonic', lambda: clock[0])
+    return offers, order
+
+
+def test_component_offers_get_their_share_of_a_cut_budget(tmp_path, monkeypatch):
+    offers, order = _fair_setup(tmp_path, monkeypatch)
+    research.publish('soccer', budget_s=6)
+    comp = [p for p in order if int(p[1:]) >= 10]
+    assert len(order) == 6 and 2 <= len(comp) <= 3          # before: 6 count offers, 0 component (starved for good)
+
+
+def test_rotation_reaches_every_offer_least_recently_checked_first(tmp_path, monkeypatch):
+    offers, order = _fair_setup(tmp_path, monkeypatch)
+    runs = []
+    for _ in range(3):
+        order.clear()
+        research.publish('soccer', budget_s=6)
+        runs.append(set(order))
+    assert not runs[0] & runs[1]                              # run 2 reads only offers run 1 did not reach
+    assert set.union(*runs) == {o['player'] for o in offers}  # 18 reads over 3 runs reach all 15 offers
+
+
+def test_fresh_resolved_entries_are_carried_and_unresolved_ones_retried(tmp_path, monkeypatch):
+    from sports.contracts import now_utc
+    offers, order = _fair_setup(tmp_path, monkeypatch, n_count=3, n_comp=0)
+    prev = {research.key(offers[0]): {'identity': {'competition': 'usa.1', 'event_id': 'x', 'player_id': 'y'},
+                                      'games': [], 'checked_at': now_utc(), 'scope': 'regulation'},
+            research.key(offers[1]): {'identity': {'competition': 'usa.1', 'event_id': 'x', 'player_id': 'z'},
+                                      'games': [], 'checked_at': now_utc(), 'scope': 'regulation',
+                                      'error': 'history_unavailable'},
+            research.key(offers[2]): {'identity': {'competition': 'usa.1', 'event_id': 'x', 'player_id': 'w'},
+                                      'games': [], 'checked_at': '2026-01-01T00:00:00Z', 'scope': 'regulation'}}
+    atomic_json(tmp_path / 'soccer' / 'research.json', {'sport': 'soccer', 'players': prev})
+    research.publish('soccer', budget_s=60)
+    assert order == ['P2', 'P1']                              # old first, then the failed one; the fresh one carried
+    assert research.saved('soccer')['players'][research.key(offers[0])] == prev[research.key(offers[0])]

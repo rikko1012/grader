@@ -208,8 +208,10 @@ def pinned(offer, competition):
     return not code or competition == code
 
 
-def resolve(offer, matches):
-    """A single matching event AND player, otherwise abstain. No name-only join."""
+def resolve(offer, matches, links=None):
+    """A single matching event AND player, otherwise abstain. No name-only join.
+    links (sg-squads, soccer): squad-links.json - used only when the fixture's player list has no exact-name player
+    for the book's team (expansion_squads: past match rosters, or FotMob squad + shirt + birth date)."""
     answer = {}
     for match in matches:
         competition = match.get('competition')
@@ -255,6 +257,9 @@ def resolve(offer, matches):
             candidates = [p for p in match.get('players', []) if p['team_id'] in owners
                           and normalized(offer['player']) in player_names(p)]
             player = candidates[0] if len(candidates) == 1 else None
+            if not candidates and links and len(owners) == 1:
+                from .expansion_squads import lookup
+                player = lookup(links, competition, owners[0], offer['player'])
         if player:
             answer[(match['event_id'], player['id'])] = {'competition': competition,
                 'event_id': match['event_id'], 'player_id': player['id']}
