@@ -208,6 +208,9 @@ def pinned(offer, competition):
     return not code or competition == code
 
 
+TWO_STORE_GAP_S = 1800   # one tennis match listed by its tour store and its 125 / Challenger store (resolve)
+
+
 def resolve(offer, matches, links=None):
     """A single matching event AND player, otherwise abstain. No name-only join.
     links (sg-squads, soccer): squad-links.json - used only when the fixture's player list has no exact-name player
@@ -267,10 +270,13 @@ def resolve(offer, matches, links=None):
         # soccer-grades-1120: one real match listed by the tour store (ESPN) AND its lower-level store (365Scores
         # Challenger / WTA 125) - exact same pair, same start: the tour store's identity (the graded results source).
         # PrizePicks tennis carries no tour, so it is the only path that can see both.
+        # prove-663 (live 2026-11-21): the two stores list one match up to a few minutes apart (ESPN 'LP Open' 21:30Z,
+        # 365Scores WTA 125 Colina 21:10Z, PrizePicks 21:10Z, Masarova v Maristany Zuleta de Reales) - the same exact
+        # pair, both inside the offer's own 2 h window and at most 30 min apart, is one match; an hour apart stays refused.
         (a, b) = sorted(answer.values(), key=lambda x: x['competition'])
         same = {a['competition'], b['competition']} in ({'atp', 'atp_challenger'}, {'wta', 'wta125'})
-        starts = {m['event_id']: m.get('start') for m in matches if m.get('event_id') in (a['event_id'], b['event_id'])}
-        if same and len(set(starts.values())) == 1:
+        starts = [parse_utc(m['start']) for m in matches if m.get('event_id') in (a['event_id'], b['event_id'])]
+        if same and len(starts) == 2 and abs((starts[0] - starts[1]).total_seconds()) <= TWO_STORE_GAP_S:
             return a if a['competition'] in ('atp', 'wta') else b
     return next(iter(answer.values())) if len(answer) == 1 else None
 
