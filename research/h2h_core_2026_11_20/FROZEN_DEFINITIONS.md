@@ -54,3 +54,20 @@ The feature is 0 when there is no meeting.
   - a pass becomes a shadow challenger, and promotion needs the owner's go-ahead;
   - a fail leaves the live grade untouched;
   - the display change (C ∪ N meetings on the card) is display only and ships either way.
+
+## Amendment 1 (2026-11-20, after the first run; this changes only the split dates)
+The first run found the TRAIN split empty. The baseline `cm2_lam12` in `baseline.pkl` exists only from 2025-11-01. The frozen
+split had assumed cm-2 coverage from 2024. That run therefore had no TRAIN fit (b = 0, dMAE = 0). It showed two things, both
+already seen before this amendment:
+- the 2025-11 to 2026-03 coefficients;
+- the real-line hit rates, which do not depend on the split.
+
+The first run's output is kept as `walkforward_run1_empty_train.json`.
+
+The new splits keep the same rule, three chronological blocks:
+- TRAIN: 2025-11-01 to 2026-03-31;
+- VALID: 2026-04-01 to 2026-06-30;
+- TEST: 2026-07-01 to 2026-11-05.
+
+Everything else is unchanged. A meeting counts in a feature only when the earlier series has a baseline projection, so meetings
+before 2025-11-01 are not used.

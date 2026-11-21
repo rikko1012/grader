@@ -985,8 +985,9 @@ def _history(srv, x, full=False, peek=False):
             since = (date.today() - timedelta(days=365)).isoformat()
             if scope == "123":
                 rows = srv.records._hltv_rows(nick, team, since)
+                oid_of = {r.get("match_id"): r.get("opponent_id") for r in rows}
                 ser = [({"date": s["date"], "opponent": s.get("opponent"), "value": s["total"], "maps": s.get("maps") or [], "values": s.get("values") or []},
-                        s.get("match_id")) for s in srv.records._series(rows, stat)]
+                        s.get("match_id"), oid_of.get(s.get("match_id"))) for s in srv.records._series(rows, stat)]
             else:
                 by, maps = {}, []
                 for r in srv.hltv.recent_series(nick, team, since):
@@ -995,11 +996,13 @@ def _history(srv, x, full=False, peek=False):
                         by.setdefault(r["match_id"], []).append(r)
                 need = 1 if scope == "1" else 2
                 ser = [({"date": m[0]["date"], "opponent": m[0].get("opponent"), "value": sum(y[stat] for y in m), "maps": [y.get("map") for y in m],
-                         "values": [y[stat] for y in m]}, m[0].get("match_id"))
+                         "values": [y[stat] for y in m]}, m[0].get("match_id"), m[0].get("opponent_id"))
                        for m in by.values() if len(m) == need and all(y.get(stat) is not None for y in m)]
             ser.sort(key=lambda s: s[0]["date"], reverse=True)
             # each game's match id rides beside the series (never inside it: the /line bytes stay as they were); closing lines use it
-            return 200, {"ser": [s for s, _ in ser], "mids": [m for _, m in ser], "stats": _map_stats(maps) if scope != "123" else None}
+            # and the HLTV team id he played against (oids): the roster-core H2H (h2h_core) reads both, beside the series too
+            return 200, {"ser": [s for s, _, _ in ser], "mids": [m for _, m, _ in ser], "oids": [o for _, _, o in ser],
+                         "stats": _map_stats(maps) if scope != "123" else None}
         except Exception:
             return 200, None, 1
         finally:
@@ -1018,6 +1021,34 @@ def _history(srv, x, full=False, peek=False):
     if (len(last) != n + push or sum(s["value"] > line for s in last) != over or sum(s["value"] == line for s in last) != push):
         return None
     return ser
+
+
+def _core_h2h(srv, x, opponent, line, board=False, full=None, peek=False, team_core=False):
+    """H2H of this CS2 line (the card's block, or with board=True the board cell): exact-opponent meetings plus roster-core meetings
+    (h2h_core, hc-1: 3+ of tonight's opponent's current HLTV players on the side he faced, any team name). The same cached HLTV year
+    as the history; the core is one cached read per opponent. Core unknown (no exact HLTV team / lineup, a failed read): the
+    exact-opponent meetings alone, as before. team_core=True (card): his current core's meetings with tonight's core without him."""
+    if full is None:
+        full = _history(srv, x, full=True, peek=peek) or {}
+    ser = full.get("ser")
+    if not ser:
+        return None
+    core = None
+    try:
+        import h2h_core
+        core = h2h_core.opponent_core(opponent) if not peek else h2h_core.peek_core(opponent)
+    except Exception:                                  # noqa: BLE001 - no core now: the exact-opponent meetings, never an error
+        core = None
+    mids, oids = full.get("mids"), full.get("oids")
+    if board:
+        return workspace_h2h.board_h2h(ser, opponent, line, mids=mids, oids=oids, core=core)
+    out = workspace_h2h.h2h(ser, opponent, line, mids=mids, oids=oids, core=core)
+    if out is not None and core and team_core:
+        try:
+            out["team_core"] = h2h_core.team_core(_nick(x), x.get("team_name") or x.get("team"), opponent)
+        except Exception:                              # noqa: BLE001
+            out["team_core"] = []
+    return out
 
 
 def _market(x):
@@ -1107,7 +1138,7 @@ def _line_body(srv, book, rid):
         _line_history(srv, x, prop_key, full, hist)
     card = _cs2_card(x, saved)
     doc = {"record": rec, "forecast": forecast, "history": hist,
-           "h2h": workspace_h2h.h2h(full.get("ser"), rec["player"]["opponent"], x.get("line")) if full.get("ser") else None,
+           "h2h": _core_h2h(srv, x, rec["player"]["opponent"], x.get("line"), full=full, team_core=True) if full.get("ser") else None,
            "books": books, "context": ctx, "market": _market(x), "map_chances": _map_chances(x, saved),
            "cs2_card": card, "veto": _veto(x)}
     gin = _grade_inputs(x, rec, saved, card)
@@ -1778,7 +1809,7 @@ def _hits_pass(srv, items, key, cols, budget, board=None):
             if ser:
                 row = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
                 if cols:
-                    row.update(h2h=workspace_h2h.board_h2h(ser, x.get("opp_name") or x.get("opponent"), x.get("line")),
+                    row.update(h2h=_core_h2h(srv, x, x.get("opp_name") or x.get("opponent"), x.get("line"), board=True),
                                season=workspace_h2h.board_season(ser, x.get("line")))
                 d.setdefault('sigs', {})[f"{book}|{rid}"] = (x.get('line'), x.get('l10_n'), x.get('l10_over'), x.get('l10_push'))
                 rows[f"{book}|{rid}"] = row
