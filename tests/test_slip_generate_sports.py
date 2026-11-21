@@ -76,3 +76,24 @@ def test_lol_settled_record_reads_the_worker_schema(env):
     workspace_api.reset()
     table = workspace_api._slip_table(server)
     assert table is not None and any(k.startswith("lol|") for k in table["cells"])
+
+
+def test_lol_band_table_leaves_out_one_sided_lines_rp1(env, monkeypatch):
+    """rp-1 (LoL round 2): an Underdog line that listed one option only (os-1) never was a graded pick, so the slip band table
+    leaves it out like the member record does; a two-sided line stays; LOL_RECORD_PLAYABLE=0 restores the old rows."""
+    lol = env.lol
+    lol.con.execute("UPDATE lol_forecasts SET side_offered = 1")
+    lol.con.commit()
+    row = next(r for r in lol.rows if r.get("forecast"))
+    lol.con.execute("UPDATE lol_forecasts SET platform = 'underdog', sides = ? WHERE market_key = ?",
+                    ('{"higher": {"status": "active"}}', row["market_key"]))
+    lol.con.commit()
+    lol.settle(dict(row, platform="underdog"), over_hit=1, actual=9)
+    monkeypatch.delenv("LOL_RECORD_PLAYABLE", raising=False)
+    assert workspace_api._lol_settled(server) == []
+    monkeypatch.setenv("LOL_RECORD_PLAYABLE", "0")
+    assert len(workspace_api._lol_settled(server)) == 1
+    monkeypatch.delenv("LOL_RECORD_PLAYABLE")
+    lol.con.execute("UPDATE lol_forecasts SET sides = ?", ('{"higher": {"status": "active"}, "lower": {"status": "active"}}',))
+    lol.con.commit()
+    assert len(workspace_api._lol_settled(server)) == 1

@@ -2108,7 +2108,7 @@ SLIP_SCOPE = {"map1": "1", "maps12": "12", "maps13": "123"}
 _SLIP_POOL = {}
 _SLIP_LOCKS = {s: threading.Lock() for s in SPORTS}
 LOL_SETTLED_SQL = (
-    "SELECT f.stat, f.p_over, f.p_under, f.model_side, f.sid, f.series_start, s.over_hit FROM lol_forecasts f "
+    "SELECT f.stat, f.p_over, f.p_under, f.model_side, f.sid, f.series_start, s.over_hit, f.platform, f.sides FROM lol_forecasts f "
     "JOIN (SELECT platform, market_key, line, MAX(id) AS id FROM lol_forecasts WHERE forecast_at < series_start "
     "GROUP BY platform, market_key, line) z ON z.id = f.id "
     "JOIN (SELECT unit_key, MAX(version) AS v FROM lol_settlements GROUP BY unit_key) lv ON "
@@ -2117,14 +2117,37 @@ LOL_SETTLED_SQL = (
     "WHERE s.status = 'graded' AND f.side_offered = 1")
 
 
+def lol_record_playable():
+    """rp-1 (LoL round 2, 2026-11-21): the slip band table counts only lines a member could play as graded - the shown side
+    offered AND the line not one-sided (os-1, the member record's own rule in lol/center/learning.dashboard). Rollback
+    LOL_RECORD_PLAYABLE=0 (read on every rebuild)."""
+    return os.environ.get("LOL_RECORD_PLAYABLE", "1") != "0"
+
+
+def _lol_one_sided_row(r):
+    """os-1 without importing lol: an Underdog line whose saved sides list exactly one option (lol/center/forecast.one_sided)."""
+    if r.get("platform") != "underdog":
+        return False
+    try:
+        sides = json.loads(r.get("sides") or "{}") if isinstance(r.get("sides"), str) else (r.get("sides") or {})
+    except ValueError:
+        sides = {}
+    sides = sides if isinstance(sides, dict) else {}
+    return len([k for k in ("higher", "lower") if sides.get(k)]) == 1
+
+
 def _lol_settled(srv):
-    """LoL settled pre-match forecasts on offered sides (lol/center/learning.dashboard's join), read-only."""
+    """LoL settled pre-match forecasts on offered sides (lol/center/learning.dashboard's join), read-only. rp-1: one-sided
+    (os-1) lines are left out, as in the member record - they were graded before Nov 6 but could never be a graded pick."""
     import workspace_lol
     con = workspace_lol._open(srv, "lol.db")
     try:
-        return [dict(r) for r in con.execute(LOL_SETTLED_SQL).fetchall()]
+        rows = [dict(r) for r in con.execute(LOL_SETTLED_SQL).fetchall()]
     finally:
         con.close()
+    if lol_record_playable():
+        rows = [r for r in rows if not _lol_one_sided_row(r)]
+    return rows
 
 
 def _slip_table(srv):
