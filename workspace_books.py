@@ -577,7 +577,13 @@ def reader(srv, sport, s):
         except (TypeError, ValueError):
             return None, None
         ser, x = series_of(srv, sport, s, base, budget)
-        return chance_of(srv, sport, x, ln), _hist_of(ser, ln, (base.get("player") or {}).get("opponent"))
+        opp = (base.get("player") or {}).get("opponent")
+        hist = _hist_of(ser, ln, opp)
+        if sport == "cs2" and hist and "h2h" in hist and x is not None:   # the CS2 card's H2H rule (roster core, h2h_core)
+            import workspace_api as api
+            hh = api._core_h2h(srv, x, opp, ln, board=True, peek=time.monotonic() > budget)
+            hist["h2h"] = None if hh is api.CORE_PENDING else hh                  # core not read yet: no count, never a name-only one
+        return chance_of(srv, sport, x, ln), hist
     return read
 
 
@@ -673,7 +679,7 @@ def line_doc(srv, sport, pid, oid):
     doc = json.loads(got[1])
     recs, s = records(srv, sport)
     brec = next((r for r in recs or [] if r["offer"]["platform"] == base.get("platform") and str(r["offer"].get("offer_id")) == str(base.get("offer_id"))), None)
-    ser = series_of(srv, sport, s, brec)[0] if brec else None
+    ser, bx = series_of(srv, sport, s, brec) if brec else (None, None)
     line, same = rec["offer"]["line"], bool((rec.get("extra") or {}).get("same_line_as"))
     h = rec.get("history") or {}
     hist = dict(doc.get("history") or {}, tally=h.get("l10"))
@@ -685,7 +691,9 @@ def line_doc(srv, sport, pid, oid):
     if not same:
         doc["forecast"] = None                     # no forecast was saved at this line; a chance shown is read from the distribution
     old = doc.get("h2h")
-    if ser:
+    if ser and sport == "cs2" and bx is not None:     # the CS2 card's H2H rule (roster core, h2h_core), at this line
+        doc["h2h"] = api._core_h2h(srv, bx, rec["player"].get("opponent"), line, team_core=True)
+    elif ser:
         doc["h2h"] = workspace_h2h.h2h(ser, rec["player"].get("opponent"), line)
     elif old:
         vals = [g["value"] for g in old.get("series") or [] if isinstance(g.get("value"), (int, float))]
