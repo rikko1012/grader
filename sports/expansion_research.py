@@ -167,6 +167,19 @@ def document(sport, players, starts, events, results_at):
     return doc
 
 
+class _MemoStore:
+    """sg-fair: the store module with _any_event memoised per store file signature (expansion_history._event) - the
+    component series read the same events for every part stat; identical answers."""
+    def __init__(self, history, path):
+        self._history, self._path, self._sig = history, str(path), history._file_signature(path)
+
+    def __getattr__(self, name):
+        return getattr(self._history.store, name)
+
+    def _any_event(self, con, event_id, before):
+        return self._history._event(con, self._path, self._sig, event_id, before)
+
+
 RECHECK_S = 600          # sg-fair: a resolved, error-free entry checked within 10 minutes is carried, not re-read
 COMPONENT_SHARE = 0.35   # sg-fair: the component-model queue's share of research time while both queues have work
 
@@ -263,8 +276,8 @@ def publish(sport, budget_s=20, results_at=None):
                         catalogs[comp] = json.loads(catalog.read_text(encoding='utf-8')) if catalog.stat().st_size <= 5_000_000 else {}
                     from contextlib import closing
                     with closing(history.store.connect(path, read_only=True)) as con:
-                        entry['games'] = component_games(con, history.store, offer, identity['player_id'], before,
-                                                         catalogs[comp])
+                        entry['games'] = component_games(con, _MemoStore(history, path), offer,
+                                                         identity['player_id'], before, catalogs[comp])
                     entry['component_model'] = component
                 else:
                     entry['games'] = history._history(str(path), history._file_signature(path),

@@ -105,3 +105,22 @@ def test_fresh_resolved_entries_are_carried_and_unresolved_ones_retried(tmp_path
     research.publish('soccer', budget_s=60)
     assert order == ['P2', 'P1']                              # old first, then the failed one; the fresh one carried
     assert research.saved('soccer')['players'][research.key(offers[0])] == prev[research.key(offers[0])]
+
+
+def test_event_lookup_is_memoised_per_store_signature_with_identical_answers(monkeypatch):
+    from sports import expansion_history as history
+    calls = []
+
+    def any_event(con, event_id, before):
+        calls.append((event_id, before))
+        return {'event': event_id, 'before': before}
+    monkeypatch.setattr(history.store, '_any_event', any_event)
+    history._EVENTS.clear()
+    a = history._event(None, 'p', (1, 2), 'e1', 'T')
+    b = history._event(None, 'p', (1, 2), 'e1', 'T')
+    assert a == b == {'event': 'e1', 'before': 'T'} and calls == [('e1', 'T')]
+    history._event(None, 'p', (1, 3), 'e1', 'T')                  # the store file changed: asked again
+    history._event(None, 'p', (1, 3), 'e1', 'U')                  # another cut-off: asked again
+    assert len(calls) == 3
+    memo = research._MemoStore(history, 'p')
+    assert memo._latest_rows is history.store._latest_rows        # everything else is the store itself

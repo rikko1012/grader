@@ -1152,6 +1152,26 @@ def _matches(path, stamp, size):
     return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
+_EVENTS = {}   # sg-fair: (path, signature) -> {(event_id, before): event record}; same store file = same answers
+
+
+def _event(con, path, signature, event_id, before):
+    """store._any_event, memoised per store file signature. research.publish reads up to 40 stats of one player and
+    each stat looked up the same events again (tennis: ~12 ms a lookup, 15 s budget gone after 6 offers); the answer
+    of one store file for (event, before) never changes, so the result is identical."""
+    rows = _EVENTS.get((path, signature))
+    if rows is None:
+        if len(_EVENTS) >= 8:
+            _EVENTS.clear()
+        rows = _EVENTS[(path, signature)] = {}
+    key = (event_id, before)
+    if key not in rows:
+        if len(rows) >= 50_000:
+            rows.clear()
+        rows[key] = store._any_event(con, event_id, before)
+    return rows[key]
+
+
 @lru_cache(maxsize=64)
 def _history(path, signature, player, stat, scope, before):
     con = store.connect(path, read_only=True)
@@ -1163,7 +1183,7 @@ def _history(path, signature, player, stat, scope, before):
             obs = store._rec(row)
             if obs.scope != scope:
                 continue
-            event = store._any_event(con, obs.event_id, before)
+            event = _event(con, path, signature, obs.event_id, before)
             if event and event.start_utc and event.start_utc < before:
                 by_event.setdefault(obs.event_id, []).append((obs, event))
         result = []
