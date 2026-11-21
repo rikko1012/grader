@@ -147,6 +147,49 @@ def test_ready_ev_empty_state_says_what_was_checked(browser, env, monkeypatch, s
         c.close()
 
 
+@pytest.mark.parametrize("size", [DESK, PHONE])
+def test_ready_slips_show_their_own_build_time_and_never_an_old_slip(browser, env, monkeypatch, size):
+    """Review 2026-11-20: the ready slips name their part's own as_of; a slip past expires_at, or a part older than max_age_s
+    (also when it is the last answer the page holds), is not shown."""
+    import time
+    from workspace_books import _iso
+    monkeypatch.setenv("SCOUT_PICKEM_EV", "1")
+    wa_auto.reset()
+    c = context(browser, env, size)
+    records = c.request.get(env.url + "/api/upgrade/board?sport=cs2").json()["records"]
+    board = {r["key"]: r for r in records}
+    built = time.time() - 120
+    doc = _auto_doc(board, _iso(time.time() - 600))                 # top-level as_of: an older part (arbitrage) - not the EV time
+    slips = doc["ev"]["entries"][0]["slips"]
+    if len(slips) == 1:
+        slips.append(json.loads(json.dumps(slips[0])))
+    slips[0]["expires_at"] = _iso(time.time() + 900)
+    slips[1]["expires_at"] = _iso(time.time() - 5)                  # its oldest price is past the age rule
+    doc["ev"].update(as_of=_iso(built), max_age_s=240)
+    state = {"doc": doc}
+    c.route("**/api/upgrade/auto-slips", lambda r: r.fulfill(json=state["doc"]))
+    try:
+        p = open_page(c, env, "/#/ev", size)
+        p.wait_for_selector(".ev-ready-card", timeout=30000)
+        assert p.locator(".ev-ready-card").count() == 1
+        when = p.evaluate(f"new Date({int(built * 1000)}).toLocaleTimeString([], {{hour: 'numeric', minute: '2-digit'}})")
+        head = p.locator(".ev-ready-head").inner_text()
+        assert "built" in head, head
+        assert when.replace(" ", " ") in head.replace(" ", " "), (when, head)
+        # the part itself is past its age limit: nothing is shown as current
+        state["doc"] = json.loads(json.dumps(doc))
+        state["doc"]["ev"]["as_of"] = _iso(time.time() - 300)
+        p.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+        p.goto(env.url + "/#/arb")
+        p.goto(env.url + "/#/ev")
+        p.wait_for_function("document.querySelector('.ev-ready')?.textContent.includes('could not be built just now')", timeout=30000)
+        assert p.locator(".ev-ready-card").count() == 0
+        no_h_scroll(p)
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
 @pytest.mark.parametrize("v3", ["0", "1"])
 @pytest.mark.parametrize("size", [DESK, PHONE])
 def test_arbitrage_one_tap_copy_and_clock(browser, env, monkeypatch, size, v3):

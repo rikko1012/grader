@@ -61,21 +61,42 @@ def default_entry(app):
     """The entry the board opens on: the in-app entry that needs the LOWEST chance per leg (PrizePicks: 6-pick Flex, 54.2%;
     Underdog: Standard 2-pick, 53.5%). The 2026-11-12 check found PrizePicks opened on its hardest entry (Power 2-pick, 57.7%)
     and so read "0 plays"; the needed chance is on every entry in the picker and in the list heading."""
-    es = [e for e in entries() if e["app"] == app]
-    if not es:
-        return ("power" if app == "prizepicks" else "standard"), 2
-    e = min(es, key=lambda e: (round(e["break_even"], 6), e["n"]))
-    return e["entry"], e["n"]
+    t = _tables()
+    if app not in t["default"]:
+        es = [e for e in t["entries"] if e["app"] == app]
+        if not es:
+            t["default"][app] = (("power" if app == "prizepicks" else "standard"), 2)
+        else:
+            e = min(es, key=lambda e: (round(e["break_even"], 6), e["n"]))
+            t["default"][app] = (e["entry"], e["n"])
+    return t["default"][app]
 
 
 # ------------------------------------------------------------------------------------------------------------- params
 
+_TABLES = {}
+
+
+def _tables():
+    """The verified entry list and each app's default entry, worked out once per payout table (both payout reads are cached by
+    gradecore.payouts, so this is once per process). Before 2026-11-20 every leg of every build re-solved every Flex table
+    (default_entry -> entries -> payouts.entry_types): 83% of a build. Same numbers, computed once."""
+    from gradecore import payouts
+    cfg, raw = payouts.pickem_config(), payouts._pickem_raw()
+    hit = _TABLES.get("v")
+    if hit is not None and hit[0] is cfg and hit[1] is raw:      # held references: an identity check, never a reused id
+        return hit[2]
+    es = [{"app": e["book"], "entry": e["entry"], "n": e["n"], "break_even": e["break_even"], "american": e["american"]}
+          for e in payouts.entry_types() if e["book"] in APPS and e["break_even"] is not None
+          and payouts.in_app(e["book"], e["entry"], e["n"])]
+    t = {"entries": es, "default": {}}
+    _TABLES["v"] = (cfg, raw, t)
+    return t
+
+
 def entries():
     """Every verified (app, entry, n) with its break-even, for the entry picker."""
-    from gradecore import payouts
-    return [{"app": e["book"], "entry": e["entry"], "n": e["n"], "break_even": e["break_even"], "american": e["american"]}
-            for e in payouts.entry_types() if e["book"] in APPS and e["break_even"] is not None
-            and payouts.in_app(e["book"], e["entry"], e["n"])]
+    return [dict(e) for e in _tables()["entries"]]
 
 
 def _choice(v, choices, default):
@@ -298,17 +319,24 @@ def build(srv, p, allowed, now=None):
                 usable.add(bb)                     # only books this board can price are offered as filters
     cfg = payouts.pickem_config()
     entry_be = payouts.entry_break_even(app, entry, n, cfg)
+    memo = {}
+
+    def pbe(a, e, k, m):                            # one solve per (app, entry, size, multiplier) per build, not per leg
+        key = (a, e, k, m)
+        if key not in memo:
+            memo[key] = ev_board.pickem_break_even(a, e, k, m, config=cfg)
+        return memo[key]
     rows, model_rows, hidden, plays = [], [], {}, {a: 0 for a in APPS}
     for leg in legs:
         if not allowed.get(leg["sport"]):
             continue
         sel = p if leg["app"] == app else None
-        be = ev_board.pickem_break_even(leg["app"], entry, n, leg["multiplier"], config=cfg) if sel else None
+        be = pbe(leg["app"], entry, n, leg["multiplier"]) if sel else None
         f, why = priced.get((leg["key"], leg["side"]), (None, None))
         if leg["sport"] in MARKET_SPORTS and f is not None and f["p"] is not None and leg["app"] != app:
             # the other app's +EV count at its default entry (the "plays" chips)
             dflt = default_entry(leg["app"])
-            obe = ev_board.pickem_break_even(leg["app"], *dflt, leg["multiplier"], config=cfg)
+            obe = pbe(leg["app"], *dflt, leg["multiplier"])
             if obe is not None and fair.leg_ev(f["p"], obe) > 0:
                 plays[leg["app"]] += 1
         if leg["app"] != app:
@@ -346,7 +374,8 @@ def build(srv, p, allowed, now=None):
     model_rows = [r for _, r in sorted(model_rows, key=lambda t: (-t[0], t[1]["key"], t[1]["side"]))]
     used = sorted({s["book"] for r in rows for s in r["sources"]} | usable)
     src = cfg.get(app) or {}
-    verified = {e["app"] for e in entries()}
+    ents = entries()
+    verified = {e["app"] for e in ents}
     return {"as_of": wb._iso(now), "app": app, "app_label": APP_LABEL[app], "entry": entry, "n": n,
             "apps": [a for a in APPS if a in verified],
             "break_even": None if entry_be is None else round(entry_be, 6),
@@ -355,7 +384,7 @@ def build(srv, p, allowed, now=None):
             "payout": _payout(app, entry, n, cfg), "default_entry": dict(zip(("entry", "n"), default_entry(app))),
             "params": {"preset": p[3], "method": p[4], "min_books": p[5], "req": list(p[6]), "weights": dict(p[7]),
                        "min_liq": p[8], "max_width": p[9]},
-            "options": {"entries": entries(), "presets": sorted(fair.PRESETS) + ["custom"], "methods": list(fair.METHODS),
+            "options": {"entries": ents, "presets": sorted(fair.PRESETS) + ["custom"], "methods": list(fair.METHODS),
                         "books": [{"id": b, "label": labels.get(b, b.title())} for b in used],
                         "weight_choices": list(ev_board.WEIGHT_CHOICES), "min_liq_choices": list(ev_board.MIN_LIQUIDITY_CHOICES),
                         "max_width_choices": list(ev_board.MAX_WIDTH_CHOICES), "min_books_max": ev_board.MIN_BOOKS_MAX,

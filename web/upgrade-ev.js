@@ -228,13 +228,24 @@ function render() {
   paintBox();
   if (fk && !box.contains(document.activeElement)) { const el = box.querySelector(fk); if (el && !el.disabled) el.focus({preventScroll: true}); }
 }
-function autoSlips(d) {
+/* review 2026-11-20: the ready slips carry their own build time (ev.as_of) and each slip the time its oldest book price passes the
+   price-age rule (expires_at). A copy older than ev.max_age_s, or a slip past expires_at, is never shown - also when the minute
+   re-read failed and the page still holds the last answer. */
+const past = t => !!t && Date.parse(t) <= Date.now();
+function autoPart() {
   const ev = A.doc && A.doc.ev;
   if (!ev || ev.state !== 'ok') return null;
+  if (ev.as_of && ev.max_age_s && Date.now() - Date.parse(ev.as_of) > ev.max_age_s * 1000) return null;
+  return ev;
+}
+function autoSlips(d) {
+  const ev = autoPart();
+  if (!ev) return null;
   const out = [];
   ev.entries.forEach((e, ei) => {
     if (e.app !== d.app) return;
     e.slips.forEach((s, si) => {
+      if (past(s.expires_at)) return;
       if (S.f.sport !== 'all' && s.legs.some(l => l.sport !== S.f.sport)) return;
       out.push({e, s, id: ei + ':' + si, nth: si});
     });
@@ -249,7 +260,7 @@ function readyLeg(l, sports) {
 function readyHtml(d) {
   if (!C.autoOn) return '';
   const list = autoSlips(d), app = d.app_label || (d.app === 'prizepicks' ? 'PrizePicks' : 'Underdog');
-  const ev = A.doc && A.doc.ev, sports = (d.sports || []).length, at = A.doc ? C.when(A.doc.as_of) : '';
+  const ev = autoPart(), sports = (d.sports || []).length, at = ev && ev.as_of ? C.when(ev.as_of) : '';   /* the part's own build time */
   let body;
   if (!A.doc) body = `<p class="ev-state" role="status">${A.error ? 'Ready slips could not be read. Scout tries again in a minute.' : 'Building ready slips from current prices…'}</p>`;
   else if (!list) body = `<p class="ev-state" role="status">Ready slips could not be built just now. Scout tries again in a minute.</p>`;
@@ -266,8 +277,8 @@ function readyHtml(d) {
     + `<p>Built for you from legs that beat each entry on at least two independent books at the app's exact line. Each slip is rechecked when you add, copy or open it. The chance beside each leg is the books' chance; Scout's own chance stays on the board.</p></div>${body}</section>`;
 }
 function autoFind(id) {
-  const [ei, si] = String(id).split(':').map(Number), e = A.doc && A.doc.ev && A.doc.ev.entries[ei];
-  return e && e.slips[si] ? e.slips[si] : null;
+  const [ei, si] = String(id).split(':').map(Number), ev = autoPart(), e = ev && ev.entries[ei];
+  return e && e.slips[si] && !past(e.slips[si].expires_at) ? e.slips[si] : null;
 }
 async function autoAct(a, id) {
   const s = autoFind(id); if (!s || A.busy) return;

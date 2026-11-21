@@ -216,20 +216,20 @@ def test_700_members_at_once_one_build(big_queue, env, monkeypatch):
     d, r = _fresh_market()
     monkeypatch.setattr(wm, "shared", lambda srv: (200, json.dumps(d).encode()))
     builds, lock = [0], threading.Lock()
-    real = wa_auto.build
+    real = wa_auto._build_part
 
-    def count(srv, seen, now=None):
+    def count(srv, key, pace=None):
         with lock:
             builds[0] += 1
         time.sleep(0.2)
-        return real(srv, seen, now)
-    monkeypatch.setattr(wa_auto, "build", count)
+        return real(srv, key, pace)
+    monkeypatch.setattr(wa_auto, "_build_part", count)
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=700) as ex:
         codes = list(ex.map(lambda i: _send(env.port, API + "auto-slips", f"{whop_auth.COOKIE}=good-m{i}"), range(700)))
     took = time.time() - t0
     assert codes.count(200) == 700, {c: codes.count(c) for c in set(codes)}
-    assert builds[0] <= 2, builds                                        # one single-flight build (the thread may add one)
+    assert builds[0] <= 4, builds                                        # one single-flight build per part (the thread may add one each)
     assert took < 120, took
 
 
