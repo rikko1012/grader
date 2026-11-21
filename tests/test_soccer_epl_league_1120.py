@@ -45,8 +45,10 @@ def test_record_keeps_the_code_and_adds_the_league_name(expansion):
     assert all(r['key'].startswith('soccer:event:') for r in doc['records'])     # identity keys unchanged
 
 
+@pytest.mark.parametrize('v3', ['0', '1'])
 @pytest.mark.parametrize('size', [DESK, PHONE])
-def test_league_filter_lists_premier_league_first_and_filters_the_board(ctx, env, expansion, size, tmp_path):
+def test_league_filter_lists_premier_league_first_and_filters_the_board(ctx, env, expansion, size, tmp_path, v3, monkeypatch):
+    monkeypatch.setenv('SCOUT_UI_V3', v3)                 # v3 = what members see now; 0 = the hub underneath
     adapter.reset()
     two_leagues(expansion['soccer'])
     p = open_page(ctx, env, '/#scout/board?sport=soccer', size)
@@ -59,16 +61,18 @@ def test_league_filter_lists_premier_league_first_and_filters_the_board(ctx, env
     p.wait_for_function("!document.querySelector('#hub-rows').textContent.includes('Spanish Player')")
     assert 'Verified Player' in p.locator('#hub-rows').inner_text()
     assert p.locator('#hub-filter-n').inner_text() == '1'
-    shots = Path(os.environ.get('UPGRADE_SHOTS') or tmp_path); shots.mkdir(parents=True, exist_ok=True)
-    p.screenshot(path=str(shots / f'epl-league-filter-{size["width"]}.png'))
+    if os.environ.get('UPGRADE_SHOTS'):
+        shots = Path(os.environ['UPGRADE_SHOTS']); shots.mkdir(parents=True, exist_ok=True)
+        p.screenshot(path=str(shots / f'epl-league-filter-v{v3}-{size["width"]}.png'))
     p.locator('[data-hub="filters"]').last.click()
     chip = p.locator('[data-hub="filter-remove"][data-id="league"]')
     expect(chip).to_contain_text('Premier League')
     chip.click()
     expect(p.locator('#hub-rows')).to_contain_text('Spanish Player')
     # the league name, not the code, is what the member reads (and can search)
-    p.locator('#hub-q').fill('premier league')
-    p.wait_for_function("!document.querySelector('#hub-rows').textContent.includes('Spanish Player')")
+    if p.locator('#hub-q').is_visible():                  # v3 phone keeps search behind its own toggle
+        p.locator('#hub-q').fill('premier league')
+        p.wait_for_function("!document.querySelector('#hub-rows').textContent.includes('Spanish Player')")
     assert 'eng.1' not in p.locator('#hub-center').inner_text()
     no_h_scroll(p)
     assert not p.errors
