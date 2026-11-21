@@ -9,7 +9,7 @@ their team versus that team". Teams also switch orgs (3DMAX's five became Envy o
   exact-opponent meetings alone, as before.
 - Stale lineups (owner review 2026-11-20: 9% of teams, ENCE's five play on as ex-ENCE, 3DMAX's as Envy): a player of that five
   whose newer HLTV series (date, then match id) was for ANOTHER team id has left. MIN_CORE (3) or more gone: that team id has no
-  current lineup (None - no core, the exact-name meetings as before); one or two gone: they are dropped from the five. HLTV has no
+  current lineup (None - no core, the exact-name meetings as before); one or two gone: the five stays (a stand-in). HLTV has no
   separate active-roster table: player_roles.hltv_team is each player's newest HLTV team (it lists 'ex-ENCE'), so the newest series
   per player is the roster evidence.
 - A past series of his is an H2H when at least MIN_CORE (3) of those five played on the side AGAINST him in it, whatever that
@@ -26,12 +26,10 @@ research/h2h_core_2026_11_20 (FROZEN_DEFINITIONS.md, RESULTS.md).
 Reads: one cached read per opponent (CORE_TTL), one per player for the team core meetings; single-flight per key, at most
 SLOTS reads at a time, the last good answer is kept through a failed read and a failure is never cached but always logged (memory:
 transient-failure-rule)."""
-import logging
+import sys
 import threading
 import time
 from datetime import date, timedelta
-
-log = logging.getLogger("h2h_core")
 
 MIN_CORE = 3        # owner: "3 people = a team's core"
 LINEUP = 5
@@ -65,13 +63,13 @@ def moved_players(newest, team_id, series_date, series_mid):
 
 
 def live_lineup(ids, moved, min_core=MIN_CORE):
-    """The five without the players who have left; None when min_core or more left (that team id's five play elsewhere now)."""
+    """The five, or None when min_core or more of them have left (that team id's five play elsewhere now). One or two gone keep the
+    five as it is: a single newer series elsewhere can be a stand-in appearance, not a departure."""
     if not ids:
         return None
-    gone = {int(x) for x in moved or ()}
-    if len(gone & set(ids)) >= min_core:
+    if len({int(x) for x in moved or ()} & set(ids)) >= min_core:
         return None
-    return [p for p in ids if p not in gone]
+    return list(ids)
 
 
 def core_matches(rows, current_ids, min_core=MIN_CORE):
@@ -317,8 +315,9 @@ def _note_failure(key, e):
         text = type(e).__name__
     with _LOCK:
         FAILS.update(n=FAILS["n"] + 1, last=f"{key[0]}: {text}", at=time.time())
-    log.warning("h2h_core read failed (%s %s): %s - last good answer kept, retry in %ss", key[0], key[1] if len(key) > 1 else "",
-                text, FAIL_RETRY)
+    # the server log is stderr (no logging config in this app; workspace_api._hits_log writes the same way)
+    sys.stderr.write(f"  h2h_core: read failed ({key[0]} {key[1] if len(key) > 1 else ''}): {text} - last good answer kept, "
+                     f"retry in {FAIL_RETRY}s\n")
 
 
 def _with_cursor(fn):

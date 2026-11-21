@@ -309,13 +309,12 @@ def test_moved_rule_edges():
     assert h2h_core.moved_players([(1, 9, "2026-11-01", 101), (2, 9, "2026-11-01", 101)], 7, "2026-11-01", 100) == {1, 2}  # same day, later id
     assert h2h_core.moved_players([(1, 9, "2026-11-01", 99)], 7, "2026-11-01", 100) == set()      # an earlier series: no move
     assert h2h_core.moved_players([(1, 7, "2026-11-05", 120)], 7, "2026-11-01", 100) == set()     # newer series, same team id
-    assert h2h_core.live_lineup(five, {1, 2}) == [3, 4, 5]                                         # one or two left: dropped
+    assert h2h_core.live_lineup(five, {1, 2}) == five                                              # one or two: the five stays
     assert h2h_core.live_lineup(five, {1, 2, 3}) is None                                           # three left: no lineup
     assert h2h_core.live_lineup(five, set()) == five
 
 
-def test_a_failed_read_is_logged_never_silent_and_never_cached(caplog):
-    import logging
+def test_a_failed_read_is_logged_never_silent_and_never_cached(capsys):
     h2h_core._CACHE.clear()
 
     class QueryError(Exception):
@@ -330,14 +329,12 @@ def test_a_failed_read_is_logged_never_silent_and_never_cached(caplog):
     def dropped():
         raise ConnectionError("could not connect host=secret.example port=5432")
 
-    with caplog.at_level(logging.WARNING, logger="h2h_core"):
-        assert h2h_core._cached_state(("opp", "envy", "d"), boom) == (None, False)
-        msg = " ".join(r.getMessage() for r in caplog.records)
-        assert "h2h_core read failed" in msg and "42703" in msg and 'column "nope"' in msg and "LINE 1" not in msg
-        assert h2h_core.FAILS["n"] >= 1 and "42703" in h2h_core.FAILS["last"]
-        caplog.clear()
-        assert h2h_core._cached_state(("opp", "x", "d"), dropped) == (None, False)
-        msg = " ".join(r.getMessage() for r in caplog.records)
+    assert h2h_core._cached_state(("opp", "envy", "d"), boom) == (None, False)
+    msg = capsys.readouterr().err
+    assert "h2h_core: read failed" in msg and "42703" in msg and 'column "nope"' in msg and "LINE 1" not in msg
+    assert h2h_core.FAILS["n"] >= 1 and "42703" in h2h_core.FAILS["last"]
+    assert h2h_core._cached_state(("opp", "x", "d"), dropped) == (None, False)
+    msg = capsys.readouterr().err
     assert "unreachable" in msg and "secret.example" not in msg                                    # connection details never logged
 
 
