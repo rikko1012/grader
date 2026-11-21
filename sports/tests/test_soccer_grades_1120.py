@@ -230,6 +230,9 @@ def test_close_final_checked_labels_celta_and_safonov():
          'team_names': ['Paris Saint-Germain'], 'team_aliases': [['Paris Saint-Germain'], []], 'player': 'Matvey Safonov', 'competition_code': 'fra.1'}
     assert h.resolve(p, [fr])['player_id'] == 'soccer:player:espn:248699'
     assert h.resolve(dict(p, player='Matvey Safonv'), [fr]) is None
+    es['players'] = [{'id': 'soccer:player:espn:144720', 'team_id': 'soccer:team:espn:85', 'name': 'Andrei Radu'}]
+    assert h.resolve(dict(o, player='Ionut Radu'), [es])['player_id'] == 'soccer:player:espn:144720'
+    assert h.resolve(dict(o, player='Ionut Radu', team='Real Madrid'), [es]) is None       # the other team: never
 
 
 def test_thin_prior_alone_where_history_is_not_an_input():

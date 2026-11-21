@@ -171,6 +171,7 @@ BOOK_PLAYER_ALIASES = {
     'soccer:player:espn:200101': ('Luis Malagón',),         # Ángel Malagón, América, Goalkeeper (same fixture)
     # close-1120 final e2e (PrizePicks Ligue 1 tab 535, raw pull 2026-11-21 01:52Z, position Goalkeeper)
     'soccer:player:espn:248699': ('Matvey Safonov',),       # Matvei Safonov, Paris Saint-Germain, Goalkeeper (v Nice 11-21 16:15Z)
+    'soccer:player:espn:144720': ('Ionut Radu',),           # Andrei Radu (Ionuț Andrei Radu), Celta Vigo, Goalkeeper (v Real Madrid 11-21 20:00Z; tab 531)
 }
 
 
