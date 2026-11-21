@@ -122,5 +122,6 @@ def test_event_lookup_is_memoised_per_store_signature_with_identical_answers(mon
     history._event(None, 'p', (1, 3), 'e1', 'T')                  # the store file changed: asked again
     history._event(None, 'p', (1, 3), 'e1', 'U')                  # another cut-off: asked again
     assert len(calls) == 3
-    memo = research._MemoStore(history, 'p')
+    from pathlib import Path
+    memo = research._MemoStore(history, Path('p'))
     assert memo._latest_rows is history.store._latest_rows        # everything else is the store itself
