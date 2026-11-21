@@ -140,6 +140,8 @@ BOOK_TEAM_ALIASES = {
     # close-1120 (PrizePicks Liga MX tab 536, raw pull 2026-11-20 21:18Z; ESPN mex.1 lists the club by its short name only)
     'soccer:team:espn:225': ('Santos Laguna',),           # Santos (v León exact, 2026-11-21 23:00Z, the only mex.1 fixture then)
     'soccer:team:espn:227': ('Club América',),            # América (v Tigres UANL exact, 2026-11-22 03:00Z, the only one)
+    # close-1120 final e2e (PrizePicks LaLiga tab 531, raw pull 2026-11-21 01:50Z: team 'Celta', team_name 'Celta de Vigo')
+    'soccer:team:espn:85': ('Celta',),                    # Celta Vigo (v Real Madrid exact, 2026-11-21 20:00Z, the only esp.1 fixture then)
 }
 
 
@@ -167,6 +169,8 @@ BOOK_PLAYER_ALIASES = {
     'soccer:player:espn:110987': ('Fran Villalba',),        # Francisco Villalba, Santos, Midfielder (v León 11-21 23:00Z)
     'soccer:player:espn:82782': ('Santiago Ramos Mingo',),  # Santiago Ramos, América, Defender (v Tigres 11-22 03:00Z)
     'soccer:player:espn:200101': ('Luis Malagón',),         # Ángel Malagón, América, Goalkeeper (same fixture)
+    # close-1120 final e2e (PrizePicks Ligue 1 tab 535, raw pull 2026-11-21 01:52Z, position Goalkeeper)
+    'soccer:player:espn:248699': ('Matvey Safonov',),       # Matvei Safonov, Paris Saint-Germain, Goalkeeper (v Nice 11-21 16:15Z)
 }
 
 

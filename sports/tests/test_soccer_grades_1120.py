@@ -209,6 +209,29 @@ def test_checked_book_team_labels_resolve_exactly():
     assert h.resolve(dict(o, player='Fran Villalba', team='León'), [mx]) is None          # the other team: never
 
 
+def test_close_final_checked_labels_celta_and_safonov():
+    from sports import expansion_history as h
+    # final live e2e 2026-11-21: PrizePicks 'Celta' (team_name 'Celta de Vigo') = ESPN 85 'Celta Vigo', v Real Madrid
+    # exact, the only esp.1 fixture at 20:00Z; 'Matvey Safonov' = ESPN 248699 'Matvei Safonov', PSG goalkeeper
+    es = {'event_id': 'soccer:espn:esp.1:1:1', 'competition': 'esp.1', 'start': '2026-11-21T20:00:00Z',
+          'participants': [{'id': 'soccer:team:espn:86', 'name': 'Real Madrid', 'short_name': 'Real Madrid', 'abbreviation': 'RMA'},
+                           {'id': 'soccer:team:espn:85', 'name': 'Celta Vigo', 'short_name': 'Celta Vigo', 'abbreviation': 'CEL'}],
+          'players': [{'id': 'soccer:player:espn:9', 'team_id': 'soccer:team:espn:85', 'name': 'Iago Aspas'}]}
+    o = {'sport': 'soccer', 'start': '2026-11-21T20:00:00Z', 'teams': ['Celta', 'Real Madrid'], 'team': 'Celta',
+         'player': 'Iago Aspas', 'competition_code': 'esp.1'}
+    assert h.resolve(o, [es])['player_id'] == 'soccer:player:espn:9'
+    assert h.resolve(dict(o, teams=['Celt', 'Real Madrid'], team='Celt'), [es]) is None        # exact label only
+    assert 'celta' not in h.participant_names({'id': 'soccer:team:espn:999', 'name': 'Celta Vigo B'})
+    fr = {'event_id': 'soccer:espn:fra.1:2:2', 'competition': 'fra.1', 'start': '2026-11-21T16:15:00Z',
+          'participants': [{'id': 'soccer:team:espn:2502', 'name': 'Nice', 'short_name': 'Nice', 'abbreviation': 'NICE'},
+                           {'id': 'soccer:team:espn:160', 'name': 'Paris Saint-Germain', 'short_name': 'PSG', 'abbreviation': 'PSG'}],
+          'players': [{'id': 'soccer:player:espn:248699', 'team_id': 'soccer:team:espn:160', 'name': 'Matvei Safonov'}]}
+    p = {'sport': 'soccer', 'start': '2026-11-21T16:15:00Z', 'teams': ['Paris SG', 'Nice'], 'team': 'Paris SG',
+         'team_names': ['Paris Saint-Germain'], 'team_aliases': [['Paris Saint-Germain'], []], 'player': 'Matvey Safonov', 'competition_code': 'fra.1'}
+    assert h.resolve(p, [fr])['player_id'] == 'soccer:player:espn:248699'
+    assert h.resolve(dict(p, player='Matvey Safonv'), [fr]) is None
+
+
 def test_thin_prior_alone_where_history_is_not_an_input():
     offer, facts = fixture()
     offer['stat'] = 'saves'
