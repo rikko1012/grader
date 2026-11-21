@@ -46,10 +46,28 @@ def atomic_json(path, value):
             json.dump(value, f, separators=(',', ':'), allow_nan=False)
             f.flush()
             os.fsync(f.fileno())            # sg-stability: a crash right after the rename never leaves an empty file
-        os.replace(temp, path)
+        _replace(temp, path)
     finally:
         if os.path.exists(temp):
-            os.unlink(temp)
+            try:
+                os.unlink(temp)
+            except PermissionError:         # prove-663: never fail a job on the leftover temp (swept as *.tmp)
+                pass
+
+
+REPLACE_RETRIES = (0.05, 0.1, 0.2, 0.4, 0.8)
+
+
+def _replace(temp, path):
+    """prove-663 (local fault injection + memory runs on Windows, 2026-11-21): a scanner holding the target or temp file
+    for a moment fails os.replace with a sharing violation (WinError 32 / PermissionError) and the soccer job stopped.
+    Retried for up to 1.55 s, then raised as before. On Linux (production) a rename does not fail this way."""
+    for wait in REPLACE_RETRIES:
+        try:
+            return os.replace(temp, path)
+        except PermissionError:
+            time.sleep(wait)
+    return os.replace(temp, path)
 
 
 # League IDs verified from each ESPN scoreboard league header on 2026-11-17.

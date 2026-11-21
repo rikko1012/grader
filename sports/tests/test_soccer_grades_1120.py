@@ -670,3 +670,26 @@ def test_lean_cap_never_touches_one_game_or_more_or_tennis():
     offer, facts = fixture()                                       # 10 games: count model, no thin, no cap key
     f, _ = model.make_forecast(offer, facts, NOW)
     assert 'lean_cap' not in f and 'thin_model' not in f
+
+
+def test_atomic_json_retries_a_sharing_violation_then_raises(tmp_path, monkeypatch):
+    """prove-663: a Windows scanner holding the file for a moment (WinError 32) no longer stops the soccer job; a lasting
+    failure still raises, and the leftover temp is swept later (history-*.tmp), never a second crash."""
+    import json as _json
+    from sports import expansion_history as history
+    monkeypatch.setattr(history, 'REPLACE_RETRIES', (0, 0, 0))
+    real, calls = history.os.replace, []
+
+    def flaky(a, b):
+        calls.append(b)
+        if len(calls) < 3:
+            raise PermissionError(32, 'in use')
+        return real(a, b)
+    monkeypatch.setattr(history.os, 'replace', flaky)
+    target = tmp_path / 'state.json'
+    history.atomic_json(target, {'a': 1})
+    assert _json.loads(target.read_text(encoding='utf-8')) == {'a': 1} and len(calls) == 3
+    monkeypatch.setattr(history.os, 'replace', lambda a, b: (_ for _ in ()).throw(PermissionError(32, 'in use')))
+    with pytest.raises(PermissionError):
+        history.atomic_json(target, {'a': 2})
+    assert _json.loads(target.read_text(encoding='utf-8')) == {'a': 1}
