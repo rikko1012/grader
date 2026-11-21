@@ -123,6 +123,7 @@ THIN_T2_VERSION = 'thin-t2'
 THIN_T2_PRIOR = {"aces": {"atp|3": [5.5537, 0.4458], "atp|5": [9.9415, 0.3679], "wta|3": [2.5458, 0.7849]}, "double_faults": {"atp|3": [3.0212, 0.2238], "atp|5": [4.2592, 0.2307], "wta|3": [3.7208, 0.2648]}, "breakpoints_won": {"atp|3": [2.1854, 0.0903], "atp|5": [3.6656, 0.1135], "wta|3": [3.9361, 0.0643]}}
 THIN_T2_K = {"aces": 2, "double_faults": 3, "breakpoints_won": 12}
 THIN_T2_TIERS = {"aces": "failed", "double_faults": "failed", "breakpoints_won": "failed"}
+LEAN_CAP_VERSION = 'thin-3-lean-cap'   # soccer 0-game thin letters capped at Lean (see make_forecast)
 THIN2_TIERS = {'passes_attempted': 'close', 'tackles': 'failed', 'crosses': 'close', 'clearances': 'failed',
                'attempted_dribbles': 'passed'}
 
@@ -427,6 +428,16 @@ def make_forecast(offer, facts, now):
                       grade_reason=[*result['grade_reason'], why])
         if not fitted.get('component_model') and not fitted.get('thin_model'):
             result['stake_reason'] = why
+    thin = fitted.get('thin_model') or {}
+    if (offer['sport'] == 'soccer' and thin and thin.get('games') == 0 and
+            result['grade'] not in (None, policy.LEAN)):
+        # thin-3 fallback (soccer-grades-1120 fair, cs2_scout_ops/logs/soccer_grades_1120/fair_1120/wf_thin3.py +
+        # thin3_walkforward.json): a soccer player with NO past game at this stat gets the population prior alone, which
+        # does not know the player's level - on live member lines those letters ran 39 Under / 9 Over outside Lean and the
+        # prior-only chances failed the pre-registered test at book-like lines for every candidate prior (thin-2 as is,
+        # starter-like, league starter-like, league all-minutes). Kept as a letter, capped at Lean; chance unchanged.
+        result.update(grade=policy.LEAN, lean_cap=LEAN_CAP_VERSION,
+                      grade_reason=[*result['grade_reason'], 'Lean: no past games at this stat.'])
     result['id'] = digest({k:v for k,v in result.items() if k != 'made_at'})
     return result, None
 

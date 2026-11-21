@@ -631,3 +631,34 @@ def test_short_team_label_links_by_the_players_own_full_team_name_only():
             if x['type'] == 'new_player':
                 x['attributes']['team_name'] = wrong
         assert 'team_names' not in offers.prizepicks(_json.loads(_json.dumps(body)), 'soccer', NOW, 14)[0]
+
+
+# ---------------------------------------------------------------- thin-3 fallback (fair): 0-game soccer letters at Lean
+
+@pytest.mark.parametrize('line,expect_side', [(52.5, 'under'), (9.5, 'over')])
+def test_zero_game_soccer_thin_letter_is_capped_at_lean_chance_unchanged(line, expect_side):
+    offer, facts = facts_with([], [['fotmob', 'passes_attempted']])
+    offer.update(stat='passes_attempted', line=line, role='Defender')
+    f, reason = model.make_forecast(offer, facts, NOW)
+    assert reason is None and f['thin_model']['games'] == 0 and f['side'] == expect_side
+    assert f['p_side'] >= policy.LETTER_CUTS[-1][1]               # the chance alone would letter it ...
+    assert f['grade'] == policy.LEAN and f['lean_cap'] == model.LEAN_CAP_VERSION   # ... capped at Lean
+    assert f['grade_reason'][-1] == 'Lean: no past games at this stat.' and f['units'] == 0.0
+
+
+def test_zero_game_component_thin_letter_is_capped_at_lean():
+    offer, facts = facts_with([], [['fotmob', 'passes_attempted'], ['espn', 'goals']])
+    offer.update(stat='fantasy_outfield', line=30.5, role='Defender')
+    f, reason = model.make_forecast(offer, facts, NOW)
+    assert reason is None and f['component_model'] == 'fantasy_outfield' and f['thin_model']['games'] == 0
+    assert f['grade'] == policy.LEAN and f['lean_cap'] == model.LEAN_CAP_VERSION
+
+
+def test_lean_cap_never_touches_one_game_or_more_or_tennis():
+    offer, facts = facts_with([30], [['fotmob', 'passes_attempted']])
+    offer.update(stat='passes_attempted', line=52.5, role='Defender')
+    f, _ = model.make_forecast(offer, facts, NOW)
+    assert f['thin_model']['games'] == 1 and 'lean_cap' not in f and f['grade'] != policy.LEAN
+    offer, facts = fixture()                                       # 10 games: count model, no thin, no cap key
+    f, _ = model.make_forecast(offer, facts, NOW)
+    assert 'lean_cap' not in f and 'thin_model' not in f
