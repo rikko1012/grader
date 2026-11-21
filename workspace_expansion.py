@@ -83,11 +83,11 @@ def member_stake_reason(f, saved_games=None):
         return 'Stake 0U · under 5 past matches' if f.get('sport') == 'tennis' else 'Stake 0U · under 5 past games'
     if f.get('thin_model'):
         return 'Stake 0U · new model'
-    if f.get('member_stake_reason'):
-        return f['member_stake_reason']
-    if f.get('units') is None or f.get('component_model') or f.get('units') == 0:
-        return 'Stake 0U · new model'
-    return f.get('stake_reason')
+    units = f.get('units')
+    if isinstance(units, (int, float)) and units > 0:
+        return f'Stake {units:g}U'
+    # never the stored text (it carries test / process detail for admin and logs only)
+    return 'Stake 0U · new model'
 
 
 def _record(o, research, forecast=None):
@@ -130,14 +130,14 @@ def _record(o, research, forecast=None):
                  "similar players. " if f.get('thin_model') or f.get('population_model') else
                  f"Model estimate from {f['sample']} completed games at the same stat and period. ")
         detail = (basis +
-                  "The forecast allows for variation between games. Chances are conditional on a non-push result. "
-                  "This new model has not yet been calibrated against forward results.")
+                  "The forecast allows for variation between games. Chances are conditional on a non-push result.")
         record['scout'].update(side=f['side'],read_rev=f['id'],p_side=f['p_side'],
             p_over=f['p_over']/(1-f['p_push']),p_under=f['p_under']/(1-f['p_push']),p_push=f['p_push'],
             projection=f['projection'],range80=f['range80'],grade=f['grade'],
             model_version=f['model_version'],forecast_at=f['made_at'],stake_reason=member_stake_reason(f, len(games)),
             units=0.0 if f['grade'] else None,   # every soccer / tennis stake is 0U today: the card says so, never a dash
-            hold=None if f['grade'] else {'short':'Model estimate','reason':'; '.join(f['grade_reason'])},
+            # no letter: a short fact, never the stored grade_reason (test / process detail stays in admin and logs)
+            hold=None if f['grade'] else {'short':'Model estimate','reason':'No grade for this line.'},
             validation={'kind':'model_estimate','label':'Model estimate','detail':detail})
     return record
 

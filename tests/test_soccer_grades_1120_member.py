@@ -70,3 +70,34 @@ def test_member_card_for_a_lettered_line_without_saved_games(monkeypatch):
     doc['forecasts'] = {}
     status, body = wx._build(None, 'soccer')
     assert json.loads(body)['records'] == []                           # no letter and no saved game: no empty card
+
+
+BANNED = ('walk-forward', 'for information', 'calibrat', 'not yet', 'unverified', 'may ', 'might', 'pending',
+          'not assigned', 'missed', 'test')
+
+
+def test_every_member_text_the_adapter_can_emit_is_a_short_definite_fact():
+    """Decision 2 from source, not from one day's doc: every stake reason, model-method paragraph and no-letter note a
+    soccer / tennis card can carry. Stored grade_reason / stake_reason (test detail for admin and logs) never reach it."""
+    import workspace_expansion as wx
+    stored = {'stake_reason': '0U: fewer than 5 past games - population-prior model missed its walk-forward test.',
+              'grade_reason': ['policy: unverified', '0U: the payout of this demon line is not published.']}
+    variants = [{}, {'thin_model': {'version': 'thin-2'}}, {'population_model': 'x'}, {'component_model': 'cards'},
+                {'letter_basis': 'chance_payout_unknown'}, {'units': None}, {'sport': 'tennis', 'thin_model': {'version': 'thin-t2'}}]
+    texts = set()
+    for v in variants:
+        for grade in ('A', 'Lean', None):
+            for games in ([], [{'value': 1.0, 'date': '2026-11-01'}] * 6):
+                o, ident, key, f = _offer_and_forecast(['over', 'under'], 'over', .6, grade, sample=len(games),
+                                                       **{'range80': [0, 2], 'model_version': 'm', 'id': 'fid',
+                                                          'units': 0.0, **stored, **v})
+                o.update(variant='standard', observed_at=o['start'], label='Shots', match='A · B', team='A',
+                         player='P', sport=v.get('sport', 'soccer'))
+                r = wx._record(o, {'identity': ident, 'games': games, 'scope': 'full_game'}, f)
+                s = r['scout']
+                texts |= {s['stake_reason'], s['validation']['detail'], (s['hold'] or {}).get('reason')}
+    texts.discard(None)
+    assert {'Stake 0U · new model', 'Stake 0U · under 5 past games', 'Stake 0U · under 5 past matches',
+            'Stake 0U · payout not published', 'No grade for this line.'} <= texts
+    for t in texts:
+        assert not any(w in t.lower() for w in BANNED), t
