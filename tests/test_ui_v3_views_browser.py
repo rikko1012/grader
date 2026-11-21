@@ -250,10 +250,9 @@ def test_line_moves_view_is_the_board_with_the_hubs_filter(browser, env, monkeyp
         assert "v3=moves" not in p.evaluate("location.hash")
         chip = p.locator("#hub-chips [data-id=movedOnly]")
         # the hub may repaint its chips between two reads; views.js relabels them on the next frame
-        p.wait_for_function("(c => c && c.getAttribute('aria-label') === 'Remove Line moved filter')"
+        p.wait_for_function("(c => c && c.getAttribute('aria-label') === 'Remove Line moved filter'"
+                            " && c.innerText.replace('×', '').trim() === 'Line moved')"
                             "(document.querySelector('#hub-chips [data-id=movedOnly]'))")
-        assert chip.inner_text().replace("×", "").strip() == "Line moved"
-        assert chip.get_attribute("aria-label") == "Remove Line moved filter"
         rows = rows_text(p)
         assert rows and all("37.5" in t for _, t in rows), rows                    # each row shows the line it moved from
         assert {r.split("|")[2] for r, _ in rows} <= {"pp:7001", "11111111-0000-4000-8000-000000000004"}
