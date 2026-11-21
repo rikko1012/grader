@@ -14,7 +14,8 @@ part is keyed by the market sports a member sees (NBA / NFL; a CS2 + LoL + NBA m
 arbitrage part by the sports the market sheet holds. One daemon thread (started on the first request, only with SCOUT_PICKEM_EV
 or SCOUT_MARKET_TOOLS on) rebuilds each part some member asked for in the last IDLE_S seconds, CYCLE_S seconds after its last
 build ENDED, and yields between entries and between chunks of the shared pricing (it sleeps PACE x the CPU it used, so it takes
-at most about half a core; while member requests compete for the CPU it waits for a quiet moment, up to MAX_DEFER_S per part;
+at most about half a core; during a member burst it waits for a quiet moment, up to MAX_DEFER_S per part and only while the
+part's current copy can still be served - never when members would be waiting on that build;
 a part that used more than CYCLE_CPU_S of CPU waits proportionally longer before its next build). A request whose part is older than SERVE_MAX_S joins
 one single-flight build. The served document is assembled once per part change, never per request.
 
@@ -38,7 +39,6 @@ MAX_SETS = 8            # sport sets kept warm (member access gives only a handf
 PACE = 1.0              # background scan: sleep PACE x the CPU each entry used (about half a core at most)
 MAX_PAUSE_S = 0.5
 CYCLE_CPU_S = 3.0       # a part that used more CPU than this waits CYCLE_S x (used / this) before its next build
-BUSY_LAG_S = 0.006      # a short sleep that comes back this much late = other threads want the CPU
 BURST_RPS = 60          # more requests a second than this = a member burst (700 members polling once a minute ~ 12/s)
 BURST_WINDOW_S = 0.05
 MAX_DEFER_S = 15        # the scan waits for a quiet moment at most this long per part, then finishes regardless
@@ -52,6 +52,7 @@ _LOCK = threading.Lock()
 _PARTS = {}             # (kind, sports) -> {"t0": build start, "tried": last attempt start, "next": due, "cpu": s, "part": dict}
 _STORE = {}             # sport set -> {"stamp", "body", "expires"}
 _DEMAND = {}            # sport set -> last request time
+_USED = {}              # part key -> last request that read it (any sport set, also past MAX_SETS)
 _THREAD = {"t": None, "srv": None, "cycles": 0, "errors": 0, "last_error": None, "last_cycle_s": None, "last_cycle_cpu_s": None,
            "last_deferred_s": None, "scanning": False}
 
@@ -250,20 +251,20 @@ def part_keys(seen):
 
 def _busy(srv):
     """True while members are being served in a burst: more than BURST_RPS requests a second over a short window
-    (srv.REQUESTS_SEEN), or other threads competing for the CPU (a 2 ms sleep comes back late)."""
+    (srv.REQUESTS_SEEN, counted in server.Handler)."""
     seen = getattr(srv, "REQUESTS_SEEN", None)
-    c0, t = (seen[0] if seen else 0), time.perf_counter()
+    if not seen:
+        return False
+    c0, t = seen[0], time.perf_counter()
     time.sleep(BURST_WINDOW_S)
-    dt = time.perf_counter() - t
-    if seen and (seen[0] - c0) / dt > BURST_RPS:
-        return True
-    return dt - BURST_WINDOW_S > BUSY_LAG_S
+    return (seen[0] - c0) / (time.perf_counter() - t) > BURST_RPS
 
 
-def _pacer(srv=None):
+def _pacer(srv=None, defer_until=0.0):
     """Called between units of background work (entries; every workspace_ev.YIELD_EVERY legs inside the shared pricing): sleeps
-    PACE x the CPU this thread used since the last call, then, while member requests are competing for the CPU, waits for a
-    quiet moment (at most MAX_DEFER_S per part in all)."""
+    PACE x the CPU this thread used since the last call, then, during a member burst, waits for a quiet moment - at most
+    MAX_DEFER_S per part in all, and only before `defer_until` (the time the part's current copy stops being served). With no
+    servable copy (defer_until 0) it never waits: members would be waiting on this very build."""
     st = {"last": time.thread_time(), "used": 0.0, "deferred": 0.0}
 
     def pace():
@@ -271,7 +272,7 @@ def _pacer(srv=None):
         d = max(0.0, c - st["last"])
         st["used"] += d
         time.sleep(min(MAX_PAUSE_S, max(0.002, d * PACE)))
-        while st["deferred"] < MAX_DEFER_S and _busy(srv):
+        while st["deferred"] < MAX_DEFER_S and time.time() < defer_until and _busy(srv):
             st["deferred"] += BURST_WINDOW_S
         st["last"] = time.thread_time()
     pace.state = st
@@ -414,13 +415,17 @@ def _loop():
             seens = list(_DEMAND)
         keys = {k for s in seens for k in part_keys(s)}
         with _LOCK:
-            for k in [k for k in _PARTS if k not in keys]:
-                _PARTS.pop(k, None)
+            for k in [k for k in _PARTS if now - _USED.get(k, 0) > IDLE_S]:
+                _PARTS.pop(k, None)                      # nobody read it for IDLE_S (sets past MAX_SETS keep theirs too)
+                _USED.pop(k, None)
             due = sorted(k for k in keys if k not in _PARTS or now >= _PARTS[k]["next"])
         for key in due:
             try:
                 _THREAD["scanning"] = True
-                _ensure(srv, key, force=True, pace=_pacer(srv))
+                with _LOCK:
+                    e = _PARTS.get(key)
+                until = e["tried"] + SERVE_MAX_S - 10 if e else 0.0      # stop waiting before members would need this build
+                _ensure(srv, key, force=True, pace=_pacer(srv, until))
                 _THREAD["cycles"] += 1
             except Exception as e:                       # noqa: BLE001 - the loop never dies on one bad build
                 _THREAD["errors"] += 1
@@ -473,6 +478,8 @@ def serve(srv, allowed, now=None):
     with _LOCK:
         if seen in _DEMAND or len(_DEMAND) < MAX_SETS:
             _DEMAND[seen] = now
+        for k in part_keys(seen):
+            _USED[k] = now
         hit = _STORE.get(seen)
     start(srv)
     if _current(seen, hit, now):
@@ -491,3 +498,4 @@ def reset():
         _STORE.clear()
         _DEMAND.clear()
         _PARTS.clear()
+        _USED.clear()

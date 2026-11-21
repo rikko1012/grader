@@ -143,7 +143,8 @@ def test_slip_expiry_follows_the_oldest_price(monkeypatch):
     t0 = time.time()
     ev = wa_auto.ev_part(server, {"nba": True})
     s = next(s for e in ev["entries"] for s in e["slips"])
-    exp = time.mktime(time.strptime(s["expires_at"][:19], "%Y-%m-%dT%H:%M:%S")) - time.timezone
+    from workspace_books import _ts
+    exp = _ts(s["expires_at"])
     want = t0 - we.TTL + fair.FRESHNESS_S["sportsbook"] - 60
     assert abs(exp - want) < 5, (exp, want)
 
@@ -226,7 +227,10 @@ def test_the_scan_waits_out_a_member_burst_but_never_forever(monkeypatch):
     t.start()
     monkeypatch.setattr(wa_auto, "MAX_DEFER_S", 0.6)
     try:
-        pace = wa_auto._pacer(srv)
+        t0 = time.time()
+        wa_auto._pacer(srv)()                                                          # no servable copy: never waits
+        assert time.time() - t0 < 0.3
+        pace = wa_auto._pacer(srv, time.time() + 60)
         t0 = time.time()
         pace()
         waited = time.time() - t0
@@ -237,7 +241,40 @@ def test_the_scan_waits_out_a_member_burst_but_never_forever(monkeypatch):
     finally:
         stop.set()
         t.join()
-    quiet = wa_auto._pacer(types.SimpleNamespace(REQUESTS_SEEN=[0]))
+    quiet = wa_auto._pacer(types.SimpleNamespace(REQUESTS_SEEN=[0]), time.time() + 60)
     t0 = time.time()
     quiet()
     assert time.time() - t0 < 0.3 and quiet.state["deferred"] == 0
+
+
+def test_members_never_wait_on_a_deferring_build(monkeypatch):
+    """An aged part (past SERVE_MAX_S) rebuilt by the loop during a burst: the loop's build does not wait for quiet, so the
+    members who join it are answered at build speed."""
+    import threading
+    import server
+    monkeypatch.setenv("SCOUT_MARKET_TOOLS", "1")
+    monkeypatch.delenv("SCOUT_PICKEM_EV", raising=False)
+    d, r = _fresh_market()
+    monkeypatch.setattr(wm, "shared", lambda srv: (200, json.dumps(d).encode()))
+    key, seen = ("arb", ("nba",)), ("nba",)
+    wa_auto._build_part(server, key)
+    wa_auto._PARTS[key]["tried"] -= wa_auto.SERVE_MAX_S + 1                     # aged: members now need a new build
+    stop = threading.Event()
+
+    def burst():
+        while not stop.is_set():
+            server.REQUESTS_SEEN[0] += 1
+            time.sleep(0.001)
+    threading.Thread(target=burst, daemon=True).start()
+    try:
+        e = wa_auto._PARTS[key]
+        until = e["tried"] + wa_auto.SERVE_MAX_S - 10                              # what the loop passes
+        loop = threading.Thread(target=lambda: wa_auto._ensure(server, key, force=True, pace=wa_auto._pacer(server, until)))
+        loop.start()
+        t0 = time.time()
+        st, body = wa_auto.serve(server, {"nba": True})
+        assert st == 200 and time.time() - t0 < 2.0
+        loop.join(5)
+        assert not loop.is_alive() and wa_auto._PARTS[key]["part"]["state"] == "ok"
+    finally:
+        stop.set()
