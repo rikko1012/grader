@@ -1096,6 +1096,10 @@ def _line_body(srv, book, rid):
     if full.get("stats"):
         ctx = {"rows": full["stats"] + (ctx or {}).get("rows", [])}
     hist = {"tally": rec["history"]["l10"], "avg": rec["history"]["avg"], "series": ser}
+    if not ser and full.get("ser"):
+        # v3 HLTV only (v3_hltv.py / web/v3/player.js): the saved L10 (BO3.gg + HLTV) is not reproduced by HLTV, so the v3 card counts
+        # his HLTV results from these (the same cached year, no read). The classic card does not read this field.
+        hist["hltv_series"] = full["ser"][:20]
     closing = _closing(srv, x, full) if os.environ.get("SCOUT_CLOSING_LINES") == "1" else None
     if closing:
         hist["closing"] = closing                      # SCOUT_CLOSING_LINES: only when a past game has a saved closing line
@@ -1547,6 +1551,46 @@ def get_line(h, srv, q, member, scratch, name):
     if got is None:
         return h.send(404, {"error": "not found"})
     st, body = got
+    return h.send(st, body)
+
+
+PMAPS_TTL = 120
+
+
+def _v3_request(h):
+    """The v3 interface is on for this request (SCOUT_UI_V3=1 or the owner's preview cookie). Off: player-maps is the unknown route."""
+    try:
+        fn = getattr(h, "_v3_on", None)
+        return bool(fn and fn())
+    except Exception:
+        return False
+
+
+def get_player_maps(h, srv, q, member, scratch, name):
+    """v3 player card (web/v3/player.js): HLTV per-map raw totals (12 mo / 3 mo) of the board row's player + the current map pool
+    (hltv_maps.card_doc). The player is the row's own (nick / team from the board, never from the request), so the cache holds
+    at most one answer per board row; one shared single flight per row (srv.shared) over hltv_maps' per-player single flight.
+    Display only: HLTV only (owner 2026-11-20), never a grade input. A failed HLTV read is a 503 (kept FAIL_KEEP s), never data."""
+    book, rid = q.get("book"), q.get("id")
+    if (q.get("sport") or "cs2") != "cs2" or book not in BOOKS or not isinstance(rid, str) or not _ID_RE.match(rid):
+        return h.send(404, {"error": "not found"})
+    if snapshot(srv) is None or (book, rid) not in _SNAP["index"]:
+        return h.send(404, {"error": "not found"})
+    x = _SNAP["index"][(book, rid)]
+    nick, team, mid = _nick(x), x.get("team_name") or x.get("team"), x.get("match_id")
+
+    def compute():
+        import hltv_maps
+        doc = hltv_maps.card_doc(nick, team, mid)
+        if doc.get("state") == "unavailable":
+            return 503, json.dumps({"error": "hltv_unavailable"}).encode()
+        return 200, json.dumps(doc, default=str, separators=(",", ":")).encode()
+    try:
+        st, body = srv.shared(("ws_pmaps", _norm(nick), _norm(team), str(mid or "")), compute, ttl=PMAPS_TTL)
+    except Exception:
+        return h.send(503, {"error": "hltv_unavailable"}, headers={"Retry-After": "5"})
+    if st != 200:
+        return h.send(st, body, headers={"Retry-After": "5"}) if st == 503 else h.send(st, body)
     return h.send(st, body)
 
 
@@ -2542,6 +2586,9 @@ def post_genie(h, srv, q, member, scratch, name, n):
     if got is None or got[0] != 200:
         return h.send(404 if got is None or got[0] == 404 else 503, {"error": "not found" if got is None or got[0] == 404 else "line_unavailable"})
     doc = json.loads(got[1])
+    if _v3_request(h) and qq["sport"] == "cs2":
+        import v3_hltv                         # v3 HLTV only (owner 2026-11-20): the answer never states a BO3.gg number
+        doc = v3_hltv.scrub(doc)
     rec = doc.get("record") or {}
     rev = d.get("revision")
     if rev is not None and rev != (rec.get("offer") or {}).get("revision"):
@@ -2622,6 +2669,8 @@ def handle(h, srv, method, path, q, n=0, prefix=None):
     fn = (GET if method == "GET" else POST).get(name)
     if fn is None and name == "genie" and os.environ.get("SCOUT_GENIE") == "1":
         fn = GENIE["GET" if method == "GET" else "POST"]
+    if fn is None and method == "GET" and name == "player-maps" and _v3_request(h):
+        fn = get_player_maps                         # v3 only: off, "player-maps" is the unknown-route answer
     if fn is None and method == "POST" and name in FLAGGED_POST and board_parity.on(FLAGGED_POST[name][0]):
         fn = FLAGGED_POST[name][1]
     if fn is None:

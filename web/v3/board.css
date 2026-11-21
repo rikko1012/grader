@@ -523,3 +523,126 @@ html[data-ui-v3] #u-hub #hub-games-body .h-empty{grid-column:1/-1;padding:40px 2
 @media (max-width:1023px){
   html[data-ui-v3] #u-hub.h-board-mode .h-center{padding-bottom:calc(84px + env(safe-area-inset-bottom))!important}
 }
+/* ---- polish1 (2026-11-20) ---- */
+/* one stake per line on every row (desktop and phone), beside the grade, as the card states it; a sub-threshold sports line reads
+   Lean Over / Lean Under + Stake 0U (the hub's own hold chip stays in the row, not drawn) */
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-stake{flex:none;color:var(--sc-muted);font:400 12px/1.2 var(--sc-font);white-space:nowrap}
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-stake b{color:var(--sc-text);font-weight:600}
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-bd-hide{display:none!important}
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-lean{white-space:nowrap}
+/* the count shows once: under the title (the band line, with the game count); the toolbar copy is kept for the hub, not drawn */
+html[data-ui-v3] #u-hub #hub-count{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip-path:inset(50%)!important;white-space:nowrap!important}
+@media (max-width:1100px){
+  /* market and period never cut: the line wraps between words, the period stays one token ("Maps 1-2"); the book's freshness and
+     the matchup wrap too */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell>div{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;word-break:normal;overflow-wrap:normal}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell>div>b{white-space:normal!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-market .h-mcell>div>small{white-space:nowrap!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .sc-seen{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .sc-seen>*{white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}
+  /* the role, matchup and sport tag sit on their own line under the name, whole (never cut); they wrap as units if still too long */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player{flex-wrap:wrap!important;row-gap:2px!important;overflow:visible!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small{flex:1 1 100%!important;flex-wrap:wrap!important;row-gap:2px;overflow:visible!important;min-width:0}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small>*{white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-edge .h-below{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout>.h-scout-grade{align-self:start;flex-wrap:nowrap}
+  /* line 1 may now take two lines (a long matchup wraps): the name and Scout's side stay level at the top */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-player{align-self:start}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout>:is(.h-direction,.h-direction-options){align-self:start}
+}
+/* the Lean chip is never cut: on a narrow Scout column the stake moves under it */
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade{flex-wrap:wrap;row-gap:4px}
+html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-lean{max-width:none!important;overflow:visible!important;text-overflow:clip!important;flex:none}
+
+/* ---- polish2 (2026-11-20) ---- */
+/* the toolbar is one row, as mocks 06 / 07 / 11: [All][PP][UD] ... [Filters][Views][refresh]. EV is not a toolbar pill: it is in the
+   header nav (desktop) and the More sheet (phone), the hub's own EV section either way */
+html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-ev-link{display:none!important}
+@media (max-width:480px){
+  html[data-ui-v3] #u-hub #hub-platform{flex:0 1 auto!important;min-width:0;overflow-x:auto;scrollbar-width:none}
+  html[data-ui-v3] #u-hub #hub-platform::-webkit-scrollbar{display:none}
+  html[data-ui-v3] #u-hub #hub-platform>button{padding:0 9px!important}
+  html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-pop-wrap:first-of-type{margin-left:auto}
+  html[data-ui-v3] #u-hub #hub-board-section .h-toolbar .h-pop-wrap>button,html[data-ui-v3] #u-hub #hub-board-section .h-toolbar>.h-refresh{padding:0 9px!important}
+}
+/* no slip toggle in the sort row while the slip is empty (the rail stays closed; the header's Slip opens Slips) */
+html[data-ui-v3] #u-hub.sc-slip-empty #hub-focus{display:none!important}
+/* the Edge explanation wraps instead of being cut */
+html[data-ui-v3] #u-hub .sc-bd-legend .sc-lg-edge{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+/* Source updates: one quiet line (the full text on hover / focus), never a panel pushing the rows down */
+html[data-ui-v3] #u-hub #hub-sources p{position:relative;margin:4px 0 0!important;padding:0 64px 0 0!important;background:none!important;box-shadow:none!important;
+  color:var(--sc-faint)!important;font:400 12px/20px var(--sc-font)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-ui-v3] #u-hub #hub-sources p:hover,html[data-ui-v3] #u-hub #hub-sources p:focus-within{white-space:normal}
+html[data-ui-v3] #u-hub #hub-sources p b{color:var(--sc-muted)!important;font-weight:500}
+html[data-ui-v3] #u-hub #hub-sources p button{position:absolute;right:0;top:0;min-height:20px;font-size:12px!important}
+/* avatars: every desktop row (the hub's face for NBA / NFL, an initial elsewhere, as mock 11); none on the phone (mock 06) */
+html[data-ui-v3] #u-hub #hub-table .sc-bd-av{display:inline-grid;place-items:center;flex:none;width:32px;height:32px;border-radius:50%;float:left;margin:2px 10px 0 0;
+  color:#F1F3F8;font:600 13px/1 var(--sc-font);background:radial-gradient(110% 100% at 32% 12%,#3A4E78 0%,#22304D 55%,#141C2E 100%);box-shadow:inset 0 0 0 1px rgba(200,215,255,.12)}
+:root[data-ui-v3][data-theme="light"] #u-hub #hub-table .sc-bd-av{color:var(--sc-muted);background:var(--sc-s2);box-shadow:inset 0 0 0 1px var(--sc-edge)}
+@media (max-width:1100px){
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-face,html[data-ui-v3] #u-hub #hub-table .sc-bd-av{display:none!important}
+  /* every row keeps its hit-rate line; an empty window reads — (the rule for missing values), never a dropped line */
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record].h-nohits{grid-template-areas:"pl pl pl pl sd sd sd sd" "ln mk pj gr gr gr gr gr" "hi hi hi hi hi ed ed ed" "nt nt nt nt nt nt nt nt" "me me me me cp mo st ad"!important}
+  html[data-ui-v3] #u-hub #hub-table.h-has-medge>tbody>tr[data-record].h-nohits{grid-template-areas:"pl pl pl pl sd sd sd sd" "ln mk pj gr gr gr gr gr" "hi hi hi hi hi ed ed ed" "mx mx mx mx mx mx mx mx" "nt nt nt nt nt nt nt nt" "me me me me cp mo st ad"!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record].h-nohits>td.h-c-hits{display:block!important}
+}
+/* the add note: a check, the pick, and Undo */
+html[data-ui-v3] .u-toast.sc-added::before{content:"";display:inline-block;width:14px;height:8px;margin:0 10px 3px 2px;border:solid var(--sc-good);border-width:0 0 2px 2px;transform:rotate(-45deg)}
+/* phone rows (mocks 06 / 07): the role chip and matchup follow the name on line 1, each wrapping whole only when it does not fit
+   (never cut) */
+@media (max-width:1100px){
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small{display:contents!important}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small>*{flex:none;color:var(--sc-faint)}
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player{column-gap:7px!important;align-items:baseline!important}
+  html[data-ui-v3] #u-hub.sc-one-sport #hub-table>tbody>tr[data-record] .h-player small>i{display:none}   /* the sport is in the title */
+}
+html[data-ui-v3] #u-hub #hub-table td.h-c-player .sc-bd-av+.h-player{width:calc(100% - 42px)}
+@media (max-width:1100px){html[data-ui-v3] #u-hub #hub-table td.h-c-player .sc-bd-av+.h-player,html[data-ui-v3] #u-hub #hub-table td.h-c-player .u-face+.h-player{width:auto}}
+html[data-ui-v3] #u-hub #hub-sources p{display:block!important}html[data-ui-v3] #u-hub #hub-sources p b{display:inline!important;margin-right:4px}
+
+/* ---- qa-boards (2026-11-20, live-data pass) ---- */
+/* phone / tablet card, line 2: Scout's letter + stake take only the right-hand tracks (over +N props, watch, add), so the market
+   gets the room the 1fr track used to leave empty beside Proj. (it wrapped to three lines on 390px with 100px blank on its right) */
+@media (max-width:1100px){
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record],html[data-ui-v3] #u-hub.h-cols #hub-table>tbody>tr[data-record],
+  html[data-ui-v3] #u-hub #hub-table.h-has-edge>tbody>tr[data-record],html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record].h-nohits{
+    grid-template-areas:"pl pl pl pl sd sd sd sd" "ln mk pj pj pj gr gr gr" "hi hi hi hi hi ed ed ed" "nt nt nt nt nt nt nt nt" "me me me me cp mo st ad"!important}
+  html[data-ui-v3] #u-hub #hub-table.h-has-medge>tbody>tr[data-record],html[data-ui-v3] #u-hub #hub-table.h-has-medge>tbody>tr[data-record].h-nohits{
+    grid-template-areas:"pl pl pl pl sd sd sd sd" "ln mk pj pj pj gr gr gr" "hi hi hi hi hi ed ed ed" "mx mx mx mx mx mx mx mx" "nt nt nt nt nt nt nt nt" "me me me me cp mo st ad"!important}
+}
+/* a hit figure is one token: "16/18" never breaks inside its cell; the hub's few-games dashed mark sits outside the digits */
+html[data-ui-v3] #u-hub #hub-table .h-hit{white-space:nowrap!important}
+html[data-ui-v3] #u-hub #hub-table .h-strip .h-hit.h-few{outline-offset:1px;border-radius:2px!important}
+/* desktop line cell: "checked N min ago" is the approved wording, never cut to "checked 37 min ..."; it wraps under the book instead */
+@media (min-width:1101px){
+  html[data-ui-v3] #u-hub #hub-table .sc-seen>span{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+}
+/* By game shows game cards, not rows: the rows' hit-rate legend steps aside with them */
+html[data-ui-v3] #u-hub #hub-board-section.h-by-game .sc-bd-legend{display:none!important}
+/* the line column fits "checked NN min ago" on one line (it wrapped "ago" alone at 106-116px) and the market fits "Receiving yards";
+   the player column gives the room, only where it has it: the slip rail closed, or 1401px+ (with the rail open at 1101-1400px the
+   tighter 104 / 106px columns above stay, so the name and matchup keep their room) */
+@media (min-width:1101px){html[data-ui-v3] #u-hub.h-focus-board #hub-table .h-c-line,html[data-ui-v3] #u-hub.h-focus-board #hub-table .h-c-market{width:128px!important}}
+@media (min-width:1401px){html[data-ui-v3] #u-hub #hub-table .h-c-line,html[data-ui-v3] #u-hub #hub-table .h-c-market{width:128px!important}}
+html[data-ui-v3] #u-hub #hub-table .h-grade.sc-lean-word{white-space:nowrap}
+/* card rows: the few-games hit sits on the strip's baseline like its neighbours (it was a 26px block, dropped 3px, its dashed box
+   twice the text's height) */
+@media (max-width:1100px){
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-strip .h-hit.h-few{display:inline-flex!important;align-items:baseline;height:auto!important;min-height:0!important;line-height:15px!important;padding:0 1px!important}
+}
+/* card rows' game header: "This game →" sits top right over the title's line, so a long matchup ("… Esports Club vs Another …")
+   ran under it. The title keeps clear of it and wraps whole (never cut) */
+@media (max-width:1100px){
+  html[data-ui-v3] #u-hub #hub-table .h-game-head b{display:block!important;-webkit-line-clamp:none!important;padding-right:96px;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere}
+}
+/* phone / tablet sort row with a filter on: Sort + direction + List / By game stay on one row; the filter chips and "Clear filters"
+   follow on the next (Clear filters took the row's first place and pushed List / By game onto a line of its own) */
+@media (max-width:1100px){
+  html[data-ui-v3] #u-hub #hub-chips{order:3;min-width:0}
+  html[data-ui-v3] #u-hub #hub-clear{order:4}
+  html[data-ui-v3] #u-hub #hub-sort-note{order:5}
+}
+/* desktop Compare button: the per-side payouts ("O 0.82x · U 1.15x") wrap inside the button instead of being cut to "U 1…" */
+@media (min-width:1101px){
+  html[data-ui-v3] #u-hub #hub-table td.h-c-compare .h-compare small{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:normal}
+}

@@ -94,3 +94,5 @@ html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools{color:var(--sc-text)}
 html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools :is(p,label){color:var(--sc-muted)}
 html[data-ui-v3] #u-hub #hub-tools-section .h-market-tools button{border:0;border-radius:var(--sc-r-md);background-color:var(--sc-s1);color:var(--sc-text);box-shadow:var(--sc-ring);font-family:var(--sc-font)}
 html[data-ui-v3]:has(body.locked #gate:not([hidden])){background:var(--sc-bg)!important}
+/* polish1: one eyebrow rule on every page, none above page titles (SHARED-4) */
+html[data-ui-v3] #u-hub #hub-center:has(#hub-tools-section:not([hidden]),#hub-alerts-section:not([hidden])) .h-top .h-eyebrow{display:none!important}

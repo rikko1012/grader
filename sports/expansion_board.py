@@ -106,14 +106,19 @@ def research_body(sport, data):
     from .expansion_research import attach
     directory = root(sport)
     key = (sport, data.get('version'), data.get('built_at'), _signature(directory / 'research.json'),
-           _signature(directory / 'forecasts.json'))
+           _signature(directory / 'forecasts.json'), _signature(directory / 'images.json'))
     instant = datetime.now(timezone.utc).timestamp()
     with _SNAPSHOT_LOCK:
         hit = _RESEARCH_BODIES.get(key)
         if hit and instant < hit['expires']:
             return hit['body']
         expires = next((v['expires'] for v in _PREPARED.values() if v['data'] is data), instant + 30)
-    body = json.dumps(attach(sport, data), default=str).encode('utf-8')
+    out = attach(sport, data)
+    from .expansion_images import for_board
+    images = for_board(directory, out.get('offers') if isinstance(out, dict) else None)
+    if images:                         # v3 card pictures (expansion_images.py); no file / no match = the same bytes as before
+        out = {**out, 'images': images}
+    body = json.dumps(out, default=str).encode('utf-8')
     with _SNAPSHOT_LOCK:
         _RESEARCH_BODIES.pop(key, None)
         while len(_RESEARCH_BODIES) >= 2:
@@ -418,6 +423,14 @@ CEILING_S = 3600                       # AIMD: the level that drew a 429 is not 
 COOL_S = 60                            # another consumer's 429 this recently: no soccer request this run
 RUN_BUDGET_S = 30                      # no new request starts after this many seconds (job timeout_s 90)
 SPACE_S = 4                            # seconds between two PrizePicks requests of one soccer run
+# soccer-epl (owner 2026-11-20: "add EPL league for soccer"): the EPL tab goes right after tab 82 whenever it is due,
+# has standard lines (or was never read) and its first kick-off is inside PRIORITY_H. Fairness guard: after
+# PRIORITY_STREAK priority reads in a row, the next non-82 slot goes to the least-recently-attempted other tab with
+# lines, so other leagues still rotate at level 1. Request count, level, spacing and back-off are unchanged.
+# SCOUT_SOCCER_PP_PRIORITY="" (or "0") = the plain least-recently-attempted rotation as before.
+PRIORITY_DEFAULT = "14"
+PRIORITY_H = 48
+PRIORITY_STREAK = 2
 _sleep, _monotonic = time.sleep, time.monotonic     # tests replace them
 
 
@@ -425,6 +438,18 @@ def pp_leagues_on():
     """Kill switch (2026-11-19): SCOUT_SOCCER_PP_LEAGUES=0 puts soccer back on the single tab-82 request exactly as
     at 5036ce4 (SCOUT_SOCCER_PP_MLS then works as before). Default on."""
     return os.environ.get("SCOUT_SOCCER_PP_LEAGUES", "1") != "0"
+
+
+def priority_tabs():
+    """PrizePicks soccer tab ids read first after tab 82 (SCOUT_SOCCER_PP_PRIORITY, comma list; default EPL 14). Only
+    mapped league tabs count; "" / "0" switches priority off."""
+    raw = os.environ.get("SCOUT_SOCCER_PP_PRIORITY", PRIORITY_DEFAULT)
+    out = []
+    for x in str(raw).split(","):
+        x = x.strip()
+        if x.isdigit() and int(x) in adapters.PP_SOCCER_LEAGUES and int(x) != 82 and int(x) not in out:
+            out.append(int(x))
+    return out
 
 
 def _env_num(name, default):
@@ -652,6 +677,8 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
                 leagues["refresh"] = True
                 raise ValueError("empty_listed_tab")
             found = adapters.prizepicks(body, "soccer", observed, None if lid == 82 else lid)
+            from .expansion_images import remember
+            remember(body, "soccer", directory)          # v3 card pictures only; never fails the read
             del body
             parsed = len(found)
             if lid != 82:
@@ -706,6 +733,26 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
     allowed = int(credit + 1e-9)
     due_tabs = sorted((lid for lid in use if due(lid)),
                       key=lambda lid: ((per.get(str(lid)) or {}).get("attempt_at") or "", order_ix.get(lid, 99)))
+    prio = state.get("priority") if isinstance(state.get("priority"), dict) else {}
+    try:
+        streak = max(0, int(prio.get("streak") or 0))
+    except (TypeError, ValueError):
+        streak = 0
+    max_streak = max(1, int(_env_num("SCOUT_SOCCER_PP_PRIORITY_STREAK", PRIORITY_STREAK)))
+    prio_ids = priority_tabs()
+
+    def soon(lid):
+        e = per.get(str(lid)) or {}
+        if not e.get("ok_at"):
+            return True                                # never read: its lines are unknown, read it first
+        first = _age_s(now, e.get("first_start")) if e.get("first_start") else None
+        return first is not None and 0 <= first <= _env_num("SCOUT_SOCCER_PP_PRIORITY_H", PRIORITY_H) * 3600
+
+    promoted = [lid for lid in prio_ids if lid in due_tabs and with_lines(lid) and soon(lid)]
+    others_due = [lid for lid in due_tabs if lid not in promoted and with_lines(lid)]
+    if promoted and streak >= max_streak and others_due:
+        promoted = []                                  # fairness: this slot goes to the other leagues' rotation
+    due_tabs = promoted + [lid for lid in due_tabs if lid not in promoted]
     picks = ([82] if due(82) else []) + due_tabs
     backoff_left = -(_age_s(state.get("backoff_until"), now) or 0)
 
@@ -742,6 +789,11 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
             roles["coverage"] = "credit"           # level x 45 s / 90 s < 1: this run's request comes next run
     credit -= sum(1 for k, r in roles.items() if k != "coverage" and r == "coverage")
     aimd["credit"] = round(max(0.0, credit), 4)
+    for k, r in roles.items():                         # read order: a priority read extends the streak, any other
+        if k in ("coverage", 82) or r != "coverage":   # league tab read ends it
+            continue
+        streak = streak + 1 if k in prio_ids else 0
+    state["priority"] = {"streak": streak}
     # 2. housekeeping, only after clean requests: the hourly league list (a failed read backs off, never every run)
     forced = leagues.get("refresh") and (list_age is None or list_age >= LEAGUES_REFRESH_MIN_S)
     try:
@@ -845,6 +897,9 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
                            "clean_since": aimd.get("clean_since"), "grow_in_s": grow_left,
                            "last_growth": aimd.get("last_growth"), "last_halving": aimd.get("last_halving"),
                            "halvings": aimd.get("halvings") or 0},
+              "priority": {"tabs": prio_ids, "streak": streak, "max_streak": max_streak,
+                           "window_h": _env_num("SCOUT_SOCCER_PP_PRIORITY_H", PRIORITY_H),
+                           "promoted_this_run": promoted},
               "pp_429": pp_429_counts(),
               "covered": [lid for lid in counts if counts[lid]], "not_covered": [
                   lid for lid in use if not counts.get(lid) and (per.get(str(lid)) or {}).get("kept", 0) > 0],
@@ -860,6 +915,7 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
         ok_age = _age_s(e.get("ok_at"), now)
         status["leagues"].append({
             "id": lid, "name": name, "competition": code, "listed": (listing.get(str(lid)) or {}).get("count"),
+            "priority": lid in prio_ids,
             "fetched": lid == 82 or lid in use, "covered": bool(counts.get(lid)),
             "ok": bool(ok_age is not None and 0 <= ok_age <= MAX_AGE and not (
                 e.get("error_at") and (e.get("error_at") or "") > (e.get("ok_at") or ""))),
@@ -961,6 +1017,8 @@ def collect(sport):
             observed = now_utc()
             if provider == "prizepicks":
                 found = adapters.prizepicks(body, sport, observed)
+                from .expansion_images import remember
+                remember(body, sport, root(sport))      # v3 card pictures only; never fails the read
             else:
                 found = adapters.underdog(body, observed) if sport == "tennis" else adapters.underdog_soccer(body, observed)
             del body

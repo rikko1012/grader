@@ -25,6 +25,12 @@
       mark.textContent = '1T';
       link.insertBefore(mark, link.firstChild);
       link.classList.add('v3-brand');
+      /* the same 1T Scout header as every member page: "Scout" beside the mark (the page's own wordmark stays for readers) */
+      var word = document.createElement('span');
+      word.className = 'v3-brand-word';
+      word.setAttribute('aria-hidden', 'true');
+      word.textContent = 'Scout';
+      mark.after(word);
     }
     var h1 = document.querySelector('main > h1');
     if (h1 && !h1.querySelector('.v3-h1-sub')) {
@@ -38,9 +44,28 @@
     }
   }
 
+  /* wording the same on every record page: one en-dash W–L, singular for one ("1 push"), and the snapshot as a date and UTC time */
+  var ONE = {wins: 'win', losses: 'loss', pushes: 'push', voids: 'void'};
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function utcText(iso) {
+    var d = new Date(iso);
+    if (isNaN(d)) return null;
+    var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+    return MON[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + d.getUTCFullYear() + ', ' + p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()) + ' UTC';
+  }
+  function words(root) {
+    var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), n, fix = [];
+    while ((n = w.nextNode())) {
+      var t = n.nodeValue, u = t.replace(/(^|[^\d.])1 (wins|losses|pushes|voids)\b/g, function (m, a, k) { return a + '1 ' + ONE[k]; })
+        .replace(/Snapshot: (\d{4}-\d\d-\d\dT[\d:.]+(?:Z|[+-]\d\d:?\d\d)?)/, function (m, iso) { var x = utcText(iso); return x ? 'Snapshot: ' + x : m; });
+      if (u !== t) fix.push([n, u]);
+    }
+    fix.forEach(function (f) { f[0].nodeValue = f[1]; });
+  }
   function decorate() {
     var root = document.getElementById('record');
     if (!root) return;
+    words(root);
     var scores = root.querySelector('.scores');
     if (!scores) return;
     var cells = scores.children, hasSlips = !!root.querySelector('nav.view [data-view="slips"][aria-pressed="true"]');

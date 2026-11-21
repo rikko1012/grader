@@ -24,6 +24,81 @@
 
   function $(id) { return document.getElementById(id); }
 
+  /* ---------------------------------------------------------------- the hub's own board records (teed, never re-fetched)
+     The hub's /api/upgrade/board answers are cloned as they arrive (the hub reads the original untouched) and kept by the row key the
+     hub itself uses (tr[data-record] = sport|platform|offer_id). They give each row its stake and the band's game count: nothing is
+     worked out that the record does not say. */
+  var RECS = {};
+  var recKey = function (r) { return [r.sport, r.offer.platform, r.offer.offer_id].join('|'); };
+  var nativeFetch = window.fetch;
+  if (typeof nativeFetch === 'function') {
+    window.fetch = function (input, init) {
+      var pr = nativeFetch.apply(this, arguments);
+      try {
+        var u = typeof input === 'string' ? input : (input && input.url) || '';
+        var m = (init && init.method) || (input && typeof input === 'object' && input.method) || 'GET';
+        if (/\/api\/upgrade\/board(\?|$)/.test(u) && String(m).toUpperCase() === 'GET') {
+          pr.then(function (r) {
+            if (!r || r.status !== 200) return;
+            var sp = (/[?&]sport=([a-z0-9]+)/.exec(u) || [0, 'cs2'])[1];
+            r.clone().json().then(function (d) {
+              Object.keys(RECS).forEach(function (k) { if (k.indexOf(sp + '|') === 0) delete RECS[k]; });   /* this sport's board, replaced whole */
+              ((d && d.records) || []).forEach(function (x) { if (x && x.offer && x.scout) RECS[recKey(x)] = x; });
+              soon();
+              try { document.dispatchEvent(new CustomEvent('scout-v3-recs')); } catch (e) { /* old browser: legs keep their read */ }
+            }, function () { /* not JSON: the hub handles it */ });
+          }, function () { /* the hub sees its own failure */ });
+        }
+      } catch (e) { /* never in the hub's way */ }
+      return pr;
+    };
+  }
+  /* the row's stake, as the card's decision strip states it (upgrade-hub.js decisionHtml): Scout's side, a number of units, on a line
+     the app offers on both sides with Scout's side offered, not a view-only book. A sports line with a side but no published letter
+     ("No grade yet") reads as the sub-threshold rule the other sports use: Lean Over / Lean Under, Stake 0U. */
+  function leanOnly(r) {
+    var s = r && r.scout;
+    return !!(s && (s.side === 'over' || s.side === 'under') && !s.grade && s.hold && s.hold.short === 'No grade yet' && !r.extra);
+  }
+  function stakeOf(r, tr) {
+    var s = r && r.scout;
+    if (!s || !s.side || r.extra) return null;
+    if (tr && tr.querySelector('.h-scout-nf, .h-one-sided, .h-not-offered')) return null;
+    if (leanOnly(r)) return '0';
+    return typeof s.units === 'number' && isFinite(s.units) ? String(s.units) : null;
+  }
+  /* for the slip legs (slips.js): the same records and the same stake rule */
+  V.boardRecs = function () { return RECS; };
+  V.stakeOf = stakeOf;
+  V.leanOnly = leanOnly;
+  function paintStake(tr) {
+    var r = RECS[tr.getAttribute('data-record')], g = tr.querySelector('.h-scout-grade');
+    if (!r || !g) return;
+    var st = stakeOf(r, tr), have = g.querySelector('.sc-stake');
+    /* the soccer / tennis models publish the word "Lean" as their grade: the row spells the side out, as everywhere else
+       ("Lean Over" / "Lean Under"). Wording only: the record's grade is untouched */
+    var sd = r.scout && r.scout.side;
+    if ((sd === 'over' || sd === 'under') && /^lean$/i.test(String(r.scout.grade || '').trim())) {
+      g.querySelectorAll('.h-grade').forEach(function (c) {
+        if (/^lean$/i.test(c.textContent.trim())) { c.textContent = 'Lean ' + (sd === 'over' ? 'Over' : 'Under'); c.classList.add('sc-lean-word'); }
+      });
+    }
+    if (leanOnly(r)) {
+      var hold = g.querySelector('.h-hold-why');
+      if (hold) hold.classList.add('sc-bd-hide');
+      if (!g.querySelector('.sc-lean')) {
+        var ln = document.createElement('span');
+        ln.className = 'h-grade-text sc-lean';
+        ln.textContent = 'Lean ' + (r.scout.side === 'over' ? 'Over' : 'Under');
+        g.insertBefore(ln, g.firstChild);
+      }
+    }
+    if (st == null) { if (have) have.remove(); return; }
+    var html = 'Stake <b>' + V.esc(st) + 'U</b>';
+    if (!have) { have = document.createElement('small'); have.className = 'sc-stake'; g.appendChild(have); }
+    if (have.innerHTML !== html) have.innerHTML = html;
+  }
+
   /* the band keeps only the drawing's linework in one tint (currentColor): no ground box, rulers, construction dashes, mass fill,
      mist band or lamp orb (the same cleaning as the approved mock, build_boards.band_art); ids made unique per copy */
   function bandSvg(s) {
@@ -51,6 +126,7 @@
     var top = document.querySelector('#u-hub .h-top');
     if (!top) return;
     var s = currentSport(), band = s === 'all' ? PAGE_SPORT : s;
+    var hubEl = $('u-hub'); if (hubEl) hubEl.classList.toggle('sc-one-sport', s !== 'all');
     if (!BAND[band]) band = 'cs2';
     V.setSport(band);
     if (!top.classList.contains('sc-bd-band')) {
@@ -61,7 +137,7 @@
       top.insertBefore(art, top.firstChild);
       var meta = document.createElement('p');
       meta.className = 'sc-lit__meta sc-bd-meta';
-      meta.setAttribute('aria-hidden', 'true');   /* the same text as #hub-count, which screen readers already reach */
+      meta.setAttribute('aria-live', 'polite');   /* the board's count, shown once (the toolbar copy, #hub-count, is visually hidden) */
       var h = $('hub-title');
       if (h && h.parentNode) h.parentNode.appendChild(meta);
     }
@@ -78,6 +154,7 @@
     var m = document.querySelector('#u-hub .sc-bd-meta'), c = $('hub-count');
     if (m && c && m.textContent !== c.textContent) m.textContent = c.textContent;
   }
+
 
   /* ---------------------------------------------------------------- rows */
   var AGE = /^(.*?)\s·\s(now|—|\d+m|\d+h)(?:\s·\swas\s(.+))?$/;
@@ -164,6 +241,8 @@
   function paintRows() {
     var rows = document.querySelectorAll('#hub-rows>tr[data-record]:not([data-sc="1"])');
     for (var i = 0; i < rows.length; i++) { try { decorateRow(rows[i]); } catch (e) { /* one odd row keeps the hub's own look */ } }
+    var all = document.querySelectorAll('#hub-rows>tr[data-record]');
+    for (var j = 0; j < all.length; j++) { try { paintStake(all[j]); } catch (e) { /* the hub's own cell stays */ } }
     paintLegend();
     paintMeta();
   }
@@ -178,10 +257,125 @@
     q.addEventListener('blur', function () { if (!q.value) sec.classList.remove('sc-bd-search'); });
   }
 
+
+  /* ---------------------------------------------------------------- polish2 (2026-11-20)
+     - desktop rows: an initials avatar where the hub draws no face (CS2 / LoL / soccer / tennis; NBA / NFL keep the hub's face), as
+       mock 11; the phone shows none (mock 06, CSS);
+     - the slip rail (the hub's own .h-slip) starts closed, as mocks 11 / B: it opens by itself only when the slip holds picks on a
+       1440+ screen; the member's own Hide / Show slip press always wins until the slip is emptied. Pressed through the hub's own
+       #hub-focus button, so the hub's state stays the source of truth;
+     - the add-to-slip note gets a check and an Undo (it presses the same row's own add button again, which takes the pick off) and
+       goes away when the view changes (sport tab, List / By game, another section). */
+  function avatars() {
+    document.querySelectorAll('#hub-rows>tr[data-record]>td.h-c-player').forEach(function (td) {
+      if (td.querySelector('.h-face, .sc-bd-av')) return;
+      var b = td.querySelector('.h-player b'), n = b ? b.textContent.trim() : '';
+      if (!n) return;
+      var av = document.createElement('span');
+      av.className = 'sc-bd-av';
+      av.setAttribute('aria-hidden', 'true');
+      av.textContent = n.charAt(0).toUpperCase();
+      td.insertBefore(av, td.firstChild);
+    });
+  }
+  var railUser = false, railBusy = false;
+  function slipN() { var c = $('hub-slip-count'); return c ? parseInt(c.textContent, 10) || 0 : 0; }
+  function railAuto() {
+    var hub = $('u-hub'), btn = $('hub-focus');
+    if (!hub || !btn) return;
+    var n = slipN();
+    hub.classList.toggle('sc-slip-empty', n === 0);
+    if (n === 0) railUser = false;
+    if (window.innerWidth < 1025 || hub.classList.contains('h-studio-mode') || railUser) return;
+    var want = n > 0 && window.innerWidth >= 1440, open = !hub.classList.contains('h-focus-board');
+    if (open !== want) { railBusy = true; try { btn.click(); } finally { railBusy = false; } }
+  }
+  document.addEventListener('click', function (e) {
+    if (!railBusy && e.target.closest && e.target.closest('#hub-focus')) railUser = true;
+  }, true);
+  var lastAdd = null;
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('#hub-rows .h-add, #hub-rows [data-hub="add"]');
+    if (b) lastAdd = b.getAttribute('data-id');
+  }, true);
+  function toastUndo() {
+    var t = document.getElementById('u-toast');
+    if (!t || !t.classList.contains('on')) return;
+    var txt = t.textContent || '';
+    var added = /^Added .+ to your slip\./.test(txt);
+    t.classList.toggle('sc-added', added);
+    if (!added || t.querySelector('.u-toast-undo') || !lastAdd) return;
+    var id = lastAdd, u = document.createElement('button');
+    var find = function () { var all = document.querySelectorAll('#hub-rows [data-hub="add"]'); for (var i = 0; i < all.length; i++) if (all[i].getAttribute('data-id') === id) return all[i]; return null; };
+    if (!find()) return;
+    u.type = 'button'; u.className = 'u-toast-undo sc-undo'; u.textContent = 'Undo';
+    u.addEventListener('click', function () { t.classList.remove('on'); var b = find(); if (b) b.click(); });
+    t.appendChild(document.createTextNode(' ')); t.appendChild(u);
+  }
+  function hideToast() { var t = document.getElementById('u-toast'); if (t) t.classList.remove('on'); }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('#hub-sports [data-hub="sport"], .h-viewmode button, [data-hub="section"], [data-v3-nav]')) hideToast();
+  }, true);
+  window.addEventListener('hashchange', hideToast);
+  function wireP2() {
+    var t = document.getElementById('u-toast');
+    if (t && !t.getAttribute('data-sc-p2')) {
+      t.setAttribute('data-sc-p2', '1');
+      new MutationObserver(function () { try { toastUndo(); } catch (e) {} }).observe(t, {childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['class']});
+    }
+    var c = $('hub-slip-count');
+    if (c && !c.getAttribute('data-sc-p2')) {
+      c.setAttribute('data-sc-p2', '1');
+      new MutationObserver(function () { try { railAuto(); } catch (e) {} }).observe(c, {childList: true, characterData: true, subtree: true});
+      window.addEventListener('resize', function () { try { railAuto(); } catch (e) {} });
+    }
+  }
+
+  /* ---------------------------------------------------------------- qa-boards (2026-11-20): browser Back closes the desktop card
+     The v3 card fills the page on desktop too, but the hub gives it a history entry only on a phone (its desktop card was a side
+     panel). So on a 1101px+ screen Back left the board's address behind and the full-page card stayed up. Here the desktop card gets
+     the phone's rule: one entry at the same address when it opens; Back closes it (through the card's own close control); closing it
+     any other way takes that entry back off, so Back then leaves as before. Our own popstate never reaches the hub's router. */
+  var DESK = window.matchMedia ? window.matchMedia('(min-width:1101px)') : {matches: false};
+  var cardEntry = null, cardSkip = false;
+  function cardUp() { var c = $('hub-card'); return !!(c && !c.hidden); }
+  function cardWatch() {
+    var c = $('hub-card');
+    if (!c || c.getAttribute('data-sc-hist')) return;
+    c.setAttribute('data-sc-hist', '1');
+    new MutationObserver(function () {
+      try {
+        if (cardUp()) {
+          if (!cardEntry && DESK.matches && !(history.state && history.state.hubCard)) {
+            /* a marker left on this entry (a reload with the card up, or Back onto it after leaving for another page) is adopted as
+               this card's entry, so Back still closes it; otherwise the card gets its own entry */
+            if (!(history.state && history.state.scV3Card)) history.pushState({scV3Card: 1}, '', location.href);
+            cardEntry = location.href;
+          }
+        } else if (cardEntry) {
+          var here = cardEntry === location.href && history.state && history.state.scV3Card;
+          cardEntry = null;
+          if (here) { cardSkip = true; history.back(); }
+          else if (history.state && history.state.scV3Card) { try { history.replaceState(null, '', location.href); } catch (e) { /* blocked */ } }
+        }
+      } catch (e) { /* history blocked: the card's own Back still closes it */ }
+    }).observe(c, {attributes: true, attributeFilter: ['hidden']});
+  }
+  window.addEventListener('popstate', function (e) {
+    if (cardSkip) { cardSkip = false; e.stopImmediatePropagation(); return; }          /* our entry, taken off after a close */
+    if (cardEntry && cardUp() && !(e.state && e.state.scV3Card)) {
+      cardEntry = null;
+      e.stopImmediatePropagation();
+      var x = document.querySelector('#hub-card [data-hub="card-close"]');
+      if (x) x.click();
+    }
+  }, true);
+
   var queued = 0;
   function run() {
     queued = 0;
     try { paintBand(); paintRows(); } catch (e) { /* keep the hub's own board */ }
+    try { avatars(); wireP2(); railAuto(); cardWatch(); } catch (e) { /* the hub's own look */ }
   }
   function soon() { if (!queued) queued = requestAnimationFrame(run); }
 

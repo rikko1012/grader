@@ -1,0 +1,142 @@
+/* v3 views.css - Moneylines, Line moves and Lines differ in v3 (web/v3/views.js; approved C mocks moneylines / moves / lines-diff).
+   Loaded in the member bundle after the other groups' sheets. Only applies on a v3 page: every rule sits under html[data-ui-v3], and
+   hub overrides under html[data-ui-v3] #u-hub (the hub's own sheets load after this bundle). Display only. */
+
+/* ---------------------------------------------------------------- Moneylines: a section of its own in the hub's centre column */
+html[data-ui-v3] #u-hub.v3x-ml-on #hub-tools-section,html[data-ui-v3] #u-hub.v3x-ml-on #hub-center>.h-top{display:none!important}
+html[data-ui-v3] #u-hub .h-center:has(>#v3-ml-section:not([hidden])){background:var(--sc-bg)}
+html[data-ui-v3] #u-hub #v3-ml-section{color:var(--sc-text);font-family:var(--sc-font);font-variant-numeric:tabular-nums;padding-bottom:40px;min-width:0}
+html[data-ui-v3] #u-hub #v3-ml-section[hidden]{display:none!important}
+html[data-ui-v3] #u-hub #v3-ml-section :is(h1,h2,h3,h4,p,ul){font-family:var(--sc-font)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-lit{margin:0 -12px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-lit__in{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;padding-left:var(--sc-gutter);padding-right:var(--sc-gutter)}
+html[data-ui-v3] #u-hub #v3-ml-section .sc-lit__title{color:var(--sc-text);outline:0}
+html[data-ui-v3] #u-hub #v3-ml-section .sc-lit__meta{max-width:60ch;line-height:1.45;color:var(--sc-muted);font-size:15px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml-body{padding:0 4px}
+html[data-ui-v3] #u-hub #v3-ml-section :is(.sc-btn,.sc-pill){font-family:var(--sc-font)}
+html[data-ui-v3] #u-hub #v3-ml-section .sc-btn{min-height:44px;padding:0 16px;border-radius:var(--sc-r-md);background:var(--sc-s1);color:var(--sc-text);font-weight:500;font-size:15px;
+  box-shadow:var(--sc-ring);cursor:pointer}
+html[data-ui-v3] #u-hub #v3-ml-section .sc-btn[aria-busy="true"]{opacity:.6}
+html[data-ui-v3] #u-hub #v3-ml-section .sc-pill{min-height:40px;padding:0 16px;border-radius:999px;font-size:15px;font-weight:500;color:var(--sc-muted);background:none;
+  box-shadow:inset 0 0 0 1px var(--sc-edge);cursor:pointer;white-space:nowrap}
+html[data-ui-v3] #u-hub #v3-ml-section .sc-pill[aria-pressed="true"]{color:var(--sc-text);background:var(--sc-s2);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-text) 30%,transparent)}
+html[data-ui-v3][data-theme="light"] #u-hub #v3-ml-section .sc-pill[aria-pressed="true"]{background:#0E1320;color:#fff;box-shadow:none}
+html[data-ui-v3] #u-hub #v3-ml-section .sc-pill[hidden]{display:none}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-pills{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px;margin:0 -2px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-pills::-webkit-scrollbar{display:none}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:12px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-search{flex:1 1 280px;min-width:0;display:block}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-search input{appearance:none;-webkit-appearance:none;width:100%!important;min-height:44px!important;padding:0 14px!important;border:0!important;
+  border-radius:var(--sc-r-md)!important;background:var(--sc-s2)!important;color:var(--sc-text)!important;font:500 15px/1 var(--sc-font)!important;box-shadow:var(--sc-ring)!important}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-search input::placeholder{color:var(--sc-faint);font-weight:400}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-older{display:inline-flex;align-items:center;gap:8px;min-height:44px;color:var(--sc-text);font-size:14.5px;cursor:pointer}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-older[hidden]{display:none}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-older input{width:18px;height:18px;margin:0;accent-color:var(--sc-accent-fill)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml-count{margin:12px 0 0;color:var(--sc-muted);font-size:14px;line-height:1.5}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml-count:empty{display:none}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml-count b{color:var(--sc-text);font-weight:600}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml-list{margin-top:4px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml-list>.sc-skel{margin-top:24px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-division{margin-top:28px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-division__h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 12px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-division h2{margin:0;color:var(--sc-text);font:600 20px/1.2 var(--sc-font);letter-spacing:-.015em}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-division h2 small{margin-left:8px;color:var(--sc-faint);font:400 13px var(--sc-font);letter-spacing:0}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-empty{margin:0;padding:14px 16px;border-radius:var(--sc-r-lg);background:var(--sc-s1);box-shadow:var(--sc-ring);color:var(--sc-muted);font-size:14px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-more{margin-top:10px}
+/* one card per game / series */
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml{background:var(--sc-s1);border-radius:var(--sc-r-xl);box-shadow:var(--sc-ring),var(--sc-drop);overflow:hidden;min-width:0}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml+.v3x-ml{margin-top:10px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml.is-older .v3x-mlt td{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml__top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;padding:14px 16px 12px;min-width:0}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml__id{min-width:0}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml__fix{margin:0;color:var(--sc-text);font:600 16.5px/1.25 var(--sc-font);letter-spacing:-.01em;overflow-wrap:anywhere}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml__meta{margin-top:3px;color:var(--sc-faint);font-size:13px;line-height:1.4}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml-pick{text-align:right;max-width:46vw}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml-pick small{display:block;color:var(--sc-faint);font-size:12px;line-height:1.35}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml-pick b{display:block;margin-top:2px;color:var(--sc-text);font:600 15px/1.25 var(--sc-font);overflow-wrap:anywhere}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-split{grid-column:1/-1;display:grid;gap:6px;margin-top:6px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-split__bar{display:flex;gap:2px;height:6px;border-radius:1px;overflow:hidden;background:var(--sc-hair)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-split__bar i{display:block;height:100%}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-split__bar .a{background:var(--sc-accent-fill)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-split__bar .b{background:color-mix(in srgb,var(--sc-muted) 45%,transparent)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-split__lbl{display:flex;justify-content:space-between;gap:12px;color:var(--sc-muted);font-size:13px;min-width:0}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-split__lbl b{margin-right:6px;color:var(--sc-text);font:600 16px/1 var(--sc-font)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-split__lbl b.r{margin:0 0 0 6px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-split small{color:var(--sc-faint);font-size:12px}
+/* the price table: source rows, one column per team */
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-mlt-wrap{min-width:0;overflow-x:auto}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-mlt{width:100%;border-collapse:collapse;background:none;font-size:14px;table-layout:auto}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-mlt :is(th,td){padding:9px 16px;border:0;border-top:1px solid var(--sc-hair);background:none;color:var(--sc-text);text-align:right;white-space:nowrap;vertical-align:middle;text-transform:none;letter-spacing:0;font-family:var(--sc-font)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-mlt th:first-child{text-align:left;font-weight:500;white-space:normal;width:100%}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-mlt tbody th{font-size:14.5px;line-height:1.3;color:var(--sc-text)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-mlt thead th{color:var(--sc-faint);font:400 12.5px/1.2 var(--sc-font);max-width:9em;overflow:hidden;text-overflow:ellipsis;text-transform:none;letter-spacing:0}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-mlt abbr{text-decoration:none;cursor:help}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-mlt tbody th small{display:block;font-family:var(--sc-font);text-transform:none;letter-spacing:0;margin-top:2px;color:var(--sc-faint);font-size:12px;font-weight:400;line-height:1.35}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-mlt td{font:500 15px/1 var(--sc-font)}
+/* details: why the pick, context and quote details, which price is shown */
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-det{border-top:1px solid var(--sc-hair)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml .v3x-det{padding:0 16px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-det>summary{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer;list-style:none;color:var(--sc-muted);font:500 14px/1.3 var(--sc-font)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-det>summary::-webkit-details-marker{display:none}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-det>summary::before{content:"";flex:none;width:7px;height:7px;margin:0 4px 0 2px;border-right:1.5px solid var(--sc-faint);border-bottom:1.5px solid var(--sc-faint);transform:rotate(-45deg);transition:transform var(--sc-fast)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-det[open]>summary::before{transform:rotate(45deg)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-det>summary:focus-visible{outline:2px solid var(--sc-accent);outline-offset:-2px;border-radius:var(--sc-r-xs)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-which{margin-top:18px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-which>div{margin:0 0 14px;color:var(--sc-muted);font-size:14px;line-height:1.55}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-which p{margin:0 0 8px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-which b{color:var(--sc-text);font-weight:600}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-factors{list-style:none;margin:0 0 8px;padding:0}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-factors li{display:grid;grid-template-columns:minmax(0,1fr) 64px auto;gap:12px;align-items:center;padding:7px 0;border-top:1px solid var(--sc-hair);color:var(--sc-muted);font-size:13.5px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-factors li b{color:var(--sc-text);font-weight:500;text-align:right}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-factors .w{position:relative;display:block;height:3px;background:var(--sc-hair)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-factors .w i{position:absolute;inset:0 auto 0 0;background:color-mix(in srgb,var(--sc-text) 55%,transparent)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-factors-wrap>small{display:block;margin-bottom:12px;color:var(--sc-faint);font-size:12px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ctx-grid{display:grid;gap:10px;margin:0 0 14px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ctx{min-width:0;padding:12px 14px;border-radius:var(--sc-r-lg);background:color-mix(in srgb,var(--sc-bg) 55%,var(--sc-s1));box-shadow:inset 0 0 0 1px var(--sc-hair);
+  color:var(--sc-muted);font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ctx h4{margin:0 0 6px;color:var(--sc-faint);font:500 12.5px/1.3 var(--sc-font);letter-spacing:0;text-transform:none}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ctx :is(p,li,ul){margin:3px 0;color:var(--sc-muted);font-size:13px;line-height:1.45}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ctx ul{margin:6px 0;padding-left:16px}
+html[data-ui-v3] #u-hub #v3-ml-section :is(p,li,small,b,span,summary,label,h1,h2,h3,h4){font-family:var(--sc-font)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ctx li{margin:3px 0}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ctx p.big{color:var(--sc-text);font:600 15px/1.3 var(--sc-font)}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-ctx .why,html[data-ui-v3] #u-hub #v3-ml-section .v3x-ctx .f{color:var(--sc-faint);font-size:12.5px;font-weight:400}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-link{color:var(--sc-link);text-decoration:underline;text-underline-offset:2px}
+html[data-ui-v3] #u-hub #v3-ml-section .v3x-badge{display:inline-flex;align-items:center;min-height:20px;padding:0 6px;border-radius:var(--sc-r-xs);box-shadow:inset 0 0 0 1px var(--sc-edge);
+  color:var(--sc-muted);font:500 11.5px/1.3 var(--sc-font);vertical-align:1px}
+@media (min-width:1024px){
+  html[data-ui-v3] #u-hub #v3-ml-section .v3x-lit{margin:0 -24px}
+  html[data-ui-v3] #u-hub #v3-ml-section .v3x-lit__in{padding-left:24px;padding-right:24px}
+  html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml-body{padding:0}
+  html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr)}
+  html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml__top{align-content:start;padding:18px 20px;box-shadow:inset -1px 0 0 var(--sc-hair)}
+  html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml-pick{max-width:none}
+  html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml .v3x-mlt thead th{border-top:0}
+  html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml .v3x-mlt th:first-child{padding-left:20px}
+  html[data-ui-v3] #u-hub #v3-ml-section .v3x-ml .v3x-det{grid-column:1/-1;padding:0 20px}
+  html[data-ui-v3] #u-hub #v3-ml-section .v3x-ctx-grid{grid-template-columns:1fr 1fr}
+}
+@media (max-width:420px){
+  html[data-ui-v3] #u-hub #v3-ml-section .v3x-mlt :is(th,td){padding-left:12px;padding-right:12px}
+  html[data-ui-v3] #u-hub #v3-ml-section .v3x-mlt th:first-child{padding-left:16px}
+}
+
+/* ---------------------------------------------------------------- Line moves / Lines differ: the board with the hub's own quick filter */
+html[data-ui-v3] #u-hub #hub-board-section .v3x-note{margin:10px 0 4px;color:var(--sc-muted);font:400 15px/1.5 var(--sc-font);max-width:72ch}
+html[data-ui-v3] #u-hub #hub-board-section .v3x-note[hidden]{display:none}
+html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td .v3x-lines{display:block;max-width:none;margin-top:4px;overflow:visible;text-overflow:clip;white-space:normal;
+  color:var(--sc-muted);font:400 12.5px/1.35 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td .v3x-lines b{color:var(--sc-text);font-weight:600;white-space:nowrap}
+html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td .v3x-lines abbr{text-decoration:none}
+/* Board views in the hub's Views menu */
+html[data-ui-v3] #u-hub #hub-views-pop .v3x-views{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 0 12px;margin:0 0 4px;border-bottom:1px solid var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-views-pop .v3x-views__h{flex:1 0 100%;color:var(--sc-faint);font:500 12.5px/1.3 var(--sc-font)}
+html[data-ui-v3] #u-hub #hub-views-pop .v3x-views .sc-pill{min-height:36px;padding:0 14px;border:0;border-radius:999px;background:none;color:var(--sc-muted);font:500 14px var(--sc-font);
+  box-shadow:inset 0 0 0 1px var(--sc-edge);cursor:pointer;width:auto}
+html[data-ui-v3] #u-hub #hub-views-pop .v3x-views .sc-pill[aria-pressed="true"]{color:var(--sc-text);background:var(--sc-s2);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-text) 30%,transparent)}
+html[data-ui-v3][data-theme="light"] #u-hub #hub-views-pop .v3x-views .sc-pill[aria-pressed="true"]{background:#0E1320;color:#fff;box-shadow:none}
+html[data-ui-v3] #u-hub #hub-views-pop .v3x-views .sc-pill[hidden]{display:none}
+/* phone rows are a grid of named areas (board.css): the books' lines take one full-width row of their own under the row's last one */
+@media (max-width:1023px){
+  html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td .v3x-lines{grid-column:1/-1;grid-row:-1/span 1;margin-top:0}
+}

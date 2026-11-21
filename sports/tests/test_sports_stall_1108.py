@@ -102,7 +102,7 @@ def test_settle_gets_its_turn_and_settle_post_never_holds_it_long(six_hours):
     assert all(code == 0 for _t, code in r["ends"]["settle"])
     iv = _intervals(r)
     assert _overlap(iv, "settle", "settle-post") == []                      # model-daily: never together
-    assert _overlap(iv, "settle-post", "results-public") == []              # season-results (review 2026-11-08)
+    assert _overlap(iv, "results-ledger", "results-public") == []           # season-results (review 2026-11-08)
     for n, s, e in iv:
         if n == "settle-post":
             assert e - s <= r["specs"]["settle-post"]["timeout_s"]          # budget-bounded, never killed
@@ -485,9 +485,10 @@ def test_settle_post_budget_stops_between_events_and_the_next_run_finishes_ident
 def test_settle_post_cli_passes_its_budget(monkeypatch):
     from sports import worker
     seen = {}
-    monkeypatch.setattr(worker, "_post_settle", lambda lg, con, st, t0, name, budget_s=None:
-                        seen.update(lg=lg, budget=budget_s, name=name) or {})
+    monkeypatch.setattr(worker, "_post_settle", lambda lg, con, st, t0, name, budget_s=None, ledger=True:
+                        seen.update(lg=lg, budget=budget_s, name=name, ledger=ledger) or {})
     monkeypatch.setenv("SPORTS_INGEST", "1")
     import argparse
     worker.cmd_settle_post(argparse.Namespace(leagues=["nba", "nfl"], budget_s=600.0), None)
-    assert seen == {"lg": ["nba", "nfl"], "budget": 600.0, "name": "settle_post_stages.json"}
+    assert seen == {"lg": ["nba", "nfl"], "budget": 600.0, "name": "settle_post_stages.json",
+                    "ledger": False}                    # settlepost-1120: the ledger is the results-ledger job

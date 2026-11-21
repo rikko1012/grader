@@ -9,7 +9,7 @@
    v3 ground only while one of these sections is the one on screen (:has), so other groups' sections are left as they are. */
 
 /* ---------------------------------------------------------------- ground + the hub's variables on the v3 tokens */
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section),
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools),
 html[data-ui-v3] #u-hub .h-center:has(>:is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section):not([hidden])){
   --u-gold:var(--sc-accent);--u-accent:var(--sc-accent);--u-bg:var(--sc-bg);--u-panel:var(--sc-s1);--u-panel2:var(--sc-s2);--u-panel-2:var(--sc-s2);--u-panel3:var(--sc-s3);
   --u-line:var(--sc-hair);--u-line2:var(--sc-edge);--h-line:var(--sc-hair);--u-text:var(--sc-text);--u-muted:var(--sc-muted);--u-faint:var(--sc-faint);
@@ -30,37 +30,37 @@ html[data-ui-v3] #u-hub .h-center:has(>:is(#hub-picks-section,#hub-record-sectio
   html[data-ui-v3] #u-hub .h-center:has(>:is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section):not([hidden])) .h-top h1{font-size:40px!important;letter-spacing:-.03em!important}}
 
 /* shared type, controls and links in these sections */
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(h2,h3,h4){color:var(--sc-text);font-family:var(--sc-font);letter-spacing:-.015em}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) .h-section-head p{color:var(--sc-muted);font-size:15px;line-height:1.5;max-width:62ch}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) button{
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) :is(h2,h3,h4){color:var(--sc-text);font-family:var(--sc-font);letter-spacing:-.015em}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-section-head p{color:var(--sc-muted);font-size:15px;line-height:1.5;max-width:62ch}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) button{
   font-family:var(--sc-font);color:var(--sc-text);background:var(--sc-s1);border:0;box-shadow:inset 0 0 0 1px var(--sc-edge);border-radius:var(--sc-r-md)}
 /* the hub sets its inputs and selects with !important (upgrade-hub.css): the same weight here, on the tokens */
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(select,input:not([type=checkbox]):not([type=radio])){
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) :is(select,input:not([type=checkbox]):not([type=radio])){
   background:var(--sc-s1)!important;border:0!important;color:var(--sc-text)!important;font:500 14px var(--sc-font)!important;box-shadow:inset 0 0 0 1px var(--sc-edge);border-radius:var(--sc-r-md)}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) :is(.h-market-tools,.ev-drawer,.h-book-game) :is(select,input:not([type=checkbox]):not([type=radio])){background:var(--sc-s2)!important}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(select,input)::placeholder{color:var(--sc-faint)}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(select,input:not([type=checkbox]):not([type=radio])):focus{background:var(--sc-s2)!important;box-shadow:inset 0 0 0 1px var(--sc-accent)}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) select option{background:var(--sc-s1);color:var(--sc-text)}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) input:is([type=checkbox],[type=radio]){accent-color:var(--sc-accent-fill);width:18px;height:18px;min-height:0;box-shadow:none;background:none}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) button:is(:hover,:focus){background:var(--sc-s2)}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) label{color:var(--sc-muted)}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-table th{background:none;color:var(--sc-faint);font:500 12.5px/1.3 var(--sc-font);letter-spacing:0;text-transform:none}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-table tbody th{color:var(--sc-text);font-weight:600;font-size:14px}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-table tbody th small{display:block;color:var(--sc-faint);font-weight:500;font-size:12px}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-table td{font:500 14px/1.4 var(--sc-font);font-variant-numeric:tabular-nums}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) :is(.h-market-tools,.ev-drawer,.h-book-game) :is(select,input:not([type=checkbox]):not([type=radio])){background:var(--sc-s2)!important}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) :is(select,input)::placeholder{color:var(--sc-faint)}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) :is(select,input:not([type=checkbox]):not([type=radio])):focus{background:var(--sc-s2)!important;box-shadow:inset 0 0 0 1px var(--sc-accent)}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) select option{background:var(--sc-s1);color:var(--sc-text)}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) input:is([type=checkbox],[type=radio]){accent-color:var(--sc-accent-fill);width:18px;height:18px;min-height:0;box-shadow:none;background:none}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) button:is(:hover,:focus){background:var(--sc-s2)}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) label{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-table th{background:none;color:var(--sc-faint);font:500 12.5px/1.3 var(--sc-font);letter-spacing:0;text-transform:none}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-table tbody th{color:var(--sc-text);font-weight:600;font-size:14px}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-table tbody th small{display:block;color:var(--sc-faint);font-weight:500;font-size:12px}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-table td{font:500 14px/1.4 var(--sc-font);font-variant-numeric:tabular-nums}
 /* body text the hub sets in fixed greys (fine on its dark ground, too faint on white): the token inks; value colours keep their classes */
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) :is(p,li){color:var(--sc-muted)}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) :is(b,strong):not([class]){color:var(--sc-text)}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) :is(.ev-banner,.ev-banner p){color:var(--sc-muted)}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-pc-chip{color:var(--sc-good);background:var(--sc-good-tint)}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-pc-chip.h-pc-short{color:var(--sc-text);background:var(--sc-near-tint)}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-eyebrow{color:var(--sc-faint);font-family:var(--sc-font);letter-spacing:.08em}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) :is(button,select,input,a,summary):focus-visible{outline:2px solid var(--sc-accent);outline-offset:2px}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) a{color:var(--sc-link)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) :is(p,li){color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) :is(b,strong):not([class]){color:var(--sc-text)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) :is(.ev-banner,.ev-banner p){color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-pc-chip{color:var(--sc-good);background:var(--sc-good-tint)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-pc-chip.h-pc-short{color:var(--sc-text);background:var(--sc-near-tint)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-eyebrow{color:var(--sc-faint);font-family:var(--sc-font);letter-spacing:.08em}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) :is(button,select,input,a,summary):focus-visible{outline:2px solid var(--sc-accent);outline-offset:2px}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) a{color:var(--sc-link)}
 html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section) .h-link{background:none;box-shadow:none;color:var(--sc-link);padding:0;min-height:40px}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) .h-empty{color:var(--sc-muted)}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) .h-empty h3{color:var(--sc-text);font-weight:600}
-html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section) .h-empty button{
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-empty{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-empty h3{color:var(--sc-text);font-weight:600}
+html[data-ui-v3] #u-hub :is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-empty button{
   background:var(--sc-cta-bg);color:var(--sc-cta-ink);box-shadow:none;font-weight:600;min-height:44px;padding:0 18px}
 
 /* pills (picks.js: they press the hub's own selects) */
@@ -234,10 +234,10 @@ html[data-ui-v3] #u-hub #hub-record-section .v3c-cal-key .poor{background:var(--
 html[data-ui-v3] #u-hub #hub-record-section .h-record-card>footer{margin-top:14px;padding-top:12px;border-top:1px solid var(--sc-hair);color:var(--sc-faint);font-size:12.5px}
 
 /* ---------------------------------------------------------------- EV (Best prices), Arbitrage / price check, Sportsbooks game lines */
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) :is(.ev-list,.h-market-tools,.ev-drawer,.ev-banner,.h-book-game,.ev-generated-card,.h-table-wrap){
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) :is(.ev-list,.h-market-tools,.ev-drawer,.ev-banner,.h-book-game,.ev-generated-card,.h-table-wrap){
   background:var(--sc-s1);border:0;border-radius:var(--sc-r-xl);box-shadow:var(--sc-ring),var(--sc-drop)}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-market-tools{padding:16px}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) .h-market-tools .h-table-wrap{box-shadow:none;border-radius:0;background:none}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-market-tools{padding:16px}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .h-market-tools .h-table-wrap{box-shadow:none;border-radius:0;background:none}
 html[data-ui-v3] #u-hub #hub-ev-section .ev-head{background:none;color:var(--sc-faint);font:500 12.5px var(--sc-font);padding:12px 16px}
 html[data-ui-v3] #u-hub #hub-ev-section .ev-row{padding:12px 16px;border-top:1px solid var(--sc-hair)}
 html[data-ui-v3] #u-hub #hub-ev-section .ev-play b{font:600 15px/20px var(--sc-font);letter-spacing:-.01em}
@@ -256,20 +256,62 @@ html[data-ui-v3] #u-hub #hub-ev-section [data-ev="generate"],html[data-ui-v3] #u
 html[data-ui-v3] #u-hub #hub-ev-section .ev-link{background:none;box-shadow:none;color:var(--sc-link)}
 html[data-ui-v3] #u-hub #hub-ev-section :is(.ev-state,.ev-na,.ev-left,.ev-left-list,.ev-how p){color:var(--sc-muted)}
 html[data-ui-v3] #u-hub #hub-ev-section .ev-err{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-poor) 40%,transparent)}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) table{font-variant-numeric:tabular-nums}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) :is(th,td){border-color:var(--sc-hair);color:var(--sc-text)}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) :is(th,caption,small){color:var(--sc-muted)}
-html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section) tbody tr:hover>*{background:color-mix(in srgb,var(--sc-s2) 55%,transparent)}
-html[data-ui-v3] #u-hub :is(#hub-arb-section,#hub-books-section,#hub-ev-section) :is(.h-pc-row){border-color:var(--sc-hair);background:none}
-html[data-ui-v3] #u-hub :is(#hub-arb-section,#hub-books-section,#hub-ev-section) .h-pc-head{color:var(--sc-faint);background:none}
-html[data-ui-v3] #u-hub :is(#hub-arb-section,#hub-books-section,#hub-ev-section) .h-market-filters{background:none;border:0;padding:0}
-html[data-ui-v3] #u-hub :is(#hub-arb-section,#hub-books-section,#hub-ev-section) :is(.h-market-filters,.h-game-books,.h-sports) button[aria-pressed="true"]{
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) table{font-variant-numeric:tabular-nums}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) :is(th,td){border-color:var(--sc-hair);color:var(--sc-text)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) :is(th,caption,small){color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) tbody tr:hover>*{background:color-mix(in srgb,var(--sc-s2) 55%,transparent)}
+html[data-ui-v3] #u-hub :is(#hub-arb-section,#hub-books-section,#hub-ev-section,#hub-game-prices,#hub-market-tools) :is(.h-pc-row){border-color:var(--sc-hair);background:none}
+html[data-ui-v3] #u-hub :is(#hub-arb-section,#hub-books-section,#hub-ev-section,#hub-game-prices,#hub-market-tools) .h-pc-head{color:var(--sc-faint);background:none}
+html[data-ui-v3] #u-hub :is(#hub-arb-section,#hub-books-section,#hub-ev-section,#hub-game-prices,#hub-market-tools) .h-market-filters{background:none;border:0;padding:0}
+html[data-ui-v3] #u-hub :is(#hub-arb-section,#hub-books-section,#hub-ev-section,#hub-game-prices,#hub-market-tools) :is(.h-market-filters,.h-game-books,.h-sports) button[aria-pressed="true"]{
   background:var(--sc-s2);color:var(--sc-text);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc-text) 30%,transparent)}
-html[data-ui-v3][data-theme="light"] #u-hub :is(#hub-arb-section,#hub-books-section,#hub-ev-section) :is(.h-market-filters,.h-game-books,.h-sports) button[aria-pressed="true"],
+html[data-ui-v3][data-theme="light"] #u-hub :is(#hub-arb-section,#hub-books-section,#hub-ev-section,#hub-game-prices,#hub-market-tools) :is(.h-market-filters,.h-game-books,.h-sports) button[aria-pressed="true"],
 html[data-ui-v3][data-theme="light"] #u-hub #hub-ev-section [data-ev="app"][aria-pressed="true"]{background:#0E1320;color:#fff;box-shadow:none}
-html[data-ui-v3] #u-hub #hub-books-section .h-book-game{margin:0 0 10px;overflow:hidden}
-html[data-ui-v3] #u-hub #hub-books-section .h-book-game>summary{padding:14px 16px;min-height:56px;cursor:pointer}
-html[data-ui-v3] #u-hub #hub-books-section .h-book-match strong{font:600 15.5px/1.25 var(--sc-font);color:var(--sc-text)}
-html[data-ui-v3] #u-hub #hub-books-section .h-book-match strong span,html[data-ui-v3] #u-hub #hub-books-section :is(.h-book-match time,.h-book-seen,.h-book-seen small){color:var(--sc-muted)}
-html[data-ui-v3] #u-hub #hub-books-section .h-book-game .h-table-wrap{box-shadow:none;border-radius:0;background:var(--sc-s2)}
-html[data-ui-v3] #u-hub #hub-books-section .h-book-empty{color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-game{margin:0 0 10px;overflow:hidden}
+html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-game>summary{padding:14px 16px;min-height:56px;cursor:pointer}
+html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-match strong{font:600 15.5px/1.25 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-match strong span,html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) :is(.h-book-match time,.h-book-seen,.h-book-seen small){color:var(--sc-muted)}
+html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-game .h-table-wrap{box-shadow:none;border-radius:0;background:var(--sc-s2)}
+html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-empty{color:var(--sc-muted)}
+/* ---- polish1 (2026-11-20) ---- */
+/* one eyebrow rule on every page: none above page titles (SHARED-4), as on the Board and Slips */
+html[data-ui-v3] #u-hub .h-center:has(>:is(#hub-picks-section,#hub-record-section,#hub-ev-section,#hub-arb-section,#hub-books-section):not([hidden])) .h-top .h-eyebrow{display:none!important}
+/* the hit rate against the chance you saw, under the hero figure (no arrow at 0.0, colour only on the delta) */
+html[data-ui-v3] #u-hub .v3c-tile.is-hero .v3c-vsaw{display:block;margin-top:4px;color:var(--sc-muted);font:400 13px/1.35 var(--sc-font)}
+html[data-ui-v3] #u-hub .v3c-tile.is-hero .v3c-vsaw b{display:inline!important;font:600 13px/1.35 var(--sc-font)!important;letter-spacing:0!important;color:var(--sc-text)}
+html[data-ui-v3] #u-hub .v3c-tile.is-hero .v3c-vsaw b.sc-v-good{color:var(--sc-good)}
+html[data-ui-v3] #u-hub .v3c-tile.is-hero .v3c-vsaw b.sc-v-poor{color:var(--sc-poor)}
+/* the hub's own one-line summary repeats the tiles above: kept for screen readers, not drawn */
+html[data-ui-v3] #u-hub #hub-picks-section .v3c-picks-top:not([hidden])~#hub-picks-body .h-pick-summary{position:absolute!important;width:1px;height:1px;margin:0;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+/* inner tables (EV books, sportsbook, arbitrage, card tables) take the system table header: Outfit 500, sentence case, a hairline,
+   no dark DM Mono band */
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools,#hub-detail,.h-card) table thead th,
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .ev-src thead th{background:none!important;color:var(--sc-muted)!important;font:500 12.5px/1.3 var(--sc-font)!important;letter-spacing:0!important;text-transform:none!important;border:0!important;box-shadow:inset 0 -1px 0 var(--sc-hair)!important;white-space:normal}
+html[data-ui-v3] #u-hub :is(#hub-ev-section,#hub-arb-section,#hub-books-section,#hub-game-prices,#hub-market-tools) .ev-src :is(table,thead,thead tr){background:none!important}
+/* ---- polish2 (2026-11-20): EV on the phone (mock C/ev-390): the books pill with a compact + beside it (the button keeps its label
+   "Add <player> <side> <line> to slip"); the per-book table scrolls inside its own frame instead of being cut at the screen edge */
+@media (max-width:719px){
+  html[data-ui-v3] #u-hub #hub-ev-section .ev-row>.ev-cell[data-label="Market"]{grid-column:1}
+  html[data-ui-v3] #u-hub #hub-ev-section .ev-row>.ev-act{grid-column:2!important;justify-self:end;align-self:end}
+  html[data-ui-v3] #u-hub #hub-ev-section .ev-act .ev-add{width:44px!important;min-width:44px;height:44px;padding:0!important;font-size:0!important;border-radius:var(--sc-r-md)}
+  html[data-ui-v3] #u-hub #hub-ev-section .ev-act .ev-add::before{content:"+";font:500 22px/1 var(--sc-font)}
+  html[data-ui-v3] #u-hub #hub-ev-section .ev-row>.ev-src{grid-column:1/-1;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+  html[data-ui-v3] #u-hub #hub-ev-section .ev-src table{min-width:520px}
+}
+html[data-ui-v3] #u-hub #hub-ev-section .v3-hitscale{position:relative;display:block;width:100%;max-width:140px;height:10px;margin-top:6px}
+html[data-ui-v3] #u-hub #hub-ev-section .v3-hitscale::before{content:"";position:absolute;left:0;right:0;top:4px;height:2px;border-radius:1px;background:var(--sc-hair)}
+html[data-ui-v3] #u-hub #hub-ev-section .v3-hitscale i{position:absolute;top:1px;width:8px;height:8px;margin-left:-4px;border-radius:50%;background:var(--sc-muted)}
+html[data-ui-v3] #u-hub #hub-ev-section .v3-hitscale i.ok{background:var(--sc-good)}
+html[data-ui-v3] #u-hub #hub-ev-section .v3-hitscale b{position:absolute;top:0;width:2px;height:10px;margin-left:-1px;background:var(--sc-text);opacity:.7}
+
+/* qa 11-20: EV bar - the "No repeat props" checkbox reads on one line with its box (the hub stacks every bar label as a column, which put
+   the box above its words), level with the selects; the "Only picks that beat the entry" toggle and its note share one centre line */
+html[data-ui-v3] #u-hub #hub-ev-section .ev-bar label:has(>input[type=checkbox]){flex-direction:row;align-items:center;gap:8px;min-height:40px;font-size:13.5px;color:var(--sc-text);cursor:pointer}
+html[data-ui-v3] #u-hub #hub-ev-section .ev-quick{align-items:center;column-gap:12px}
+html[data-ui-v3] #u-hub #hub-ev-section .ev-quick>span{color:var(--sc-muted);font-size:13.5px}
+
+/* qa 11-20 (owner rule: no hedge / status labels on member pages): a game card's freshness word ("Collected recently", "Older prices",
+   "Quote age unavailable") is not drawn; the definite fact beside it stays ("Seen 3:46 PM" / "No collection timestamp"). The hub's
+   text node is kept (font-size 0), so nothing the hub writes is removed. Own commit: drop it if the owner wants the word back. */
+html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-seen{font-size:0;line-height:0}
+html[data-ui-v3] #u-hub :is(#hub-books-section,#hub-game-prices) .h-book-seen small{font-size:12px;line-height:1.3}

@@ -26,6 +26,7 @@ const C = {tallies: () => ({l10: null}), siblings: () => [], chanceOf: () => nul
 const RECS = {A: {sport: 'nba', scout: {projection: null}, player: {name: 'P'}, market: {period_label: 'G', stat_label: 'pts'},
                   offer: {platform: 'pp', offer_id: 'o1', revision: 1, line: 20.5, platform_label: 'PP'}}};
 const rec = id => RECS[id], key = r => r.offer.offer_id;
+const hltvOnly = () => false, windowTally = () => null;   // the hub's CS2 HLTV-only helpers (v3, Nov 20): not part of this slice
 let paints = 0; const paintBody = () => { paints++; };
 """
 

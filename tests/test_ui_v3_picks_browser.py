@@ -3,6 +3,7 @@ member Record, the public /record, EV (Best prices), Arbitrage / price check, Sp
 390x844 and 1280x900, dark and light. Every field the page shows today is still there (the v3 files only restyle and add derived
 items computed from the numbers beside them), no sideways scroll, no script error. V3_SHOTS=<folder> keeps a screenshot each."""
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -105,9 +106,14 @@ def test_my_picks_v3_keeps_every_field(browser, env, monkeypatch, size, theme):
         assert "Pending" in p.locator(f"{sec} .h-picks-part h3").first.inner_text()
         assert p.locator(f"{sec} .h-picks-foot [data-hub=section][data-id=record]").count() == 1
         # v3: the server's own record (the tray's Record tab numbers): tiles, ticks and key reconcile with each other
-        tiles = p.locator(f"{sec} .v3c-score .v3c-tile b").all_inner_texts()
+        tiles = p.locator(f"{sec} .v3c-score .v3c-tile > b").all_inner_texts()
         assert tiles[0] == "50.0%" and tiles[1].replace("–", "-").replace(" ", "") == "1-1-1" and tiles[2] == "1" and tiles[3] == "2"
         assert "Hit rate, 2 decided" in p.locator(f"{sec} .v3c-score").inner_text()
+        # the hit rate against the chance you saw on those decided picks (mock 09), signed, no arrow
+        vs = p.locator(f"{sec} .v3c-tile.is-hero .v3c-vsaw").inner_text()
+        assert re.match(r"^[+−]?\d+\.\d pts vs \d+\.\d% you saw$", vs), vs
+        # the hub's one-line summary repeats the tiles: kept for readers, not drawn
+        assert p.evaluate("document.querySelector('#hub-picks-section .h-pick-summary').getBoundingClientRect().width") <= 1
         assert p.locator(f"{sec} .v3c-ticks i").count() == 6
         shot(p, f"picks-{size['width']}-{theme}-top")
         # chance you saw, from the saved receipt, beside each status (never a 0 for a missing one)
@@ -116,11 +122,11 @@ def test_my_picks_v3_keeps_every_field(browser, env, monkeypatch, size, theme):
         assert not any(s.endswith(" 0%") or s.endswith(" 0.0%") for s in saw)
         # pills mirror the selects and press them
         pills = p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button")
-        assert [t.strip() for t in pills.all_inner_texts()] == ["All outcomes", "Pending", "Won", "Lost", "Pushed", "Void"]
-        p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button", has_text="Won").click()
+        assert [t.strip() for t in pills.all_inner_texts()] == ["All outcomes", "Pending", "Hit", "Miss", "Pushed", "Void"]   # Hit / Miss as the record
+        p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button", has_text="Hit").click()
         p.wait_for_function("document.getElementById('hub-pick-status').value==='hit'")
         p.wait_for_function("document.querySelectorAll('#hub-picks-body .u-pick').length===1")
-        assert p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button[aria-pressed=true]").inner_text().strip() == "Won"
+        assert p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button[aria-pressed=true]").inner_text().strip() == "Hit"
         p.locator(f"{sec} .v3c-pills[data-for=hub-pick-status] button", has_text="All outcomes").click()
         p.wait_for_function("document.querySelectorAll('#hub-picks-body .u-pick').length===6")
         # an open receipt keeps its full field list
@@ -170,7 +176,7 @@ def test_member_record_v3_keeps_every_field(browser, env, monkeypatch, size, the
         p.wait_for_selector("#hub-record-body .h-record-card .h-score", timeout=30000)
         card = p.locator("#hub-record-body .h-record-card").first
         txt = card.inner_text()
-        for k in ("Wins / losses", "Actual hit rate", "Average stated chance", "decided picks", "Updated"):
+        for k in ("Wins–losses", "Actual hit rate", "Average stated chance", "decided picks", "Updated"):   # one W–L format on every record page
             assert k in txt, k
         assert p.locator("#hub-record-sport").count() == 1
         assert card.locator(".h-rel-row").count() >= 1 and card.locator(".h-record-calendar").count() == 1
@@ -226,6 +232,7 @@ def test_member_record_v3_delta_gap_bars_day_marks_and_legend(browser, env, monk
         p.wait_for_selector("#hub-record-body .h-record-card .v3c-delta")
         card = p.locator("#hub-record-body .h-record-card").first
         assert "−7.9 pts vs stated" in card.locator(".v3c-delta").inner_text()
+        assert "1,357–1,211" in card.locator(".h-score > div").first.inner_text()      # thousands as the public record writes them
         assert "is-poor" in card.locator(".v3c-delta").get_attribute("class")
         assert card.locator(".h-rel-scale .v3c-gap").count() == 2                      # A+ has no actual: no bar, its stated ring stays
         assert card.locator(".h-calendar-grid details[data-v3=poor]").count() >= 1 and card.locator(".h-calendar-grid details[data-v3=good]").count() >= 1
@@ -556,5 +563,75 @@ def test_public_record_v3_follows_the_os_theme_with_nothing_stored(browser, env,
         assert p.evaluate("document.documentElement.dataset.theme || ''") == ""
         assert p.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(246, 247, 249)"
         assert p.evaluate("getComputedStyle(document.documentElement).colorScheme") == "light"
+    finally:
+        c.close()
+
+
+# ------------------------------------------------------------------------------------------------ qa 11-20 (bug hunt on live data)
+def game_books(route):
+    now = datetime.now(timezone.utc)
+    league = "nfl" if "league=nfl" in route.request.url else "nba"
+    route.fulfill(json={"league": league, "source": "ESPN", "observed_at": now.isoformat(), "events": [{
+        "id": "espn:test", "away": "Charlotte Hornets", "home": "Atlanta Hawks", "start_utc": (now + timedelta(days=1)).isoformat(), "seen_at": None,
+        "books": {"draftkings": {"id": "draftkings", "label": "DraftKings", "markets": {"money-line": {"awayOdds": 150, "homeOdds": -170}}}}}]})
+
+
+@pytest.mark.parametrize("theme", THEMES)
+@pytest.mark.parametrize("size", SIZES, ids=["390", "1280"])
+def test_tools_game_lines_follow_the_theme(browser, env, monkeypatch, size, theme):
+    """Tools carries the same game lines as Sportsbooks (#hub-game-prices). It kept the hub's dark card and selects in the light
+    theme: dark team names on a near-black card, unreadable (live, 11-20). It now reads as Sportsbooks does."""
+    monkeypatch.setenv("SCOUT_WORKSPACE_V2", "1")
+    c, p = v3_member(browser, env, monkeypatch, size, theme, "/#/tools", "#hub-game-prices summary",
+                     route=lambda p: p.route("**/api/upgrade/game-books?*", game_books))
+    try:
+        game = p.locator("#hub-game-prices .h-book-game").first
+        s1 = p.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sc-s1').trim()")
+        want = {"#FFFFFF": "rgb(255, 255, 255)", "#0F1524": "rgb(15, 21, 36)"}[s1.upper()]
+        assert game.evaluate("e => getComputedStyle(e).backgroundColor") == want
+        p.locator("#hub-game-prices .h-book-game summary").first.click()                     # the price table, open, in both themes
+        p.wait_for_selector("#hub-game-prices .h-book-game[open] table")
+        assert "+150" in p.locator("#hub-game-prices .h-book-game[open]").inner_text()
+        sel = p.locator("#hub-game-prices select").first
+        assert sel.evaluate("e => getComputedStyle(e).backgroundColor") != "rgb(27, 30, 36)"          # the hub's own dark select
+        readable(p, "#hub-game-prices")
+        no_h_scroll(p)
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", SIZES, ids=["390", "1280"])
+def test_ev_bar_checkbox_sits_beside_its_words(browser, env, ev_on, monkeypatch, size):  # noqa: F811
+    c, p = v3_member(browser, env, monkeypatch, size, "light", "/#scout/ev", "#hub-ev-body #ev-no-repeats")
+    try:
+        box, lab = p.evaluate("""() => { const i = document.getElementById('ev-no-repeats'), l = i.closest('label'), r = document.createRange();
+          r.selectNodeContents(l); const t = [...r.getClientRects()].pop(), b = i.getBoundingClientRect();
+          return [[b.left, b.top, b.bottom], [t.left, t.top, t.bottom]] }""")
+        assert lab[0] > box[0] and lab[1] < box[2] and lab[2] > box[1]                              # beside the box, not under it
+        p.locator('[data-ev="app"][data-id="underdog"]').click()
+        p.wait_for_selector("#hub-ev-body .ev-quick button + span", timeout=30000)
+        b, n = p.evaluate("""() => { const s = document.querySelector('#hub-ev-body .ev-quick button + span'), b = s.previousElementSibling.getBoundingClientRect(),
+          n = s.getBoundingClientRect(); return [(b.top + b.bottom) / 2, (n.top + n.bottom) / 2] }""")
+        if size is DESK:
+            assert abs(b - n) < 3, (b, n)                                                          # one centre line with its toggle
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+def test_desktop_page_titles_line_up_under_the_mark(browser, env, monkeypatch):
+    """1280: the header mark, the board and Slips start at 24px; My picks, Record and Tools sat at 12px."""
+    c, p = v3_page(browser, env, monkeypatch, "board", DESK, "dark")
+    try:
+        mark = p.evaluate("Math.round(document.querySelector('.sc-v3-bar').firstElementChild.getBoundingClientRect().left)")
+        for path, sel in (("/#/picks", "#hub-picks-section"), ("/#/record", "#hub-record-section"), ("/#/tools", "#hub-tools-section"), ("/#/slips", "#hub-studio-section")):
+            p.goto(env.url + path)
+            p.wait_for_selector(sel + ":not([hidden])", timeout=20000)
+            p.wait_for_timeout(300)
+            left = p.evaluate("""() => { const t = [...document.querySelectorAll('#hub-center .h-top h1, .sb-band h2')].find(e => e.offsetParent);
+              return Math.round(t.getBoundingClientRect().left) }""")
+            assert left == 24 and mark <= 24, (path, left, mark)
+        assert not p.errors, p.errors
     finally:
         c.close()

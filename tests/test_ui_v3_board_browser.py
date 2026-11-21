@@ -87,8 +87,20 @@ def test_v3_board_keeps_every_cell_and_takes_the_approved_look(browser, env, mon
         top = p.locator("#u-hub .h-top.sc-bd-band")
         assert top.count() == 1 and top.is_visible()
         assert p.locator("#hub-title").inner_text().strip().endswith("player props") or p.locator("#hub-title").inner_text().strip() == "Player props"
-        assert p.locator("#u-hub .sc-bd-meta").inner_text() == p.locator("#hub-count").inner_text()
+        # the count shows once, under the title (the toolbar copy is kept for the hub, not drawn)
+        meta = p.locator("#u-hub .sc-bd-meta").inner_text()
+        assert meta == p.locator("#hub-count").inner_text(), meta
+        assert p.evaluate("document.getElementById('hub-count').getBoundingClientRect().width") <= 1
         check_rows(p)
+        # one stake per line: every row with a letter or a Lean shows its stake beside it; no "No grade yet" chip is drawn
+        bad = p.evaluate("""[...document.querySelectorAll('#hub-rows>tr[data-record]')].filter(tr => {
+          const g = tr.querySelector('.h-scout-grade'); if (!g) return false;
+          const shown = [...g.children].filter(e => e.getClientRects().length && getComputedStyle(e).display !== 'none');
+          const letter = shown.some(e => e.matches('.h-grade, .sc-lean') || /^Lean (Over|Under)$/.test(e.textContent.trim()));
+          return letter && !g.querySelector('.sc-stake');
+        }).map(tr => tr.dataset.record)""")
+        assert not bad, bad
+        assert p.locator("#hub-rows .h-scout-grade :visible", has_text="No grade yet").count() == 0
         # value inks only where the legend says: 60%+ green, under 40% red
         legend = p.locator("#sc-bd-legend")
         assert legend.is_visible() and "60%+" in legend.inner_text() and "under 40%" in legend.inner_text()
@@ -272,7 +284,7 @@ def test_v3_board_soccer_and_tennis(browser, env, monkeypatch, size, theme):
 
 
 def test_flag_off_board_carries_none_of_it(browser, env, monkeypatch):
-    monkeypatch.delenv("SCOUT_UI_V3", raising=False)
+    monkeypatch.setenv("SCOUT_UI_V3", "0")
     c = context(browser, env, PHONE)
     p = c.new_page()
     try:
@@ -339,6 +351,205 @@ def test_v3_board_row_opens_the_player_card(browser, env, monkeypatch, size):
         shot(p, f"card-dark-{size['width']}")
         if size is DESK:
             check_rows(p)
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+# ---------------------------------------------------------------- qa-boards (2026-11-20): regressions from the live-data pass
+TABLET = {"width": 768, "height": 1024}
+LONG_EVENT = "Extraordinarily Long Team Name Esports Club vs Another Remarkably Long Organisation"
+
+
+def open_patched(browser, env, monkeypatch, size, theme="dark", patch=None):
+    """The board with the hub's own CS2 board answer patched in flight (route.fetch + fulfill): a long matchup and a soccer-style
+    'Lean' grade on fixture rows, as live data has them."""
+    import json as _json
+    monkeypatch.setenv("SCOUT_UI_V3", "1")
+    for k in PROD_FLAGS:
+        monkeypatch.setenv(k, "1")
+    c = context(browser, env, size)
+
+    def handle(route):
+        resp = route.fetch()
+        try:
+            d = resp.json()
+            if patch:
+                patch(d)
+            route.fulfill(response=resp, body=_json.dumps(d), headers={**resp.headers, "content-type": "application/json"})
+        except Exception:
+            route.fulfill(response=resp)
+    c.route(re.compile(r".*/api/upgrade/board$"), handle)
+    c.add_init_script(f"try{{localStorage.setItem('scout-theme','{theme}')}}catch(e){{}}")
+    p = c.new_page()
+    p.errors = []
+    p.on("pageerror", lambda e: p.errors.append(str(e)))
+    p.goto(env.url + "/#all-sports")
+    p.wait_for_selector(ROW, timeout=30000)
+    p.wait_for_function("!!window.ScoutV3 && !!document.querySelector('#sc-bd-legend') && !document.querySelector('#hub-rows>tr[data-record]:not([data-sc=\"1\"])')", timeout=20000)
+    p.wait_for_timeout(300)
+    return c, p
+
+
+@pytest.mark.parametrize("size", [PHONE, TABLET], ids=["390", "768"])
+def test_qa_card_rows_give_the_market_the_room_and_hits_stay_whole(browser, env, monkeypatch, size):
+    c, p = open_board(browser, env, monkeypatch, "/#all-sports", size, "dark")
+    try:
+        # line 2: Scout's letter + stake take only the right-hand tracks; the market is not squeezed beside an empty 1fr track
+        areas = p.evaluate("getComputedStyle(document.querySelector('#hub-rows>tr[data-record]')).gridTemplateAreas")
+        assert '"ln mk pj pj pj gr gr gr"' in areas, areas
+        gaps = p.evaluate("""[...document.querySelectorAll('#hub-rows>tr[data-record]')].slice(0, 10).map(tr => {
+          const g = tr.querySelector('.h-scout-grade'), m = tr.querySelector('td.h-c-market .h-mcell>div');
+          return g && m && g.getClientRects().length ? Math.round(g.getBoundingClientRect().left - m.getBoundingClientRect().right) : 0; })""")
+        assert all(x >= 0 for x in gaps), gaps                                   # the market never runs under the letter
+        # a few-games hit ("16/18") is one token on the strip's baseline, its dashed mark no taller than the text line
+        d = p.evaluate("""() => { const h = document.querySelector('#hub-rows>tr[data-record] .h-strip .h-hit'); h.classList.add('h-few');
+          h.innerHTML = '<b>16</b><em>/18</em>'; const r = h.getBoundingClientRect(), s = getComputedStyle(h);
+          return [h.getClientRects().length, r.height, s.whiteSpace, s.display]; }""")
+        assert d[0] == 1 and d[1] <= 20 and d[2] == "nowrap" and d[3] == "flex", d
+        no_h_scroll(p)
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+def test_qa_desktop_line_cell_keeps_checked_min_ago_whole_and_by_game_drops_the_legend(browser, env, monkeypatch):
+    c, p = open_board(browser, env, monkeypatch, "/#all-sports", DESK, "light")
+    try:
+        assert p.evaluate("document.getElementById('u-hub').classList.contains('h-focus-board')")          # the rail starts closed
+        assert p.evaluate("document.querySelector('#hub-table th.h-c-line').getBoundingClientRect().width") >= 127
+        cut = p.evaluate("[...document.querySelectorAll('#hub-rows .sc-seen>*')].filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>e.textContent)")
+        assert not cut, cut
+        # the Compare button's per-side payouts wrap, never cut ("O 0.82x · U 1…" on live tennis)
+        cut = p.evaluate("""(() => { const s = document.querySelector('#hub-rows td.h-c-compare .h-compare small'); if (!s) return null;
+          s.textContent = 'O 0.82x · U 1.15x'; return s.scrollWidth > s.clientWidth + 1 ? s.textContent : ''; })()""")
+        assert not cut, cut
+        assert p.evaluate("[...document.querySelectorAll('#hub-rows .h-hit')].every(h=>h.getClientRects().length<=1 && getComputedStyle(h).whiteSpace==='nowrap')")
+        assert p.locator("#sc-bd-legend").is_visible()
+        p.locator("#hub-board-section [data-hub=view][data-id=games]").click()
+        p.wait_for_selector("#hub-games-body:not([hidden]) .h-game-card")
+        assert p.locator("#sc-bd-legend").is_hidden()                                 # it explains rows, not game cards
+        p.locator("#hub-board-section [data-hub=view][data-id=list]").click()
+        p.wait_for_selector(ROW)
+        assert p.locator("#sc-bd-legend").is_visible()
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("width", [1110, 1280])
+def test_qa_desktop_with_the_slip_rail_open_keeps_the_tighter_columns(browser, env, monkeypatch, width):
+    c, p = open_board(browser, env, monkeypatch, "/#all-sports", {"width": width, "height": 900}, "dark")
+    try:
+        p.locator(f"{ROW} .h-add:not(.h-add-info)").first.click()
+        p.wait_for_selector(f"{ROW} .h-add.is-on")
+        if p.evaluate("document.getElementById('u-hub').classList.contains('h-focus-board')"):
+            p.locator("#hub-focus").click()
+        p.wait_for_function("!document.getElementById('u-hub').classList.contains('h-focus-board')")
+        p.wait_for_function("!document.querySelector('#hub-rows>tr[data-record]:not([data-sc=\"1\"])')")
+        assert p.evaluate("document.querySelector('#hub-table th.h-c-line').getBoundingClientRect().width") <= 117
+        wrap = p.evaluate("(()=>{const w=document.querySelector('#hub-board-section .h-table-wrap'),t=document.getElementById('hub-table');return [t.getBoundingClientRect().width,w.clientWidth]})()")
+        assert wrap[0] <= wrap[1] + 1, wrap
+        assert p.evaluate("document.querySelector('#hub-rows>tr[data-record] td.h-c-player').getBoundingClientRect().width") >= 110
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_qa_browser_back_closes_the_player_card(browser, env, monkeypatch, size):
+    c, p = open_board(browser, env, monkeypatch, "/#all-sports", size, "dark")
+    try:
+        u0 = p.url
+        p.locator(f"{ROW} .h-player").first.click()
+        p.wait_for_selector("#hub-card:not([hidden])")
+        p.go_back()
+        p.wait_for_selector("#hub-card", state="hidden")
+        assert p.url == u0 and p.locator("#hub-board-section").is_visible()             # Back closed the card, the board stayed
+        # closed with the card's own Back: no dead history step is left behind
+        p.locator(f"{ROW} .h-player").first.click()
+        p.wait_for_selector("#hub-card:not([hidden])")
+        p.locator("#hub-card [data-hub=card-close]").first.click()
+        p.wait_for_selector("#hub-card", state="hidden")
+        p.wait_for_timeout(300)
+        assert p.evaluate("!(history.state && (history.state.scV3Card || history.state.hubCard))")
+        if size is DESK:
+            # a marker left behind (card up, then another page, then Back onto it; or a reload with the card up) is adopted: Back
+            # still closes the next card
+            p.locator(f"{ROW} .h-player").first.click()
+            p.wait_for_selector("#hub-card:not([hidden])")
+            p.locator(".sc-v3-bar .sc-nav [data-v3-nav=picks]").click()
+            p.wait_for_selector("#hub-picks-section:not([hidden])")
+            p.go_back()
+            p.wait_for_selector("#hub-board-section:not([hidden])")
+            p.wait_for_selector(ROW)
+            for step in ("after another page", "after a reload"):
+                if step == "after a reload":
+                    p.locator(f"{ROW} .h-player").first.click()
+                    p.wait_for_selector("#hub-card:not([hidden])")
+                    p.reload()
+                    p.wait_for_selector(ROW, timeout=30000)
+                    p.wait_for_function("!!window.ScoutV3")
+                    if p.locator("#hub-card:not([hidden])").count():
+                        p.locator("#hub-card [data-hub=card-close]").first.click()
+                        p.wait_for_selector("#hub-card", state="hidden")
+                p.locator(f"{ROW} .h-player").first.click()
+                p.wait_for_selector("#hub-card:not([hidden])")
+                p.go_back()
+                p.wait_for_selector("#hub-card", state="hidden", timeout=5000)
+                assert p.locator("#hub-board-section").is_visible(), step
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+def _long_and_lean(d):
+    recs = d.get("records") or []
+    ev = recs[0]["event"]["id"]
+    for r in recs:
+        if r["event"]["id"] == ev:
+            r["event"]["label"] = LONG_EVENT
+    for r in recs:
+        s = r.get("scout") or {}
+        if s.get("side") in ("over", "under") and s.get("grade") and not s.get("hold"):
+            s["grade"], s["units"] = "Lean", None
+            break
+
+
+@pytest.mark.parametrize("size", [PHONE, TABLET, DESK], ids=["390", "768", "1280"])
+def test_qa_long_matchup_header_and_lean_word(browser, env, monkeypatch, size):
+    c, p = open_patched(browser, env, monkeypatch, size, "light", _long_and_lean)
+    try:
+        # "Lean" alone is never shown: the side is spelled out, and no stake is invented for a line the model gives none
+        lean = p.evaluate("""[...document.querySelectorAll('#hub-rows .h-scout-grade .h-grade')].filter(e=>/lean/i.test(e.textContent)).map(e=>[e.textContent.trim(), !!e.closest('.h-scout-grade').querySelector('.sc-stake')])""")
+        assert lean and all(re.match(r"^Lean (Over|Under)$", t) and not st for t, st in lean), lean
+        if p.locator("#hub-sort option[value=start]").count():
+            p.locator("#hub-sort").select_option("start")
+            p.wait_for_function("!document.querySelector('#hub-rows>tr[data-record]:not([data-sc=\"1\"])')")
+        head = p.locator("#hub-table .h-game-head", has_text="Extraordinarily").first
+        assert head.count()
+        d = head.evaluate("""h => { const e = h.querySelector('em').getBoundingClientRect(), x = h.querySelector('b');
+          const t = document.createRange(); t.selectNodeContents(x);
+          const hits = [...t.getClientRects()].some(r => !(r.right <= e.left || e.right <= r.left || r.bottom <= e.top || e.bottom <= r.top));
+          return [hits, x.scrollHeight - x.clientHeight]; }""")
+        assert not d[0] and d[1] <= 1, d                                              # never under "This game", never cut
+        no_h_scroll(p)
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+def test_qa_phone_sort_row_keeps_list_by_game_beside_sort_with_a_filter_on(browser, env, monkeypatch):
+    c, p = open_board(browser, env, monkeypatch, "/#all-sports", PHONE, "dark")
+    try:
+        p.locator(".sc-v3-bar [data-v3=search]").click()
+        p.locator("#hub-q").fill(p.locator(f"{ROW} .h-player b").first.inner_text()[:4])
+        p.wait_for_selector("#hub-clear:not([hidden])")
+        p.wait_for_timeout(300)
+        tops = p.evaluate("['.h-sortbar', '.h-viewmode'].map(s=>Math.round(document.querySelector('#hub-board-section '+s).getBoundingClientRect().top))")
+        assert abs(tops[0] - tops[1]) <= 2, tops
+        assert p.evaluate("document.getElementById('hub-clear').getBoundingClientRect().top") > tops[0]
+        no_h_scroll(p)
         assert not p.errors, p.errors
     finally:
         c.close()

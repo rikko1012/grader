@@ -51,14 +51,17 @@ export function panels(X) {
     const stat = r.market.stat === 'hs' ? 'headshots' : 'kills';
     const tonight = env?.tonight, tw = lanWord(tonight);
     const fw3 = s.form_windows?.['3m'];
+    /* v3 HLTV only (the v3 player page rewrites the doc: hltvOnly, owner 2026-11-20): the doc carries no BO3.gg number; hv = his HLTV totals' rates */
+    const ho = !!c?.hltv_only, hv = ho ? c.hltv_v3 || {} : null;
+    const hl3 = t => `<small>HLTV, ${t}</small>`;
     /* every factor, with its weight in this grade (the classic card's "What this grade uses"); new factors at weight 0 */
     const rk = hc.ranking, ork = hc.opp_ranking;
     const rows = [
-      ['Kills per round, official maps', num(fw3?.kpr) ? `${n(fw3.kpr, 3)} <small>3 months · ${esc(fw3.maps)} maps</small>` : num(s.kpr) ? n(s.kpr, 3) : null, u('kpr')],
+      ['Kills per round, official maps', ho ? (num(hv.kpr3) ? `${n(hv.kpr3, 3)} ${hl3(`3 months · ${esc(hv.maps3)} maps${num(hv.kpr12) ? ` · 12 months ${n(hv.kpr12, 3)}` : ''}`)}` : null) : num(fw3?.kpr) ? `${n(fw3.kpr, 3)} <small>3 months · ${esc(fw3.maps)} maps</small>` : num(s.kpr) ? n(s.kpr, 3) : null, u('kpr')],
       ['Tonight’s setting', tw ? `${tw === 'LAN' ? 'LAN' : 'Online'}${env?.[tonight]?.kpr != null ? ` · his ${tw} KPR ${n(env[tonight].kpr, 2)} <small>(${esc(env[tonight].maps)} maps)</small>` : ''}` : null, u('environment')],
-      ['Maps in his sample', s.maps_played != null ? esc(s.maps_played) : null, u('sample')],
+      ['Maps in his sample', ho ? (num(hv.maps12) ? `${esc(hv.maps12)} ${hl3('12 months, every map')}` : null) : s.maps_played != null ? esc(s.maps_played) : null, u('sample')],
       ['Opponent', c?.match?.opponent ? esc(c.match.opponent) + (num(ork?.rank) ? ` <small>VRS #${esc(ork.rank)}</small>` : '') : null, u('opponent') ? 'Kills it gives up: used' : 0],
-      ...(r.market.stat === 'hs' ? [['Headshot rate', num(fw3?.hs_pct) ? n(fw3.hs_pct, 1) + '%' : null, u('hs_per_kill')]] : []),
+      ...(r.market.stat === 'hs' ? [['Headshot rate', ho ? (num(hv.hs3) ? `${n(hv.hs3, 1)}% ${hl3('3 months')}` : null) : num(fw3?.hs_pct) ? n(fw3.hs_pct, 1) + '%' : null, u('hs_per_kill')]] : []),
       ['Best of', c?.match?.bo ? 'BO' + esc(c.match.bo) : null, u('rounds') ? 'Expected rounds: used' : 0],
       ...(used.has('elo') ? [['Team strength', 'Elo ratings of both teams', true], ['Map length', 'Rounds each team’s maps usually last', true]] : []),
       ['Vs teams ranked like the opponent', rb && rb.maps ? `${sgn((rb.ratio - 1) * 100, 0)}% kills per round <small>(${esc(rb.maps)} maps vs #${Math.max(1, rb.opp_rank - (rb.band || 10))}–${rb.opp_rank + (rb.band || 10)})</small>` : null, 0],
@@ -67,12 +70,13 @@ export function panels(X) {
       ['Rank gap', num(rk?.rank) && num(ork?.rank) ? `${rk.rank < ork.rank ? 'His team is ranked' : rk.rank > ork.rank ? 'Opponent is ranked' : 'Same rank'}${rk.rank !== ork.rank ? ` ${Math.abs(rk.rank - ork.rank)} places higher` : ''}` : null, 0],
       ['CT · T rating', hl && num(hl.ct_rating) ? `${n(hl.ct_rating, 2)} · ${n(hl.t_rating, 2)}` : null, 0],
       ['Round Swing', hl && num(hl.round_swing) ? sgn(hl.round_swing, 2) + '%' : null, 0],
-      ['Recent kills per round', num(s.kpr_recent) ? `${n(s.kpr_recent, 3)}${num(s.trend_pct) ? ` <small>(${sgn(s.trend_pct, 0)}% vs his window)</small>` : ''}` : null, 0],
+      ['Recent kills per round', !ho && num(s.kpr_recent) ? `${n(s.kpr_recent, 3)}${num(s.trend_pct) ? ` <small>(${sgn(s.trend_pct, 0)}% vs his window)</small>` : ''}` : null, 0],
       ['Head-to-head, team vs opponent', hc.h2h ? `${esc(hc.h2h.wins)}–${esc(hc.h2h.losses)} in series <small>12 months</small>` : null, 0],
       ['Win chance, betting markets', num(c?.p_win) ? pct(c.p_win) : null, 0],
-      ['Opening kills', num(ck.opening?.kills_per_round) ? `${n(ck.opening.kills_per_round, 3)}/round · ${pc0(ck.opening.duel_win)} duels won` : null, 0],
-      ['Trade kills', num(ck.trade_pr) ? n(ck.trade_pr, 3) + '/round' : null, 0],
-      ['Days since his last map', num(ck.days_since_last_map) ? esc(ck.days_since_last_map) : null, num(ck.days_since_last_map) && ck.days_since_last_map >= 30 ? 'Stake rule: max 1U' : 0],
+      ['Opening kills', !ho && num(ck.opening?.kills_per_round) ? `${n(ck.opening.kills_per_round, 3)}/round · ${pc0(ck.opening.duel_win)} duels won` : null, 0],
+      ['Trade kills', !ho && num(ck.trade_pr) ? n(ck.trade_pr, 3) + '/round' : null, 0],
+      ho ? ['Days since his last map', num(hv.days) ? `${esc(hv.days)} ${hl3(`last map ${esc(hv.newest)}`)}` : ck.rest_rule ? '30 or more' : null, ck.rest_rule ? 'Stake rule: max 1U' : 0]
+        : ['Days since his last map', num(ck.days_since_last_map) ? esc(ck.days_since_last_map) : null, num(ck.days_since_last_map) && ck.days_since_last_map >= 30 ? 'Stake rule: max 1U' : 0],
     ];
     out.push(sec('cs2-factors', 'Every factor', factorTable(rows, show) + (show ? note('Used = it moves this projection. Weight 0 = shown for context: a factor moves grades only after a chronological test.') : ''), true));
     if (rb && rb.maps) out.push(sec('cs2-rank-band', 'Vs similar-ranked opponents', kv([
@@ -85,7 +89,7 @@ export function panels(X) {
       ['Online', env.online ? `${n(env.online.kpr, 2)} KPR <small>(${esc(env.online.maps)} maps)</small>` : null],
       ['Tonight', tw ? `<b>${tw === 'LAN' ? 'LAN' : 'Online'}</b>${env.event ? ` <small>${esc(env.event)}</small>` : ''}` : null],
       ['Tonight vs his average', num(env.ratio) ? `${sgn((env.ratio - 1) * 100, 0)}% kills per round` : null]]) + note('Last 12 months, every official map.'), true));
-    if (s && (s.rating != null || s.form_windows)) {
+    if (!ho && s && (s.rating != null || s.form_windows)) {
       const tiles = ['3m', '6m', '12m'].filter(k => s.form_windows?.[k]).map(k => [`${k} KPR · HS%`, `${n(s.form_windows[k].kpr, 3)} <small>${s.form_windows[k].hs_pct ?? '–'}% HS · ${esc(s.form_windows[k].maps)} maps</small>`]);
       const win = esc(String(s.window || '').replace('last_', 'last ').replace(/_/g, ' '));
       out.push(sec('cs2-stats', `Stats · Maps 1–2${s.env ? ` · ${lanWord(s.env)} maps` : ''} · BO3.gg`, kv([...tiles,

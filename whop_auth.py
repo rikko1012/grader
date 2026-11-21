@@ -58,6 +58,10 @@ PAID_RESOURCES = "exp_W6a3m1Ps4dxbCG"
 PAID_PLANS = {"plan_4zOzRl7roBDFf", "plan_8d2GVuU7671mD", "plan_fuM25oisxzQEH", "plan_0n9qau7Yt9G5r",
               "plan_G9ohvBxAxCheT", "plan_ZSpLGB3mTmagK"}          # Weekly .. Lifetime
 LIVE_STATUSES = {"active", "trialing", "canceling"}
+# owner 2026-11-20: "add free trial members to grader access" - the Plays product (prod_lrOIT837iGaIE) has 13 pricing
+# options (free trial, $25/month, hidden weekly, yearly, split-pay lifetime, comp ...) but only the six plans above were let in.
+# Any LIVE membership on the paid Plays product now counts, whatever its plan (WHOP_PAID_PRODUCT_IDS adds more products).
+PAID_PRODUCTS = {"prod_lrOIT837iGaIE"}
 LIFETIME_PLAN = "plan_ZSpLGB3mTmagK"                         # lifetime memberships show "completed"          # canceling = paid until the period ends
 MEMBERSHIPS = "https://api.whop.com/api/v1/memberships"
 NO_RECHECK_MIN = 1       # "no access" re-checked every minute: a new member gets in ~1 min after paying
@@ -185,6 +189,25 @@ def paid_plans():
     return PAID_PLANS | extra
 
 
+def paid_products():
+    extra = {p.strip() for p in _env("WHOP_PAID_PRODUCT_IDS").split(",") if p.strip()}
+    return PAID_PRODUCTS | extra
+
+
+def _row_product(m):
+    """The product a membership row belongs to (Whop gives product_id; some shapes nest it under product)."""
+    p = m.get("product_id") or m.get("product")
+    return p.get("id") if isinstance(p, dict) else p
+
+
+def _row_paid(m):
+    """A live membership on a paid plan, or any live membership on a paid product (free trials included), or a paid
+    one-time lifetime."""
+    if m.get("plan_id") == LIFETIME_PLAN and m.get("status") == "completed":
+        return True
+    return m.get("status") in LIVE_STATUSES and (m.get("plan_id") in paid_plans() or _row_product(m) in paid_products())
+
+
 def plan_access(user_id):
     """True if the user has a live membership on any paid plan (the owner's rule, plan by plan)."""
     for attempt in (1, 2):              # Whop's API answers an occasional 500 - one retry before giving up
@@ -197,9 +220,7 @@ def plan_access(user_id):
         raise RuntimeError(f"memberships HTTP {r.status_code}")
     # only THIS member's rows count (2026-10-10): if Whop ever ignored the user_id filter, another member's live
     # membership must never let someone in
-    return any(_row_user(m) == user_id and m.get("plan_id") in paid_plans() and (m.get("status") in LIVE_STATUSES or
-               (m.get("plan_id") == LIFETIME_PLAN and m.get("status") == "completed"))   # one-time payment
-               for m in r.json().get("data") or [])
+    return any(_row_user(m) == user_id and _row_paid(m) for m in r.json().get("data") or [])
 
 
 def _row_user(m):

@@ -5,8 +5,11 @@ What it checks:
 - every field the card shows today is still on screen (every Stats-tab panel, the decision strip, Lines, Ask, the star, the tabs,
   the past-series chart) with the v3 blocks added on top;
 - the v3 lead (match strip with VRS rank changes, stat grid, pick summary) mirrors the hub's own numbers and never changes them;
-- CS2 map cards + the 2-map combine: the pooled number, its signed gap and percentage are the shown maps' raw per-map results
-  (integers) pooled exactly (half-up at display), for every pair, and picking maps never changes the pick or the strip;
+- CS2 stats are HLTV only (owner 2026-11-20): the hero grid, the map cards and the combine read /api/upgrade/player-maps (HLTV per-map
+  raw totals, tests/hltv_maps_fixture.py); only current-pool maps get cards (display names, never 'de_', never cut at 390 px), each
+  with Kills/map, KPR, HS%, K/D; maps outside the pool sit in a closed group with no combine and no map chance; the pooled numbers
+  are the two maps' summed totals (Σkills/Σmaps exact half-up; KPR, HS%, K/D, rating from the sums) for every pair, and picking
+  maps never changes the pick or the strip; a failed HLTV read shows a retry, never "—";
 - the combined bar's three wordings (0, 1, 2 maps picked): never "Pick 2 maps to combine them" when 2 are picked;
 - NBA / NFL / LoL (incl. a card with no saved line history) get the lead without CS2-only blocks; no sideways scroll; no script errors.
 Flag off, the card carries none of it. V3_SHOTS=<folder> keeps a screenshot per sport, size and theme."""
@@ -19,6 +22,8 @@ from pathlib import Path
 import pytest
 
 import hltv
+import hltv_maps
+from tests import hltv_maps_fixture as HF
 from tests.test_upgrade_browser import browser, env, context, no_h_scroll  # noqa: F401
 from tests.test_card_factors_browser import seed, sections, WANT, FLAGS
 from tests.test_expansion_main_board import expansion  # noqa: F401
@@ -26,6 +31,8 @@ from tests.test_expansion_main_board import expansion  # noqa: F401
 PHONE, DESK = {"width": 390, "height": 844}, {"width": 1280, "height": 900}
 SHOTS = Path(os.environ.get("V3_SHOTS") or "")
 POOL = ["Anubis", "Dust2", "Ancient", "Mirage", "Inferno"]
+# HLTV only (owner 2026-11-20): the v3 card drops the BO3.gg stats panel, teammates' BO3.gg ratings, and the CS API / FACEIT panels
+V3_GONE = {"cs2-stats", "cs2-mates", "cs2-csapi", "cs2-faceit"}
 
 
 @pytest.fixture(autouse=True)
@@ -58,7 +65,19 @@ def setup(env, monkeypatch, theme, v3=True):
     monkeypatch.setattr(hltv, "recent_series", lambda *a, **k: maps_fixture())
     import mapchances
     monkeypatch.setattr(mapchances, "for_match", lambda mid: MAP_CHANCES)
+    hltv_fixture(monkeypatch)
     seed(env, monkeypatch)
+
+
+def hltv_fixture(monkeypatch, loader=None):
+    """the card's HLTV per-map totals from tests/hltv_maps_fixture.py (fresh caches; the pool = hltv_maps.ACTIVE_DUTY)"""
+    monkeypatch.setattr(hltv, "_CACHE", {})
+    monkeypatch.setattr(hltv, "_META", {})
+    import hltv_store
+    monkeypatch.setattr(hltv_store, "save", lambda *a, **k: None)
+    monkeypatch.setattr(hltv_store, "load", lambda *a, **k: None)
+    monkeypatch.setattr(hltv_maps, "LOADER", loader or HF.loader)
+    monkeypatch.setattr(hltv_maps, "pool_for", lambda mid: (list(hltv_maps.ACTIVE_DUTY), "constant"))
 
 
 def page(browser, env, size, theme):
@@ -154,32 +173,97 @@ def check_card(p, sport, size, theme):
         assert vis(p, "#hub-card-body [data-hub-chart]")
     assert p.locator("#hub-detail > .v3p-lead").count() == 1
     assert vis(p, "#hub-detail .v3p-match")
+    # header: the avatar centred on the name block; one absolute time on the card, with its zone
+    box = p.evaluate("""(() => { const h = document.querySelector('#hub-detail .h-card-head'), a = h.querySelector(':scope > .u-face, :scope > .v3p-avatar'),
+      n = h.querySelector(':scope > .h-card-id'); if (!a) return null; const ra = a.getBoundingClientRect(), rn = n.getBoundingClientRect();
+      return [ra.top + ra.height / 2, rn.top + rn.height / 2, rn.height]; })()""")
+    if box:
+        assert abs(box[0] - box[1]) <= max(6, box[2] / 4), box
+    # the hub's head line (time, countdown pill) is kept for screen readers only; on screen the time sits once, in the meta row
+    assert p.evaluate("[...document.querySelectorAll('#hub-detail .h-card-head .h-countdown')].every(e => { const r = e.getBoundingClientRect(); return r.width <= 1 || r.height <= 1 || !e.checkVisibility || !e.checkVisibility() || e.closest('p').getBoundingClientRect().width <= 1; })")
+    who = p.locator("#hub-detail .h-card-head .v3p-who")
+    if who.count():
+        assert who.inner_text().strip()
+    meta = p.locator("#hub-detail .v3p-meta").inner_text()
+    import re as _re
+    assert _re.search(r"\d:\d\d\s?(AM|PM)?\s?[A-Z]{2,5}|GMT|UTC", meta), meta
+    # the line panel: the big line, the book's freshness, Projection and Gap to line, L5 / L10 / L20 on the side shown
+    line = p.locator("#hub-card-line option:checked").inner_text()
+    assert p.locator("#hub-decision .v3p-lh b").inner_text() in line
+    assert " checked " in p.locator("#hub-decision .v3p-lmeta").inner_text()
+    facts = p.locator("#hub-decision .v3p-facts").inner_text()
+    assert "Projection" in facts and "Gap to line" in facts, facts
+    hits = p.locator("#hub-decision .v3p-hits").inner_text()
+    assert "L5, " in hits and "L10, " in hits and "L20, " in hits, hits
     # the pick summary mirrors the strip (never recomputed)
     if p.locator("#hub-detail .v3p-pick").count():
         assert p.locator(".v3p-pick .sc-pick__chance b").inner_text() == p.locator("#hub-decision .h-dec-chance > b").inner_text()
-        side = p.locator("#hub-decision .h-side-toggle [aria-pressed=true]").inner_text().strip()
-        assert p.locator(".v3p-pick .sc-pick__side b").inner_text().startswith(side)
+        side = p.locator("#hub-decision .h-side-toggle [aria-pressed=true]").get_attribute("data-id").capitalize()
+        if p.locator(".v3p-pick .sc-scout-tag").count() or p.locator(".v3p-pick .sc-pick__chance b").inner_text() != "—":   # no Scout read: the prop leads
+            assert p.locator(".v3p-pick .sc-pick__side b").inner_text().startswith(side)
+        # polish2 (mocks 05 / 10): the side buttons carry the line, the strip has Chance / Grade / Stake and a Market chance cell
+        line = p.locator("#hub-decision .v3p-lh b").inner_text()
+        assert p.locator("#hub-decision .h-side-toggle [aria-pressed=true]").inner_text().startswith(side + " " + line)
+        cgs = p.locator("#hub-decision .h-dec-chance").inner_text()
+        assert "Chance " + side in cgs and "Grade" in cgs and "Stake" in cgs, cgs
+        assert "Market chance" in facts, facts
         assert "Model estimate" in p.locator(".v3p-pick").inner_text()
         assert " checked " in p.locator(".v3p-pick .sc-book").inner_text()
+    # source notes readable in both themes: 4.5:1 or better against the surface they sit on
+    low = p.evaluate(r"""[...document.querySelectorAll('#hub-detail .sc-src, #hub-detail .sc-statgrid__legend')].map(e => {
+      const rgb = s => s.match(/[\d.]+/g).slice(0, 3).map(Number), lum = c => { const v = c.map(x => { x /= 255; return x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4); });
+        return .2126 * v[0] + .7152 * v[1] + .0722 * v[2]; };
+      let b = e, bg; while (b && ((bg = getComputedStyle(b).backgroundColor) === 'rgba(0, 0, 0, 0)' || bg.startsWith('rgba') && bg.endsWith(', 0)'))) b = b.parentElement;
+      if (!b) return null; const a = lum(rgb(getComputedStyle(e).color)), z = lum(rgb(bg)), r = (Math.max(a, z) + .05) / (Math.min(a, z) + .05);
+      return r < 4.5 ? [e.className, r] : null; }).filter(Boolean)""")
+    if theme == "light":
+        assert not low, low
     if sport == "cs2":
         m = p.locator("#hub-detail .v3p-match").inner_text()
         assert "VRS #14" in m and "▲3" in m and "VRS #21" in m and "▼2" in m      # rank changes restored
-        assert p.locator("#hub-detail .v3p-map").count() >= 2
-        assert "Kills/map" in p.locator(".v3p-grid").inner_text()
+        p.wait_for_selector("#hub-detail .v3p-grid[data-v3p-src=hltv]", timeout=15000)
+        p.wait_for_selector("#hub-detail .v3p-map", timeout=15000)
+        assert p.locator("#hub-detail .v3p-map").count() == len(hltv_maps.ACTIVE_DUTY)
+        g = p.locator(".v3p-grid").inner_text()
+        for w in ("Maps", "Kills/map", "K/D", "Rating", "HS%", "HS/map", "KPR", "Deaths/round"):
+            assert w in g, (w, g)
+        check_map_cards(p)
     else:
         assert p.locator("#hub-detail .v3p-map").count() == 0
-    assert vis(p, "#hub-detail > .v3p-dock")
-    card_shots(p, name)
+    if size is PHONE:
+        # phone: the combined bar waits until the card's own Add has scrolled away, so it never sits over the pick summary
+        assert not vis(p, "#hub-detail > .v3p-dock")
+        card_shots(p, name)
+        p.evaluate("(() => { const d = document.getElementById('hub-detail'), a = document.querySelector('#hub-decision'); d.scrollTop = a.offsetTop + a.offsetHeight + 40; })()")
+        p.wait_for_timeout(300)
+        gone = p.evaluate("(() => { const a = document.querySelector('#hub-decision [data-hub=detail-add]') || document.querySelector('#hub-decision'); return a.getBoundingClientRect().bottom < 60; })()")
+        if gone:                                   # Add scrolled away above: the bar is there; a short card that cannot scroll that far keeps Add in view
+            p.wait_for_function("document.documentElement.classList.contains('v3p-dock-on')", timeout=5000)
+            assert vis(p, "#hub-detail > .v3p-dock")
+            shot(p, name + "-dock")
+        p.evaluate("document.getElementById('hub-detail').scrollTop = 0")
+    else:
+        assert vis(p, "#hub-detail > .v3p-dock")
+        card_shots(p, name)
     tab(p, "stats")
-    want = WANT[sport][1]
+    want = [x for x in WANT[sport][1] if x not in V3_GONE]
     try:
         p.wait_for_function(f"(w => w.every(x => document.querySelector('#hub-card-body .h-fx[data-fx=\"' + x + '\"]')))({want!r})", timeout=10000)
     except Exception:
         pass
     got = sections(p)
     for fx in WANT[sport][1]:
+        if fx in V3_GONE:                           # HLTV only (owner 2026-11-20): BO3.gg / non-HLTV panels are not on the v3 card
+            assert fx not in got or not p.locator(f'#hub-card-body .h-fx[data-fx="{fx}"]').is_visible(), (fx, got)
+            continue
         assert fx in got, (fx, got)
+        if fx == "cs2-maps" and not p.locator(f'#hub-card-body .h-fx[data-fx="{fx}"] .h-fx-lab').count():
+            assert not p.locator(f'#hub-card-body .h-fx[data-fx="{fx}"]').is_visible(), fx   # BO3.gg table only: hidden
+            continue
         assert p.locator(f'#hub-card-body .h-fx[data-fx="{fx}"]').is_visible(), fx
+    if sport == "cs2":
+        p.evaluate("document.querySelectorAll('#hub-card-body details.h-fx').forEach(d => d.open = true)")
+        assert "BO3.gg" not in p.locator("#hub-card-body").inner_text()
     assert p.locator("#hub-detail > .v3p-lead").count() == 1                   # survived the repaint, once
     p.evaluate("(() => { const t = document.querySelector('#hub-detail > .h-card-tabs'); document.getElementById('hub-detail').scrollTop = t.offsetTop; })()")
     shot(p, name + "-stats")
@@ -192,6 +276,48 @@ def check_card(p, sport, size, theme):
     tab(p, "overview")
     no_hedge(p)
     no_h_scroll(p)
+
+
+def js_fixed(x, dp):
+    """Number.prototype.toFixed on the double nearest x (exact binary value, ties up)."""
+    return str(Decimal(float(x)).quantize(Decimal(1).scaleb(-dp), rounding=ROUND_HALF_UP))
+
+
+CARDS_JS = """[...document.querySelectorAll('#hub-detail .v3p-map')].map(b => ({k: b.dataset.v3pMap, name: b.querySelector('.v3p-mapname').textContent,
+  cut: (n => n.scrollWidth > n.clientWidth + 1 || n.getBoundingClientRect().right > b.getBoundingClientRect().right + 1)(b.querySelector('.v3p-mapname')),
+  stats: [...b.querySelectorAll('.sc-scene__stat')].map(s => [s.querySelector('span').textContent, s.querySelector('b').textContent]), disabled: b.disabled}))"""
+
+
+def check_map_cards(p):
+    """pool maps only, display names in full, the four stats on every map with HLTV maps, "—" only where HLTV has none"""
+    per = HF.per_map(365)
+    cards = p.evaluate(CARDS_JS)
+    assert sorted(c["k"] for c in cards) == sorted(hltv_maps.ACTIVE_DUTY)
+    for c in cards:
+        assert c["name"] == hltv_maps.display(c["k"]) and "de_" not in c["name"] and not c["cut"], c
+        assert [s[0] for s in c["stats"]] == ["Kills/map", "KPR", "HS%", "K/D"], c
+        t = per.get(c["k"])
+        if not t:
+            assert all(s[1] == "—" for s in c["stats"]) and c["disabled"], c
+            continue
+        want = [js_fixed(F(t["kills"], t["maps"]), 1), js_fixed(F(t["kills"], t["rounds"]), 2),
+                js_fixed(F(100 * t["hs"], t["hs_kills"]), 1) + "%", js_fixed(F(t["kills"], t["deaths"]), 2)]
+        assert [s[1] for s in c["stats"]] == want, (c, want)
+    # outside the pool: a closed group, no combine button, no map chance
+    out = p.locator("#hub-detail details.v3p-outpool")
+    assert out.count() == 1 and not out.evaluate("d => d.open")
+    txt = out.evaluate("d => d.textContent")
+    assert "Outside the current pool" in txt and "Overpass" in txt and "Train" in txt
+    assert out.locator("[data-v3p-map]").count() == 0 and "chance" not in txt.lower()
+    # nothing in the map section runs past the card, also with both closed groups open (the wide table scrolls in its own box)
+    p.evaluate("document.querySelectorAll('#hub-detail .v3p-maps details').forEach(d => d.open = true)")
+    over = p.evaluate("""(() => { const box = document.getElementById('hub-detail').getBoundingClientRect();
+      return [...document.querySelectorAll('#hub-detail .v3p-maps-list > *, #hub-detail .v3p-maps .sc-src, #hub-detail .v3p-tablewrap')]
+        .filter(e => e.getBoundingClientRect().right > box.right + 1).map(e => e.className); })()""")
+    p.evaluate("document.querySelectorAll('#hub-detail .v3p-maps details').forEach(d => d.open = false)")
+    assert not over, over
+    assert "BO3" not in p.locator("#hub-detail .v3p-maps").evaluate("d => d.textContent")
+    assert "BO3" not in p.locator("#hub-detail .v3p-grid").evaluate("d => d.textContent")
 
 
 @pytest.mark.parametrize("theme", ["dark", "light"])
@@ -233,18 +359,15 @@ def test_v3_two_map_combine_pools_exactly_and_never_moves_the_pick(browser, env,
     try:
         open_card(p, "cs2", "vargo")
         p.wait_for_selector("#hub-detail .v3p-map")
-        tot = {}                                   # the per-map raw results the page pools (all 20 fixture series have both maps)
-        for m in maps_fixture():
-            k = m["map"].lower()
-            s_, n_ = tot.get(k, (0, 0))
-            tot[k] = (s_ + m["kills"], n_ + 1)
+        per = HF.per_map(365)                      # the HLTV per-map raw totals the page pools
         pace = F(77, 2) / 2                        # line 38.5 over Maps 1-2
         fixed = p.locator("#hub-decision").inner_text() + "|" + p.locator(".v3p-pick").inner_text()
         # default: the two likeliest maps are picked, and the bar never asks for 2 maps when 2 are picked
         assert len(pressed(p)) == 2
         assert "Pick 2 maps to combine them" not in combo_text(p)
         assert "Pick 2" not in p.locator("#hub-detail .v3p-maps-head .sc-muted").inner_text()                  # the Maps heading follows the picks too
-        cards = p.evaluate("[...document.querySelectorAll('#hub-detail .v3p-map')].map(b => b.dataset.v3pMap)")
+        cards = p.evaluate("[...document.querySelectorAll('#hub-detail .v3p-map:not([disabled])')].map(b => b.dataset.v3pMap)")
+        assert sorted(cards) == sorted(k for k in per if k in hltv_maps.ACTIVE_DUTY)
         n = 0
         for a, b in itertools.combinations(cards, 2):
             p.locator("#hub-detail [data-v3p=clear]").click()
@@ -255,7 +378,8 @@ def test_v3_two_map_combine_pools_exactly_and_never_moves_the_pick(browser, env,
             assert "pick 1 more map to combine" in combo_text(p)
             assert p.locator("#hub-detail .v3p-maps-head .sc-muted").inner_text() == "1 of 2 picked"
             p.locator(f'#hub-detail .v3p-map[data-v3p-map="{b}"]').click()
-            v = F(tot[a][0] + tot[b][0], tot[a][1] + tot[b][1])
+            A, B = per[a], per[b]
+            v = F(A["kills"] + B["kills"], A["maps"] + B["maps"])
             d = v - pace
             big = p.locator("#hub-detail [data-v3p-big]").inner_text()
             lead = p.locator("#hub-detail [data-v3p-lead]").inner_text()
@@ -264,6 +388,13 @@ def test_v3_two_map_combine_pools_exactly_and_never_moves_the_pick(browser, env,
             t = combo_text(p)
             assert "Pick 2 maps to combine them" not in t and rd(v, 2) in t and sg(d, 2) in t
             assert "Pick 2" not in p.locator("#hub-detail .v3p-maps-head .sc-muted").inner_text() and p.locator("#hub-detail .v3p-maps-head .sc-muted").inner_text().startswith("2 maps combined")
+            st = p.locator("#hub-detail [data-v3p-pooled-stats]").evaluate("e => [...e.querySelectorAll('b')].map(b => b.textContent)")
+            assert st == [js_fixed(v, 1), js_fixed(F(A["kills"] + B["kills"], A["rounds"] + B["rounds"]), 2),
+                          js_fixed(F(100 * (A["hs"] + B["hs"]), A["hs_kills"] + B["hs_kills"]), 1) + "%",
+                          js_fixed(F(A["kills"] + B["kills"], A["deaths"] + B["deaths"]), 2),
+                          js_fixed((A["rx"] + B["rx"]) / (A["rr"] + B["rr"]), 2)], (a, b, st)
+            hook = p.evaluate(f"ScoutV3.player.pooled([{a!r}, {b!r}])")
+            assert hook["value"]["text"] == rd(v, 2) and hook["totals"]["kills"] == A["kills"] + B["kills"]
             assert p.locator(f'#hub-detail .v3p-map[data-v3p-map="{a}"] .sc-badge').inner_text() == "1"
             assert p.locator(f'#hub-detail .v3p-map[data-v3p-map="{b}"] .sc-badge').inner_text() == "2"
             assert p.locator("#hub-decision").inner_text() + "|" + p.locator(".v3p-pick").inner_text() == fixed
@@ -282,6 +413,96 @@ def test_v3_two_map_combine_pools_exactly_and_never_moves_the_pick(browser, env,
         tab(p, "overview")
         assert pressed(p) == cards[1:3]
         assert p.locator("#hub-detail > .v3p-maps").count() == 1
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_v3_one_confirmed_map_is_always_in_the_default_combine(browser, env, monkeypatch, size):
+    """Map 1 confirmed (Mirage, Halcyon pick) and Map 2 still open: the default combine is Mirage + the likeliest Map 2 by Scout's
+    simulated veto (Inferno 41%), never two other maps. Each card says how likely it is to be played in Maps 1-2 (Mirage 100%)."""
+    setup(env, monkeypatch, "dark")
+    c, p = page(browser, env, size, "dark")
+    try:
+        open_card(p, "cs2", "vargo")
+        p.wait_for_selector("#hub-detail .v3p-map")
+        assert pressed(p) == ["mirage", "inferno"], pressed(p)
+        t = combo_text(p)
+        assert t.startswith("Mirage + Inferno: "), t
+        assert "In Maps 1-2 100.0%" in p.locator('#hub-detail .v3p-map[data-v3p-map="mirage"]').inner_text().replace("\n", " ")
+        assert "In Maps 1-2 41.0%" in p.locator('#hub-detail .v3p-map[data-v3p-map="inferno"]').inner_text().replace("\n", " ")
+        # polish2: one measure on every card. Anubis has no exact veto share for Map 2: In Maps 1-2 —, never HLTV's map chance beside it
+        an = p.locator('#hub-detail .v3p-map[data-v3p-map="anubis"]').inner_text().replace("\n", " ")
+        assert "In Maps 1-2 —" in an and "Map chance" not in an, an
+        assert p.locator("#hub-detail .v3p-map .v3p-inp").count() == p.locator("#hub-detail .v3p-map").count()
+        # the Overview's Likely maps line leads with the same measure, one decimal (never "62%")
+        ov = p.locator("#hub-card-body").inner_text()
+        assert "Likely in Maps 1-2 (Scout’s simulated veto): Mirage 100.0% · Inferno 41.0%" in ov, ov[:600]
+        assert "Dust2 62.0%" in ov and "Dust2 62%" not in ov
+        slot = p.locator('#hub-detail .v3p-map[data-v3p-map="mirage"] .v3p-slot')
+        assert slot.inner_text() == "Map 1 · Halcyon pick"
+        assert p.evaluate("(e => e.getClientRects().length)(document.querySelector('#hub-detail .v3p-map[data-v3p-map=\"mirage\"] .v3p-slot'))") == 1
+        # "—" only where HLTV has no maps of his (Nuke, Cache in the fixture): every map with maps shows all four numbers
+        for k in HF.per_map(365):
+            if k in hltv_maps.ACTIVE_DUTY:
+                assert "—" not in p.locator(f'#hub-detail .v3p-map[data-v3p-map="{k}"] .sc-scene__stats').inner_text(), k
+        # polish2 (mock 04): the same 2 x 2 on every card, — where a map has no figure
+        for b in p.locator("#hub-detail .v3p-map .sc-scene__stats").all():
+            assert b.locator(".sc-scene__stat").count() == 4
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE], ids=["390"])
+def test_v3_confirmed_map_with_no_saved_result_is_named_not_left_out(browser, env, monkeypatch, size):
+    """Map 1 confirmed on a pool map HLTV has no maps of his on (Nuke): no default combine (it would leave that map out), and the card says so."""
+    setup(env, monkeypatch, "dark")
+    import veto_serve
+    from tests.card_factors_fixture import VETO
+    monkeypatch.setattr(veto_serve, "for_match", lambda mid: dict(VETO, confirmed=[{"slot": "Map 1", "name": "Nuke", "by": "Halcyon"}]))
+    c, p = page(browser, env, size, "dark")
+    try:
+        open_card(p, "cs2", "vargo")
+        p.wait_for_selector("#hub-detail .v3p-map")
+        assert pressed(p) == []
+        assert "Nuke is confirmed for Maps 1-2" in p.locator("#hub-detail .v3p-miss").inner_text()
+        assert "no HLTV maps" in p.locator("#hub-detail .v3p-miss").inner_text()
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_v3_hltv_read_failure_shows_a_retry_never_dashes(browser, env, monkeypatch, size):
+    """HLTV down and no good answer anywhere: the grid and the maps show a retry (never "—", which means HLTV has no data); the retry
+    loads the numbers once HLTV answers; the pick and the strip never move."""
+    setup(env, monkeypatch, "dark")
+    state = {"down": True}
+
+    def flaky(nick, team, since):
+        if state["down"]:
+            raise TimeoutError("timed out")
+        return HF.loader(nick, team, since)
+    hltv_fixture(monkeypatch, flaky)
+    c, p = page(browser, env, size, "dark")
+    try:
+        open_card(p, "cs2", "vargo")
+        p.wait_for_selector("#hub-detail .v3p-grid [data-v3p-hm=error]", timeout=15000)
+        assert "—" not in p.locator("#hub-detail .v3p-grid").inner_text()
+        assert p.locator("#hub-detail .v3p-map").count() == 0
+        fixed = p.locator("#hub-decision .h-dec-chance").inner_text()
+        state["down"] = False
+        hltv._CACHE.clear()
+        import server as _s
+        for k in [k for k in list(_s._RESULTS) if "ws_pmaps" in str(k)]:
+            _s._RESULTS.pop(k, None)
+        p.locator("#hub-detail .v3p-grid [data-v3p=hm-retry]").click()
+        p.wait_for_selector("#hub-detail .v3p-grid[data-v3p-src=hltv]", timeout=15000)
+        check_map_cards(p)
+        assert p.locator("#hub-decision .h-dec-chance").inner_text() == fixed
+        no_h_scroll(p)
         assert not p.errors, p.errors
     finally:
         c.close()

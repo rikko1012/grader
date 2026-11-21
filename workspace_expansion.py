@@ -9,6 +9,7 @@ import math
 import time
 from datetime import datetime, timezone
 
+import expansion_leagues
 import workspace_sports as remote
 
 SPORTS = ('soccer', 'tennis')
@@ -104,7 +105,8 @@ def _record(o, research, forecast=None):
     record = {'sport': o['sport'], 'key': '|'.join([identity['event_id'], identity['player_id'], o['stat'], period, str(o['line'])]),
         'event': {'id': identity['event_id'], 'id_kind': 'canonical', 'label': o['match'],
                   'teams': [v for v in (o.get('team'), o.get('opponent')) if v],
-                  'competition': identity['competition'], 'best_of': research.get('context', {}).get('best_of'),
+                  'competition': identity['competition'], 'competition_label': expansion_leagues.label(identity['competition']),
+                  'best_of': research.get('context', {}).get('best_of'),
                   'start_utc': o['start'], 'lock_utc': o['start'], 'status': 'scheduled'},
         'player': {'id': identity['player_id'], 'key': identity['player_id'], 'name': o['player'],
                    'team': o.get('team') or '', 'opponent': o.get('opponent') or '', 'role': research.get('role') or o.get('role') or ''},
@@ -176,7 +178,9 @@ def _build(srv, sport):
                      # when results were last stored, not when research.json was rebuilt (2026-11-18)
                      'history_at': doc.get('results_at') if 'results_at' in doc else doc.get('research_at')},
         'platforms': {k: {'label': v, 'kind': 'pickem'} for k, v in remote.LABEL.items()}}, separators=(',', ':')).encode()
-    _SNAP[sport] = {'body': body, 'index': index, 'props': props, 'at': now}
+    # v3 card pictures (img_index.py): the sports service's per-player PrizePicks picture map, kept beside the board (never in it)
+    images = doc.get('images') if isinstance(doc.get('images'), dict) else {}
+    _SNAP[sport] = {'body': body, 'index': index, 'props': props, 'at': now, 'images': images}
     return 200, body
 
 

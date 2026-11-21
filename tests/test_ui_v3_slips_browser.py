@@ -41,9 +41,14 @@ def test_v3_slip_studio_my_slip_auto_build_and_tracked(browser, env, monkeypatch
         p.wait_for_selector('#hub-studio-section .sb-band .h-studio-intro #hub-studio-sync')
         band = p.locator('#hub-studio-section .sb-band')
         assert band.locator('.sc-lit__title').inner_text() == 'Slips'
+        assert [t.strip() for t in p.locator('.h-studio-tabs [role=tab]').all_inner_texts()][1:] == ['Auto-build', 'Tracked']
+        # with nothing on the slip, Slips opens on the studio (approved mock 08); My slip's own empty state is one tap away
+        p.wait_for_selector('[role=tab][data-hub=studio-tab][data-id=build][aria-selected=true]')
+        shot(p, f"slips-lead-build-{w}-{theme}")
+        p.locator('[role=tab][data-hub=studio-tab][data-id=slip]').click()
+        p.wait_for_selector('#hub-studio-body .h-empty h3')
         assert band.locator('[data-hub=section][data-id=board]').is_visible()
         assert 'Add player props' in band.locator('[data-hub=section][data-id=board]').inner_text()
-        assert [t.strip() for t in p.locator('.h-studio-tabs [role=tab]').all_inner_texts()][1:] == ['Auto-build', 'Tracked']
         assert p.locator('#hub-studio-body .h-empty h3').inner_text() == 'Your slip is empty'
         assert p.locator('.sb-aside .h-studio-explain h3').inner_text() == 'Before you track'
         no_h_scroll(p)
@@ -91,9 +96,13 @@ def test_v3_slip_studio_my_slip_auto_build_and_tracked(browser, env, monkeypatch
             src = leg.locator('.u-leg-meta .sb-src').text_content()                             # today's read text, kept for readers
             assert re.match(r"^(?:[A-F][+-]? |Lean )(?:Over|Under) \d+\.\d%$", src), src
             read = leg.locator('.sb-read')
-            assert read.locator('b').inner_text() == src.split()[-1]
-            assert read.locator('small').inner_text() == 'Model estimate'
+            assert read.locator(':scope > b').inner_text() == src.split()[-1]
+            assert read.locator(':scope > small:not(.sb-stake)').inner_text() == 'Model estimate'
             assert read.locator('.sc-grade').inner_text() in src
+            assert re.match(r"^Stake \d+(\.\d+)?U$", read.locator('.sb-stake').inner_text()), read.inner_text()   # one stake per line
+            # the period stays one token: "Maps 1-2" never breaks after its hyphen
+            per = leg.locator('.u-leg-pick .sb-per')
+            assert per.count() == 1 and p.evaluate("e => e.getClientRects().length", per.element_handle()) == 1
             assert leg.locator('.sb-av, .sb-face').count() == 1
         for sel in ('.u-status', '.u-det[data-det=checks]', '.u-entry-h .u-seg', '.u-entry-foot', '[data-u=track]', '[data-u=copy]', '[data-u=clear]', '[data-u=check]'):
             assert p.locator(f'#hub-studio-body {sel}').count() >= 1, sel
@@ -127,8 +136,14 @@ def test_v3_slip_studio_my_slip_auto_build_and_tracked(browser, env, monkeypatch
 def test_v3_desktop_slip_column_reads_like_the_board_row(browser, env, monkeypatch, theme):
     c, p = v3_page(browser, env, monkeypatch, "board", DESK, theme)
     try:
-        p.wait_for_selector('#u-hub .h-slip #hub-slip-content')
+        # polish2 (mocks 11 / B): no slip rail while the slip is empty, and no Hide slip button in the sort row
+        p.wait_for_selector('#hub-rows tr[data-record]')
+        p.wait_for_function("document.getElementById('u-hub').classList.contains('h-focus-board')")
+        assert not p.locator('#u-hub .h-slip').is_visible() and not p.locator('#hub-focus').is_visible()
+        # with a pick on a 1440+ screen the rail opens by itself
+        p.set_viewport_size({"width": 1440, "height": 900})
         p.locator("#hub-rows tr[data-record] .h-add:not(.h-add-info)").first.click()
+        p.wait_for_selector('#u-hub .h-slip #hub-slip-content')
         p.wait_for_selector('#hub-slip-content .u-leg .sb-read', timeout=20000)
         leg = p.locator('#hub-slip-content .u-leg').first
         assert leg.locator('.u-leg-meta .sb-src').count() == 1 and leg.locator('.u-x').count() == 1
@@ -137,7 +152,7 @@ def test_v3_desktop_slip_column_reads_like_the_board_row(browser, env, monkeypat
         bg = p.evaluate("getComputedStyle(document.querySelector('#u-hub .h-slip')).backgroundColor")
         assert bg == ('rgb(246, 247, 249)' if theme == 'light' else 'rgb(8, 11, 19)')
         no_h_scroll(p)
-        shot(p, f"slips-column-1280-{theme}")
+        shot(p, f"slips-column-1440-{theme}")
         assert not p.errors, p.errors
     finally:
         c.close()
@@ -165,6 +180,8 @@ def test_v3_book_dialog_and_lineup_image_action(browser, env, monkeypatch, theme
     monkeypatch.setattr(server, 'PP_OPEN_LINK', True)
     c, p = v3_page(browser, env, monkeypatch, "slips", DESK, theme)
     try:
+        p.wait_for_selector('[role=tab][data-hub=studio-tab][data-id=build][aria-selected=true]')   # an empty slip opens on Auto-build
+        p.locator('[role=tab][data-hub=studio-tab][data-id=slip]').click()
         p.wait_for_selector('.sb-band [data-hub=share-card] svg')                            # the hub's own button, in the band
         assert 'Download lineup image' in p.locator('.sb-band [data-hub=share-card]').inner_text()
         p.goto(env.url + '/#/board')
@@ -204,7 +221,7 @@ def test_v3_slips_between_1024_and_1100(browser, env, monkeypatch):
 
 
 def test_flag_off_the_slip_studio_is_untouched(browser, env, monkeypatch):
-    monkeypatch.delenv("SCOUT_UI_V3", raising=False)
+    monkeypatch.setenv("SCOUT_UI_V3", "0")
     c = context(browser, env, PHONE)
     try:
         p = c.new_page()
@@ -212,5 +229,111 @@ def test_flag_off_the_slip_studio_is_untouched(browser, env, monkeypatch):
         p.wait_for_selector('#hub-studio-section:not([hidden])')
         assert p.evaluate("!window.ScoutV3") and p.locator('.sb-band, .sb-panel, .sb-seg, .sb-aside').count() == 0
         assert p.locator('[data-studio-panel=slip] > .h-studio-intro').count() == 1
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_v3_empty_slip_leads_with_auto_build_but_never_hides_picks(browser, env, monkeypatch, size):
+    """polish1: an empty slip opens Slips on Auto-build. That switch is undone as soon as the slip holds picks: a pick added from the
+    board brings My slip back on the next visit, and a reload straight onto /#/slips with a saved slip shows My slip."""
+    c, p = v3_page(browser, env, monkeypatch, "slips", size, "dark")
+    try:
+        p.wait_for_selector('[role=tab][data-hub=studio-tab][data-id=build][aria-selected=true]')
+        p.goto(env.url + '/#/board')
+        p.wait_for_selector('#hub-rows tr[data-record] .h-add:not([disabled]):not(.h-add-info)')
+        p.locator('#hub-rows tr[data-record] .h-add:not([disabled]):not(.h-add-info)').first.click()
+        if p.locator('#hub-card').is_visible():
+            p.locator('#hub-detail [data-hub=detail-add]:not([disabled])').click()
+        p.wait_for_function("document.getElementById('hub-studio-tab-n').textContent.trim() !== '0'")
+        p.evaluate("location.hash='/slips'")
+        p.wait_for_selector('#hub-studio-section:not([hidden])')
+        p.wait_for_selector('[role=tab][data-hub=studio-tab][data-id=slip][aria-selected=true]', timeout=10000)
+        p.reload()
+        p.wait_for_selector('#hub-studio-section:not([hidden])', timeout=30000)
+        p.wait_for_function("document.getElementById('hub-studio-tab-n').textContent.trim() !== '0'", timeout=20000)
+        p.wait_for_timeout(500)
+        assert p.locator('[role=tab][data-hub=studio-tab][data-id=slip]').get_attribute('aria-selected') == 'true'
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+# ------------------------------------------------------------------------------------------------ qa 11-20 (bug hunt on live data)
+def test_v3_studio_arrives_on_auto_build_without_a_focus_ring(browser, env, monkeypatch):
+    """The empty-slip switch to Auto-build presses the hub's tab, and the hub focuses the tab it selects: the tab showed its focus
+    outline on arrival, as if the member had tabbed to it."""
+    c, p = v3_page(browser, env, monkeypatch, "slips", DESK, "dark")
+    try:
+        p.wait_for_selector('[role=tab][data-hub=studio-tab][data-id=build][aria-selected=true]')
+        p.wait_for_timeout(300)
+        assert p.evaluate("document.activeElement && document.activeElement.matches('[data-hub=studio-tab]')") is False
+        assert p.evaluate("getComputedStyle(document.querySelector('[data-hub=studio-tab][data-id=build]')).outlineStyle") == "none"
+        build_and_open(p, env)
+        badges = p.evaluate("[...document.querySelectorAll('#hub-generated .h-generated-card>header>span')].map(s => Math.round(s.getBoundingClientRect().height))")
+        assert badges and len(set(badges)) == 1                                       # SLIP over its number on every card alike
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_v3_lean_leg_reads_model_estimate_not_no_grade(browser, env, monkeypatch, size):
+    """A sports line with Scout's side and no letter reads Lean Under / Stake 0U on the board; its slip leg kept the hub's raw
+    'No grade: No grade yet' under the chance (a status label). It reads 'Model estimate', as every other leg does."""
+    c, p = v3_page(browser, env, monkeypatch, "board", size, "light")
+    try:
+        row = p.locator('#hub-rows tr[data-record]', has_text="Karl Anders").first
+        row.wait_for(timeout=30000)
+        assert "Lean Under" in row.inner_text()
+        row.locator('.h-add:not(.h-add-info)').click()
+        if p.locator('#hub-detail [data-hub=detail-add]:not([disabled])').is_visible():
+            p.locator('#hub-detail [data-hub=detail-add]:not([disabled])').click()
+        p.goto(env.url + '/#/slips')
+        p.wait_for_selector('#hub-studio-section:not([hidden])')
+        p.locator('[role=tab][data-hub=studio-tab][data-id=slip]').click()
+        leg = p.locator('#hub-studio-body .u-leg', has_text="Karl Anders").first
+        leg.locator('.sb-read .sc-grade--lean').wait_for(timeout=20000)
+        read = leg.locator('.sb-read').inner_text()
+        assert "Lean Under" in read and "Model estimate" in read and "No grade" not in read, read
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("width", [1280, 1440])
+def test_v3_slip_column_leg_stays_inside_the_column(browser, env, monkeypatch, width):
+    """A column leg with the hub's swap advice: its read (chance, label, grade, stake) sat under the advice in one line and the stake
+    ran past the column's right edge. The read follows the pick and wraps; the advice spans the leg."""
+    c, p = v3_page(browser, env, monkeypatch, "board", {"width": width, "height": 900}, "dark")
+    try:
+        p.wait_for_selector('#hub-rows tr[data-record]')
+        p.locator('#hub-rows tr[data-record]', has_text="brandr").first.locator('.h-add:not(.h-add-info)').click()
+        if not p.locator('#u-hub .h-slip').is_visible():
+            p.locator('#hub-focus').click()
+        p.wait_for_selector('#hub-slip-content .u-leg .sb-read .sb-stake', timeout=20000)
+        p.wait_for_selector('#hub-slip-content .u-leg .u-leg-advice', timeout=20000)
+        out = p.evaluate("""() => { const col = document.querySelector('#u-hub .h-slip').getBoundingClientRect();
+          return [...document.querySelectorAll('#hub-slip-content *')].filter(e => e.offsetParent && e.getBoundingClientRect().right > col.right + 1).map(e => e.className) }""")
+        assert not out, out
+        read, advice = p.evaluate("""() => { const l = document.querySelector('#hub-slip-content .u-leg');
+          return [l.querySelector('.sb-read').getBoundingClientRect().top, l.querySelector('.u-leg-advice').getBoundingClientRect().top] }""")
+        assert read < advice                                                           # the read follows the pick, above the advice
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+def test_v3_phone_generate_brings_the_batch_into_view(browser, env, monkeypatch):
+    """Phone: the generated slips sit about 1,800px under the Auto-build form and only the bar's subtitle changed, so a tap on
+    Generate looked like nothing happened. A fresh batch now scrolls its header into view under the 56px app bar."""
+    c, p = v3_page(browser, env, monkeypatch, "slips", PHONE, "dark")
+    try:
+        p.wait_for_selector('[role=tab][data-hub=studio-tab][data-id=build][aria-selected=true]')
+        p.locator('#hub-generate').click()
+        p.wait_for_selector('#hub-generated .h-generated-card', timeout=30000)
+        p.wait_for_function("(() => { const t = document.querySelector('#hub-generated .h-batch-head').getBoundingClientRect().top; return t >= 56 && t < innerHeight / 2 })()",
+                            timeout=5000)
+        assert not p.errors, p.errors
     finally:
         c.close()

@@ -80,3 +80,28 @@ def test_cookie_tampering_is_refused(monkeypatch):
     raw, mac = c.rsplit(".", 1)
     assert w.session(raw + "." + ("0" * len(mac))) is None and w.session("garbage") is None
     assert w.session(w._sign({"u": "user_x", "exp": now - 1, "chk": now, "ok": True})) is None     # expired session
+
+
+def test_free_trial_and_every_plays_plan_get_access_1120(monkeypatch):
+    """Owner 2026-11-20: free-trial members (and every other pricing option on the Plays product) get the grader."""
+    import whop_auth as wa
+    rows = lambda *ms: [dict(user_id="u1", **m) for m in ms]
+    ok = wa._row_paid
+    assert ok(dict(plan_id="plan_trial_1day", product_id="prod_lrOIT837iGaIE", status="trialing"))
+    assert ok(dict(plan_id="plan_25_month", product_id="prod_lrOIT837iGaIE", status="active"))
+    assert ok(dict(plan_id="plan_x", product={"id": "prod_lrOIT837iGaIE"}, status="canceling"))
+    assert not ok(dict(plan_id="plan_trial_1day", product_id="prod_lrOIT837iGaIE", status="expired"))
+    assert not ok(dict(plan_id="plan_free", product_id="prod_FREEACCESS", status="active"))      # the free product never
+    assert ok(dict(plan_id=wa.LIFETIME_PLAN, product_id="prod_lrOIT837iGaIE", status="completed"))
+    assert ok(dict(plan_id="plan_8d2GVuU7671mD", status="active"))                               # listed plan, no product field
+    monkeypatch.setenv("WHOP_PAID_PRODUCT_IDS", "prod_extra")
+    assert ok(dict(plan_id="p", product_id="prod_extra", status="active"))
+
+    class R:
+        status_code = 200
+        def __init__(self, d): self._d = d
+        def json(self): return {"data": self._d}
+    monkeypatch.setattr(wa.requests, "get", lambda *a, **k: R(rows(dict(plan_id="plan_trial", product_id="prod_lrOIT837iGaIE", status="trialing"))))
+    assert wa.plan_access("u1") is True
+    monkeypatch.setattr(wa.requests, "get", lambda *a, **k: R([dict(user_id="someone_else", plan_id="plan_trial", product_id="prod_lrOIT837iGaIE", status="trialing")]))
+    assert wa.plan_access("u1") is False                                                         # only this member's rows

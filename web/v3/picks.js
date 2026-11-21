@@ -68,7 +68,9 @@
     [].forEach.call(sel.options, function (o) {
       var n = counts ? (o.value === 'all' ? counts.all : counts[o.value]) : null;
       if (counts && o.value !== 'all' && !n && sel.value !== o.value) return;     /* a sport with no receipts gets no pill */
-      html += '<button type="button" class="v3c-pill" data-v="' + esc(o.value) + '" aria-pressed="' + (sel.value === o.value) + '">' + esc(o.textContent) +
+      /* the outcome words match the record above (approved mock 09: Hit / Miss throughout); the hub's select keeps its own */
+      var word = sel.id === 'hub-pick-status' ? ({hit: 'Hit', miss: 'Miss'}[o.value] || o.textContent) : o.textContent;
+      html += '<button type="button" class="v3c-pill" data-v="' + esc(o.value) + '" aria-pressed="' + (sel.value === o.value) + '">' + esc(word) +
         (num(n) ? ' <span class="v3c-pill-n">' + n + '</span>' : '') + '</button>';
     });
     if (box.innerHTML !== html) box.innerHTML = html;
@@ -97,6 +99,17 @@
     }, function () { /* the last good doc stays (transient-failure rule); no tiles without one */ }).then(function () { mineBusy = null; });
     return mineBusy;
   }
+  /* the hit rate against the chance you saw (approved mock 09): the average saved displayed_p of the decided picks. Shown only when
+     every decided pick in the record is on the receipts read with its saved chance, so both numbers describe the same picks. */
+  function sawHtml(rec) {
+    if (!mine || !num(rec.hit_rate) || !num(rec.decided) || !rec.decided) return '';
+    var dec = mine.receipts.filter(function (r) { return r && (r.status === 'hit' || r.status === 'miss'); });
+    if (dec.length !== rec.decided || !dec.every(function (r) { return num(r.displayed_p); })) return '';
+    var saw = dec.reduce(function (a, r) { return a + r.displayed_p; }, 0) / dec.length;
+    var d = Math.round((rec.hit_rate - saw) * 1000) / 10, z = d === 0;
+    var cls = z ? '' : d > 0 ? ' sc-v-good' : ' sc-v-poor';
+    return '<small class="v3c-vsaw"><b class="sc-num' + cls + '">' + (z ? '' : d > 0 ? '+' : MINUS) + Math.abs(d).toFixed(1) + ' pts</b> vs ' + pct(saw) + ' you saw</small>';
+  }
   function scoreHtml(rec) {
     var hit = rec.hit, miss = rec.miss, push = rec.push, vd = rec.void, pend = rec.pending;
     if (![hit, miss, push, vd, pend].every(num)) return '';
@@ -109,7 +122,7 @@
       ticks = seg(hit, 'h', 'Hit') + seg(miss, 'm', 'Miss') + seg(push + vd, 'v', 'Push or void') + seg(pend, 'p', 'Pending');
     }
     return '<div class="v3c-score" aria-label="Your record">' +
-      '<div class="v3c-tile is-hero"><b class="sc-num">' + pct(rec.hit_rate) + '</b><span>Hit rate, ' + (num(rec.decided) ? rec.decided : '\u2014') + ' decided</span></div>' +
+      '<div class="v3c-tile is-hero"><b class="sc-num">' + pct(rec.hit_rate) + '</b><span>Hit rate, ' + (num(rec.decided) ? rec.decided : '\u2014') + ' decided</span>' + sawHtml(rec) + '</div>' +
       '<div class="v3c-tile"><b class="sc-num">' + hit + '<em>' + EN + '</em>' + miss + '<em>' + EN + '</em>' + push + '</b><span>Hit, miss, push</span></div>' +
       '<div class="v3c-tile"><b class="sc-num">' + vd + '</b><span>Void</span></div>' +
       '<div class="v3c-tile"><b class="sc-num">' + pend + '</b><span>Pending</span></div></div>' +
@@ -171,6 +184,19 @@
     if (head) pills($('hub-record-sport'), head, null);
     [].forEach.call(body.querySelectorAll('.h-record-card'), function (card) {
       var cells = card.querySelectorAll('.h-score > div');
+      /* one W-L format on every record page: "36–24", "Wins–losses" (the public record's own wording) */
+      if (cells.length && !cells[0].dataset.v3w) {
+        cells[0].dataset.v3w = '1';
+        var em = cells[0].querySelector('b > em');
+        if (em && em.textContent.trim() === '/') em.textContent = EN;
+        /* thousands as the public record writes them ("1,379–1,240"): the same counts, one format on both record pages */
+        var wl = cells[0].querySelector('b');
+        if (wl) [].forEach.call(wl.childNodes, function (n) {
+          if (n.nodeType === 3 && /^\s*\d{4,}\s*$/.test(n.nodeValue)) n.nodeValue = n.nodeValue.replace(/\d{4,}/, function (d) { return d.replace(/\B(?=(\d{3})+$)/g, ','); });
+        });
+        var lab = cells[0].querySelector('span');
+        if (lab && lab.firstChild && lab.firstChild.nodeType === 3) lab.firstChild.nodeValue = lab.firstChild.nodeValue.replace(/^Wins \/ losses/, 'Wins' + EN + 'losses');
+      }
       if (cells.length >= 3 && !cells[1].querySelector('.v3c-delta')) {
         var obs = pctOf(cells[1].querySelector('b') && cells[1].querySelector('b').textContent),
           pr = pctOf(cells[2].querySelector('b') && cells[2].querySelector('b').textContent);
@@ -209,6 +235,23 @@
   }
 
   /* ---------------------------------------------------------------- wiring */
+  /* polish2: EV "To hit" gets the mock's dot scale (C/ev-390): a 0-100% track, a dot at the books' chance, a tick at what the entry
+     needs (the row's own "needs N%"). Display only, from the two numbers printed beside it; aria-hidden (the numbers stay the text) */
+  function decorateEv() {
+    var sec = $('hub-ev-section');
+    if (!sec) return;
+    sec.querySelectorAll('.ev-row .ev-hit').forEach(function (c) {
+      var b = c.querySelector('b'), p = b ? parseFloat(b.textContent) : NaN;
+      var row = c.closest('.ev-row'), nd = row && /needs\s+([\d.]+)%/.exec(row.textContent), need = nd ? parseFloat(nd[1]) : NaN;
+      var key = p + '|' + need, sc = c.querySelector('.v3-hitscale');
+      if (!isFinite(p)) { if (sc) sc.remove(); return; }
+      if (sc && sc.getAttribute('data-k') === key) return;
+      if (!sc) { sc = document.createElement('span'); sc.className = 'v3-hitscale'; sc.setAttribute('aria-hidden', 'true'); c.appendChild(sc); }
+      sc.setAttribute('data-k', key);
+      sc.innerHTML = '<i style="left:' + Math.max(0, Math.min(100, p)) + '%"' + (isFinite(need) && p >= need ? ' class="ok"' : '') + '></i>'
+        + (isFinite(need) ? '<b style="left:' + Math.max(0, Math.min(100, need)) + '%"></b>' : '');
+    });
+  }
   function watch(el, fn, opts) {
     if (!el || el._v3c) return;
     el._v3c = 1;
@@ -224,5 +267,6 @@
     watch($('hub-picks-body'), decoratePicks);
     watch($('hub-picks-section'), decoratePicks, {attributes: true, attributeFilter: ['hidden'], subtree: true});
     watch($('hub-record-body'), decorateRecord);
+    watch($('hub-ev-section'), decorateEv, {childList: true, subtree: true});
   });
 })();

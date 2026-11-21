@@ -373,3 +373,122 @@ html[data-ui-v3] footer.foot a:hover{color:var(--sc-text);background:color-mix(i
   html[data-ui-v3] .trust b.word{font-size:16px}
 }
 @media (max-width:380px){html[data-ui-v3] .hc-pick::before{display:none}html[data-ui-v3] .hc .ring b{font-size:28px}}
+/* ---- polish1 (2026-11-20) ---- */
+/* the hero shows only the live v3 pick card (real board rows): the two screenshots of the previous design (board window, phone
+   card) advertised a UI that no longer matches the product, so under v3 they are not drawn */
+html[data-ui-v3] .stage .board-shot,html[data-ui-v3] .stage .card-shot{display:none!important}
+html[data-ui-v3] .stage{display:grid;place-items:center;padding:0!important;min-height:0}
+html[data-ui-v3] .stage .hc{position:relative!important;left:auto!important;right:auto!important;bottom:auto!important;top:auto!important;width:min(440px,100%)!important;max-width:100%!important;margin:0 auto}
+/* reviews follow the product, never sit between the headline and its sentence: headline, sentence, buttons, sign-in, numbers,
+   then the review ticker; on the phone the card comes right after the buttons, before the numbers and reviews */
+html[data-ui-v3] .hero-copy{display:flex;flex-direction:column}
+html[data-ui-v3] .hero-copy>.hero-k{order:1}
+html[data-ui-v3] .hero-copy>#hero-title{order:2}
+html[data-ui-v3] .hero-copy>.lede{order:3}
+html[data-ui-v3] .hero-copy>.ctas{order:4}
+html[data-ui-v3] .hero-copy>.member{order:5}
+html[data-ui-v3] .hero-copy>#signin-error{order:6}
+html[data-ui-v3] .hero-copy>.trust{order:7}
+html[data-ui-v3] .hero-copy>#rvq{order:8;margin-top:24px}
+@media (max-width:1024px){
+  html[data-ui-v3] .hero-in{display:flex!important;flex-direction:column;align-items:stretch;gap:0!important}
+  html[data-ui-v3] .hero-in>.hero-copy>*{margin-top:0;margin-bottom:0}
+  html[data-ui-v3] .hero-in>.hero-copy>#hero-title{margin:12px 0 14px}
+  html[data-ui-v3] .hero-in>.hero-copy>.lede{margin-bottom:20px}
+  html[data-ui-v3] .hero-in>.hero-copy>.member{margin-top:12px}
+  html[data-ui-v3] .hero-in>.hero-copy>.trust{margin-top:24px}
+  html[data-ui-v3] .hero-copy{display:contents}
+  html[data-ui-v3] .hero-in>.stage{order:6;margin:24px 0 0}
+  html[data-ui-v3] .hero-copy>.trust{order:7}
+  html[data-ui-v3] .hero-copy>#rvq{order:8}
+}
+/* ---- polish2 (2026-11-20): the approved hero (design_1119/v3/D, owner shots 01 / 02 / 13). landing.js builds it from a dated capture
+   (Lucky's player page + the CS2 board, Nov 19 16:20 UTC) and adds html.v3-hero; without the script the page keeps the polish1 hero.
+   Desktop: copy | player-page crop | phone at Map stats. Phone: headline, crop, sentence, buttons, sign-in, On the board now. The
+   previous example card, numbers row and review ticker move to .v3-more right below the hero (same nodes, same script). */
+html.v3-hero[data-ui-v3] .hero-k{display:none}
+html.v3-hero[data-ui-v3] .hero-in{display:grid!important;grid-template-columns:minmax(0,410px) minmax(0,1fr);column-gap:40px;align-items:start;padding-top:64px;padding-bottom:72px}
+html.v3-hero[data-ui-v3] .hero-copy{display:block}
+html.v3-hero[data-ui-v3] .hero h1{margin:0}
+@media (min-width:1025px){html.v3-hero[data-ui-v3] .hero h1{font-size:68px;line-height:.98}html.v3-hero[data-ui-v3] .hero h1>span:first-child{white-space:normal}}
+html.v3-hero[data-ui-v3] .hero .lede{margin:22px 0 0;max-width:34em}
+html.v3-hero[data-ui-v3] .hero .ctas{margin-top:28px}
+html.v3-hero[data-ui-v3] .hero .member{margin-top:16px}
+html.v3-hero[data-ui-v3] .stage{display:flex!important;align-items:flex-start;justify-content:space-between;gap:24px;place-items:initial;min-width:0;padding:0!important}
+html.v3-hero[data-ui-v3] .stage>.v3-crop{flex:0 1 370px;margin:64px 0 0;min-width:0}
+html.v3-hero[data-ui-v3] .stage>.v3-phone{flex:none}
+/* the crop: the player page's id, 3-month tiles and pick card */
+html[data-ui-v3] .v3-crop{margin:0;position:relative;z-index:2}
+html[data-ui-v3] .v3-crop__in{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;padding:14px;border-radius:var(--sc-r-xl);
+  background:color-mix(in srgb,var(--sc-s1) 78%,transparent);box-shadow:var(--sc-ring),0 30px 70px -28px rgba(0,0,0,.7);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+html[data-ui-v3] .v3-crop__id{display:flex;align-items:center;gap:12px}
+html[data-ui-v3] .v3-crop__id .sc-avatar{--d:44px}
+html[data-ui-v3] .v3-crop__id>div{flex:1;min-width:0}
+html[data-ui-v3] .v3-crop__id b{display:block;font:600 20px/1.15 var(--sc-font);letter-spacing:-.02em;color:var(--sc-text)}
+html[data-ui-v3] .v3-crop__id small{display:block;color:var(--sc-muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-ui-v3] .v3-crop .sc-stat{height:38px}
+html[data-ui-v3] .v3-crop .sc-statgrid__legend{margin-top:-2px}
+html[data-ui-v3] .v3-crop .sc-pick{padding:14px 16px;background:var(--sc-s2);box-shadow:var(--sc-ring)}
+html[data-ui-v3] .v3-crop .sc-pick__chance b{font-size:36px}
+html[data-ui-v3] .v3-crop .sc-pick__foot{flex-wrap:wrap;row-gap:6px}
+html[data-ui-v3] .v3-l10{display:flex;align-items:center;gap:10px;white-space:nowrap;color:var(--sc-muted)}
+html[data-ui-v3] .v3-l10 b{color:var(--sc-text);font-weight:600}
+html[data-ui-v3] .v3-cap{margin:10px 0 0;color:var(--sc-faint);font-size:12px;text-align:left}
+/* On the board now: one real row + Lucky's pooled map pair */
+html[data-ui-v3] .v3-strip{margin:36px 0 0;padding:14px 0 0;border-top:1px solid var(--sc-hair)}
+html[data-ui-v3] .v3-strip__h{margin:0 0 8px;color:var(--sc-faint);font:500 12px/1 var(--sc-font);letter-spacing:.07em;text-transform:uppercase}
+html[data-ui-v3] .v3-strip__row{padding:10px 12px;border:0;border-radius:var(--sc-r-lg);background:color-mix(in srgb,var(--sc-s1) 80%,transparent);box-shadow:var(--sc-ring)}
+html[data-ui-v3] .v3-strip__pool{margin-top:8px;padding:12px 14px 2px;border-radius:var(--sc-r-lg);background:color-mix(in srgb,var(--sc-s1) 80%,transparent);box-shadow:var(--sc-ring)}
+html[data-ui-v3] .v3-strip__ph{display:flex;align-items:baseline;justify-content:space-between;gap:12px;color:var(--sc-muted);font-size:13px}
+html[data-ui-v3] .v3-strip__ph .sc-val{font-size:20px}
+html[data-ui-v3] .v3-strip__pool .sc-pace{margin:10px 0 24px}
+html[data-ui-v3] .v3-strip__src{margin:8px 0 0;color:var(--sc-faint);font-size:12px}
+/* the phone: the player page at 390 css px scaled into the frame, scrolled to Map stats, the combined bar docked */
+html[data-ui-v3] .v3-phone{margin:0;width:304px}
+html[data-ui-v3] .v3-phone__screen{position:relative;width:304px;height:556px;overflow:hidden;border-radius:40px;background:var(--sc-bg);
+  box-shadow:0 0 0 1px rgba(200,215,255,.14),0 0 0 9px #05070C,0 0 0 10px rgba(200,215,255,.10),0 50px 90px -30px rgba(0,0,0,.9)}
+html[data-ui-v3] .v3-phone__ui{position:absolute;left:0;top:0;width:390px;height:713px;transform:scale(.7795);transform-origin:0 0}
+html[data-ui-v3] .v3-ph__bar{display:flex;align-items:center;gap:6px;height:60px;padding:8px 16px 0;box-shadow:0 1px 0 var(--sc-hair)}
+html[data-ui-v3] .v3-ph__grow{flex:1}
+html[data-ui-v3] .v3-ph__brand{display:inline-flex;align-items:center;gap:9px;color:var(--sc-text);font:600 19px/1 var(--sc-font);letter-spacing:-.01em}
+html[data-ui-v3] .v3-ph__brand>span{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#fff;color:#080B13;font:600 14px/1 var(--sc-font)}
+html[data-ui-v3] .v3-ph__ic{display:grid;place-items:center;width:40px;height:40px;color:var(--sc-muted)}
+html[data-ui-v3] .v3-ph__ic svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+html[data-ui-v3] .v3-ph__body{display:grid;gap:8px;padding:14px 16px 0}
+html[data-ui-v3] .v3-ph__head b{display:block;font:600 22px/1.2 var(--sc-font);letter-spacing:-.02em;color:var(--sc-text)}
+html[data-ui-v3] .v3-ph__head small{display:block;margin-top:4px;color:var(--sc-faint);font-size:12.5px}
+html[data-ui-v3] .v3-ph__h{margin:8px 0 0;font:600 16px/1.2 var(--sc-font);color:var(--sc-text)}
+html[data-ui-v3] .v3-ph__sort{display:flex;align-items:center;gap:10px;margin:4px 0;color:var(--sc-muted);font-size:13px}
+html[data-ui-v3] .v3-ph__sort .sc-pill{min-height:30px;font-size:13px}
+html[data-ui-v3] .v3-phone__ui .sc-dock{position:absolute;top:auto;bottom:0;left:0;right:0}
+html[data-ui-v3] .v3-phone__ui .sc-scene{--lane:24%;grid-template-columns:92px auto 1fr;min-height:78px;padding:9px 12px}
+html[data-ui-v3] .v3-phone__ui .sc-scene__art{margin:-9px -12px -9px 0}
+html[data-ui-v3] .v3-phone__ui .sc-scene__stats{grid-template-columns:auto auto;column-gap:12px}
+html[data-ui-v3] .v3-phone__ui .sc-scene__stat b{font-size:17px;line-height:20px}
+html[data-ui-v3] .v3-phone__ui .sc-scene__id>small:last-child b{display:block;font-size:15px;line-height:18px}
+:root[data-ui-v3][data-theme="light"] .v3-crop__in,:root[data-ui-v3][data-theme="light"] .v3-strip__row,:root[data-ui-v3][data-theme="light"] .v3-strip__pool{background:#fff;box-shadow:var(--sc-ring),var(--sc-drop)}
+:root[data-ui-v3][data-theme="light"] .v3-crop .sc-pick{background:#F7F8FB}
+:root[data-ui-v3][data-theme="light"] .v3-phone__screen{box-shadow:0 0 0 1px rgba(16,24,48,.10),0 0 0 9px #0E1320,0 0 0 10px rgba(16,24,48,.2),0 16px 32px -16px rgba(16,24,48,.3)}
+@media (prefers-color-scheme:light){
+  :root[data-ui-v3]:not([data-theme]) .v3-crop__in,:root[data-ui-v3]:not([data-theme]) .v3-strip__row,:root[data-ui-v3]:not([data-theme]) .v3-strip__pool{background:#fff;box-shadow:var(--sc-ring),var(--sc-drop)}
+  :root[data-ui-v3]:not([data-theme]) .v3-crop .sc-pick{background:#F7F8FB}}
+/* below the hero: the previous example card (real board rows, NFL / NBA / CS2 / League), the numbers row and the review ticker */
+html[data-ui-v3] .v3-more{padding:8px 0 40px;overflow:hidden}
+html[data-ui-v3] .v3-more__in{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);gap:40px;align-items:center}
+html[data-ui-v3] .v3-more .trust{margin-top:0}
+html[data-ui-v3] .v3-more #rvq{margin-top:24px}
+html[data-ui-v3] .v3-more .hc{position:relative!important;left:auto!important;top:auto!important;width:100%!important;max-width:440px!important;margin:0}
+@media (max-width:1240px){html.v3-hero[data-ui-v3] .stage>.v3-phone{display:none}html.v3-hero[data-ui-v3] .stage>.v3-crop{flex-basis:400px}}
+@media (max-width:1024px){
+  html.v3-hero[data-ui-v3] .hero-in{display:block!important;padding-top:28px;padding-bottom:40px}
+  html.v3-hero[data-ui-v3] .hero-copy{display:flex!important;flex-direction:column}
+  html.v3-hero[data-ui-v3] .hero-copy>*{order:0!important}
+  html.v3-hero[data-ui-v3] .hero-copy>.v3-crop{margin:28px 0 0}
+  html.v3-hero[data-ui-v3] .hero .lede{margin-top:16px}
+  html.v3-hero[data-ui-v3] .stage{display:none!important}
+  html[data-ui-v3] .v3-strip{margin-top:28px}
+  html[data-ui-v3] .v3-more__in{grid-template-columns:minmax(0,1fr);gap:28px}
+  html[data-ui-v3] .v3-more .hc{max-width:none!important}
+  html[data-ui-v3] .v3-more__r{order:-1}
+}
+@media (max-width:560px){html.v3-hero[data-ui-v3] .hero .ctas>.btn{flex:1 1 100%}}

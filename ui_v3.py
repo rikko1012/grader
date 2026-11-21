@@ -3,7 +3,7 @@
 Display only: nothing here reads grades, APIs or member data. server.py asks two questions per request and, when the answer is no,
 sends exactly what it sent before (same bytes, same cache key, same unknown-route answer):
 
-  ui_v3_default()          SCOUT_UI_V3=1 (read per request, so a Render env change applies without a deploy): v3 for everyone.
+  ui_v3_default()          v3 for everyone unless SCOUT_UI_V3=0 (read per request, so a Render env change applies without a deploy).
   preview_ok(cookie)       the owner's preview cookie (set by /preview/v3 for the owner only; an HMAC of ADMIN_TOKEN, HttpOnly),
                            so a member can neither forge nor copy-paste a value that turns it on. No ADMIN_TOKEN = no preview.
 
@@ -25,8 +25,8 @@ PREVIEW = "/preview/v3"                      # owner only: ?off=1 clears; /previ
 
 # Bundles: served at /v3/<name>. Order matters (tokens, then components, then the shell, then the page groups).
 BUNDLES = {
-    "member.css": ("tokens.css", "components.css", "shell.css", "board.css", "slips.css", "picks.css", "player.css", "account.css"),
-    "member.js": ("shell.js", "board.js", "slips.js", "picks.js", "player.js", "account.js"),
+    "member.css": ("tokens.css", "components.css", "shell.css", "board.css", "slips.css", "picks.css", "player.css", "account.css", "views.css", "faces.css"),
+    "member.js": ("shell.js", "board.js", "slips.js", "picks.js", "player.js", "account.js", "views.js", "faces.js"),
     "record.css": ("tokens.css", "components.css", "shell.css", "record.css"),
     "record.js": ("shell.js", "record.js"),
     "landing.css": ("tokens.css", "components.css", "shell.css", "landing.css"),
@@ -48,7 +48,9 @@ _PAGE = {}                                   # (id(body), name) -> (body, out)
 
 
 def ui_v3_default():
-    return os.environ.get("SCOUT_UI_V3", "").strip().lower() in ("1", "true", "on", "yes")
+    # ON for everyone since Nov 20 2026 (owner: v3 live). SCOUT_UI_V3=0 (Render env, read per request, no deploy) restores
+    # today's classic pages for everyone at once.
+    return os.environ.get("SCOUT_UI_V3", "1").strip().lower() not in ("0", "false", "off", "no")
 
 
 def preview_value(admin_token):
@@ -111,19 +113,34 @@ def head(name):
             b'<link rel="stylesheet" href="/v3/' + stem.encode() + b'.css">'), sport, stem
 
 
+def sports_on():
+    """The sports the signed-out pages name (landing copy, its sport count): the four always on, plus soccer / tennis when their
+    expansion switch is on (the same SCOUT_<SPORT>_ENABLED the sports service reads). Display only."""
+    out = ["cs2", "lol", "nba", "nfl"]
+    for sp in ("soccer", "tennis"):
+        if os.environ.get(f"SCOUT_{sp.upper()}_ENABLED") == "1":
+            out.append(sp)
+    return " ".join(out)
+
+
 def page(body, name):
-    """The v3 copy of a page's bytes (already upgraded or not). Memoised per body OBJECT, as upgrade_page is."""
-    hit = _PAGE.get((id(body), name))
+    """The v3 copy of a page's bytes (already upgraded or not). Memoised per body OBJECT, as upgrade_page is (and per sport list on
+    the landing page, two env reads)."""
+    sp = sports_on() if name == "landing" else ""
+    key = (id(body), name, sp)
+    hit = _PAGE.get(key)
     if hit is not None and hit[0] is body:
         return hit[1]
     with _LOCK:
-        hit = _PAGE.get((id(body), name))
+        hit = _PAGE.get(key)
         if hit is not None and hit[0] is body:
             return hit[1]
         out = _build(body, name)
+        if sp:                               # the landing's sport list, on the <html> mark _build added
+            out = out.replace(b'<html data-ui-v3="1"', b'<html data-v3-sports="' + sp.encode() + b'" data-ui-v3="1"', 1)
         if len(_PAGE) > 24:                  # a handful of pages x variants; old versions drop when a file changes
             _PAGE.clear()
-        _PAGE[(id(body), name)] = (body, out)
+        _PAGE[key] = (body, out)
         return out
 
 

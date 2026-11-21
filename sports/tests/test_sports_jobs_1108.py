@@ -460,7 +460,7 @@ def test_heavy_maintenance_jobs_declare_locks_and_get_a_slot_beside_back_to_back
     for writer in ("ingest-nba", "ingest-nfl", "ingest-kalshi", "settle", "history"):
         assert not pair(J["archive"], J[writer]) and not pair(J["archive-verify"], J[writer])   # store writers
     assert not pair(J["archive"], J["archive-verify"])
-    assert not pair(J["settle-post"], J["results-public"])
+    assert not pair(J["results-ledger"], J["results-public"])   # settlepost-1120: the ledger left settle-post
 
     names = ("ui-snapshots-nba", "ui-snapshots-nfl", "mapping-audit", "archive", "archive-verify")
     J = _prod_scheduler(monkeypatch, names)
@@ -569,11 +569,14 @@ def test_settle_no_post_writes_the_same_settlements_and_post_does_the_rest(monke
                                                          ["settle", "model_learning", "results"])
             if no_post:
                 post = worker.cmd_settle_post(argparse.Namespace(leagues=["nba"]), con)
-                assert touched == ["learning", "results"]           # scorecards first (resumable)
-                assert post["results"]["nba"]["settled_by_model"] == {"sm-1": 1}
+                assert touched == ["learning"]                      # settlepost-1120: scorecards only
                 assert post["model_learning"]["scorecard_rows_added"] == 1
                 ps = json.loads((config.DATA_DIR / "settle_post_stages.json").read_text())
-                assert [x[0] for x in ps["stage_s"]] == ["model_learning", "results"] and ps["finished"]
+                assert [x[0] for x in ps["stage_s"]] == ["model_learning"] and ps["finished"]
+                assert ps["model_learning"]["scorecard_rows_added"] == 1        # counters for ops
+                led = worker.cmd_results_ledger(argparse.Namespace(leagues=["nba"]), con)   # its own job now
+                assert touched == ["learning", "results"]
+                assert led["results"]["nba"]["settled_by_model"] == {"sm-1": 1}
             else:
                 assert out["results"]["nba"]["settled_by_model"] == {"sm-1": 1}
                 assert out["model_learning"]["scorecard_rows_added"] == 1
