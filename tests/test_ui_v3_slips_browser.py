@@ -257,3 +257,83 @@ def test_v3_empty_slip_leads_with_auto_build_but_never_hides_picks(browser, env,
         assert not p.errors, p.errors
     finally:
         c.close()
+
+
+# ------------------------------------------------------------------------------------------------ qa 11-20 (bug hunt on live data)
+def test_v3_studio_arrives_on_auto_build_without_a_focus_ring(browser, env, monkeypatch):
+    """The empty-slip switch to Auto-build presses the hub's tab, and the hub focuses the tab it selects: the tab showed its focus
+    outline on arrival, as if the member had tabbed to it."""
+    c, p = v3_page(browser, env, monkeypatch, "slips", DESK, "dark")
+    try:
+        p.wait_for_selector('[role=tab][data-hub=studio-tab][data-id=build][aria-selected=true]')
+        p.wait_for_timeout(300)
+        assert p.evaluate("document.activeElement && document.activeElement.matches('[data-hub=studio-tab]')") is False
+        assert p.evaluate("getComputedStyle(document.querySelector('[data-hub=studio-tab][data-id=build]')).outlineStyle") == "none"
+        build_and_open(p, env)
+        badges = p.evaluate("[...document.querySelectorAll('#hub-generated .h-generated-card>header>span')].map(s => Math.round(s.getBoundingClientRect().height))")
+        assert badges and len(set(badges)) == 1                                       # SLIP over its number on every card alike
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_v3_lean_leg_reads_model_estimate_not_no_grade(browser, env, monkeypatch, size):
+    """A sports line with Scout's side and no letter reads Lean Under / Stake 0U on the board; its slip leg kept the hub's raw
+    'No grade: No grade yet' under the chance (a status label). It reads 'Model estimate', as every other leg does."""
+    c, p = v3_page(browser, env, monkeypatch, "board", size, "light")
+    try:
+        row = p.locator('#hub-rows tr[data-record]', has_text="Karl Anders").first
+        row.wait_for(timeout=30000)
+        assert "Lean Under" in row.inner_text()
+        row.locator('.h-add:not(.h-add-info)').click()
+        if p.locator('#hub-detail [data-hub=detail-add]:not([disabled])').is_visible():
+            p.locator('#hub-detail [data-hub=detail-add]:not([disabled])').click()
+        p.goto(env.url + '/#/slips')
+        p.wait_for_selector('#hub-studio-section:not([hidden])')
+        p.locator('[role=tab][data-hub=studio-tab][data-id=slip]').click()
+        leg = p.locator('#hub-studio-body .u-leg', has_text="Karl Anders").first
+        leg.locator('.sb-read .sc-grade--lean').wait_for(timeout=20000)
+        read = leg.locator('.sb-read').inner_text()
+        assert "Lean Under" in read and "Model estimate" in read and "No grade" not in read, read
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("width", [1280, 1440])
+def test_v3_slip_column_leg_stays_inside_the_column(browser, env, monkeypatch, width):
+    """A column leg with the hub's swap advice: its read (chance, label, grade, stake) sat under the advice in one line and the stake
+    ran past the column's right edge. The read follows the pick and wraps; the advice spans the leg."""
+    c, p = v3_page(browser, env, monkeypatch, "board", {"width": width, "height": 900}, "dark")
+    try:
+        p.wait_for_selector('#hub-rows tr[data-record]')
+        p.locator('#hub-rows tr[data-record]', has_text="brandr").first.locator('.h-add:not(.h-add-info)').click()
+        if not p.locator('#u-hub .h-slip').is_visible():
+            p.locator('#hub-focus').click()
+        p.wait_for_selector('#hub-slip-content .u-leg .sb-read .sb-stake', timeout=20000)
+        p.wait_for_selector('#hub-slip-content .u-leg .u-leg-advice', timeout=20000)
+        out = p.evaluate("""() => { const col = document.querySelector('#u-hub .h-slip').getBoundingClientRect();
+          return [...document.querySelectorAll('#hub-slip-content *')].filter(e => e.offsetParent && e.getBoundingClientRect().right > col.right + 1).map(e => e.className) }""")
+        assert not out, out
+        read, advice = p.evaluate("""() => { const l = document.querySelector('#hub-slip-content .u-leg');
+          return [l.querySelector('.sb-read').getBoundingClientRect().top, l.querySelector('.u-leg-advice').getBoundingClientRect().top] }""")
+        assert read < advice                                                           # the read follows the pick, above the advice
+        assert not p.errors, p.errors
+    finally:
+        c.close()
+
+
+def test_v3_phone_generate_brings_the_batch_into_view(browser, env, monkeypatch):
+    """Phone: the generated slips sit about 1,800px under the Auto-build form and only the bar's subtitle changed, so a tap on
+    Generate looked like nothing happened. A fresh batch now scrolls its header into view under the 56px app bar."""
+    c, p = v3_page(browser, env, monkeypatch, "slips", PHONE, "dark")
+    try:
+        p.wait_for_selector('[role=tab][data-hub=studio-tab][data-id=build][aria-selected=true]')
+        p.locator('#hub-generate').click()
+        p.wait_for_selector('#hub-generated .h-generated-card', timeout=30000)
+        p.wait_for_function("(() => { const t = document.querySelector('#hub-generated .h-batch-head').getBoundingClientRect().top; return t >= 56 && t < innerHeight / 2 })()",
+                            timeout=5000)
+        assert not p.errors, p.errors
+    finally:
+        c.close()

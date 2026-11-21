@@ -357,3 +357,8 @@ html[data-ui-v3] #u-hub #hub-detail .v3p-h2htable .sc-num{text-align:right;font-
 html[data-ui-v3] #u-hub #hub-detail .v3p-h2htable td b{font-weight:600}
 html[data-ui-v3] #u-hub #hub-detail .v3p-h2htable .v3p-h2hmaps{display:block;font-size:12px;color:var(--sc-muted)}
 @media (max-width:599px){html[data-ui-v3] #u-hub #hub-detail .v3p-h2htable{font-size:12px}html[data-ui-v3] #u-hub #hub-detail .v3p-h2htable :is(th,td){padding:6px 3px}html[data-ui-v3] #u-hub #hub-detail .v3p-h2htable thead th{white-space:normal}}
+/* ---- qa 1120: delta arrows follow the sign (colour stays good / poor for Scout's side) ---- */
+html[data-ui-v3] #u-hub #hub-detail .sc-stat:is(.is-good,.is-poor) i.v3p-up::before{border-top:0;border-bottom:5px solid currentColor}
+html[data-ui-v3] #u-hub #hub-detail .sc-stat:is(.is-good,.is-poor) i.v3p-dn::before{border-bottom:0;border-top:5px solid currentColor}
+html[data-ui-v3] #u-hub #hub-detail .sc-scene__stat i:is(.sc-v-good,.sc-v-poor).v3p-up::before{border-top:0;border-bottom:4px solid currentColor}
+html[data-ui-v3] #u-hub #hub-detail .sc-scene__stat i:is(.sc-v-good,.sc-v-poor).v3p-dn::before{border-bottom:0;border-top:4px solid currentColor}

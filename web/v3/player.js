@@ -236,6 +236,12 @@
   }
   var signed = function (f) { return (f.zero ? '' : f.neg ? MINUS : '+') + f.text; };
   var fx = function (v, dp) { return num(v) ? v.toFixed(dp) : '—'; };
+  /* a result as it was recorded: whole numbers whole, a half stays a half (32.5 never reads 33) */
+  var raw = function (v) { return num(v) ? String(Math.round(v * 100) / 100) : '—'; };
+  /* the line as a number; no line (LoL no-line state) is null, never 0 (+null is 0) */
+  var lineNum = function (l) { return l == null || l === '' || !num(+l) ? null : +l; };
+  /* "Book · checked N min ago", the check time only when it parses */
+  var bookAge = function (o) { var a = o && o.seen_at ? age(o.seen_at) : ''; return o && o.platform_label ? o.platform_label + (a ? ' · checked ' + a : '') : ''; };
   function delta(d, dp, unit) {
     if (!num(d)) return '';
     var r = Math.round(Math.abs(d) * Math.pow(10, dp));
@@ -281,7 +287,8 @@
     var d = DOCS[box.dataset.id];
     if (!d) return {box: box, doc: null};
     var sel = document.getElementById('hub-card-line'), opt = sel && sel.options[sel.selectedIndex];
-    if (opt && d.record.offer.line != null && opt.textContent.indexOf(String(d.record.offer.line)) < 0) return {box: box, doc: null};
+    /* the select's option names the line as a whole token ("Underdog 2.5"): "2.5" must not match "12.5" */
+    if (opt && d.record.offer.line != null && (' ' + opt.textContent.replace(/\s+/g, ' ') + ' ').indexOf(' ' + String(d.record.offer.line) + ' ') < 0) return {box: box, doc: null};
     return {box: box, doc: d};
   }
   function series(doc) { return ((doc && doc.history && doc.history.series) || []).filter(function (g) { return g && num(g.value); }); }
@@ -313,24 +320,52 @@
     var c = doc && doc.cs2_card, hc = (c && c.context) || {}, bo = r.event.best_of || (c && c.match && c.match.bo);
     var cd = document.querySelector('#hub-detail .h-card-head .h-countdown');
     var cdText = cd ? cd.textContent : '';
-    var team = r.player.team || (r.sport === 'tennis' ? r.player.name || '' : ''), opp = r.player.opponent || '';   /* tennis: the player is the side */
+    var team = r.player.team || (r.sport === 'tennis' ? r.player.name || '' : ''), opp = oppOf(r);   /* tennis: the player is the side */
     if (!team && !opp) return '';
     return '<div class="sc-matchup v3p-match" role="group" aria-label="Match">'
       + '<div class="sc-matchup__team sc-matchup__team--a"><b>' + esc(team || '—') + '</b>' + (r.sport === 'cs2' ? rankHtml(hc.ranking) : '') + '</div>'
       + '<div class="sc-matchup__clock">' + (cdText ? '<span class="sc-live-dot"></span>' + (/^in /i.test(cdText) ? 'Starts ' : '') + '<b><span class="h-countdown" data-start="' + esc(r.event.start_utc || '') + '">' + esc(cdText) + '</span></b>' : '') + (bo ? '<small>Best of ' + esc(bo) + '</small>' : '') + '</div>'
       + '<div class="sc-matchup__team sc-matchup__team--b"><b>' + esc(opp || '—') + '</b>' + (r.sport === 'cs2' ? rankHtml(hc.opp_ranking) : '') + '</div></div>';
   }
+  /* qa 1120: the feeds' competition codes as members read them. Soccer: the ESPN league slugs the expansion feed stores
+     (sports/expansion_offers.PP_SOCCER_LEAGUES + the other leagues it reads); an unknown slug stays as it is. Tennis: 'atp_challenger'
+     -> 'ATP Challenger', 'wta125' -> 'WTA 125'. A competition that only repeats the sport chip ('NBA' beside the NBA chip) is not
+     printed twice. */
+  var LEAGUE = {'eng.1': 'Premier League', 'esp.1': 'La Liga', 'ger.1': 'Bundesliga', 'ita.1': 'Serie A', 'fra.1': 'Ligue 1', 'usa.1': 'MLS',
+    'mex.1': 'Liga MX', 'uefa.champions': 'Champions League', 'uefa.europa': 'Europa League', 'ned.1': 'Eredivisie', 'por.1': 'Primeira Liga',
+    'sco.1': 'Scottish Premiership', 'aus.1': 'A-League Men', 'bra.1': 'Brasileirão', 'ksa.1': 'Saudi Pro League'};
+  function compText(r, comp) {
+    comp = String(comp || '').trim();
+    if (!comp) return '';
+    if (r.sport === 'soccer' && LEAGUE[comp.toLowerCase()]) return LEAGUE[comp.toLowerCase()];
+    if (/^(atp|wta|itf)/i.test(comp) && /^[a-z0-9_ ]+$/i.test(comp)) {
+      return comp.replace(/_/g, ' ').replace(/^(atp|wta|itf)(?:\s*(\d+))?/i, function (a, t, n) { return t.toUpperCase() + (n ? ' ' + n : ''); })
+        .replace(/ ([a-z])/g, function (a, c) { return ' ' + c.toUpperCase(); });
+    }
+    if (/^(ufc|nba|nfl|mls)(?![a-z])/.test(comp)) comp = comp.replace(/^[a-z]+/, function (w) { return w.toUpperCase(); });
+    return comp.toLowerCase() === String(SPORT[r.sport] || r.sport).toLowerCase() ? '' : comp;
+  }
+  /* the opponent: the record's own, else (soccer feeds leave it empty) the other side of the event label, by exact name only */
+  function oppOf(r) {
+    var opp = String((r.player && r.player.opponent) || '').trim(), team = String((r.player && r.player.team) || '').trim();
+    if (opp || !team) return opp;
+    var parts = String((r.event && r.event.label) || '').split(/\s+(?:·|vs\.?|v|@)\s+/).map(function (x) { return x.trim(); }).filter(Boolean);
+    if (parts.length === 2 && (parts[0] === team) !== (parts[1] === team)) return parts[0] === team ? parts[1] : parts[0];
+    return '';
+  }
   function metaHtml(r, doc) {
-    var c = doc && doc.cs2_card, env = c && c.environment, comp = r.event.competition || (c && c.match && c.match.event) || '';
+    var c = doc && doc.cs2_card, env = c && c.environment, comp = compText(r, r.event.competition || (c && c.match && c.match.event) || '');
     var tw = env && env.tonight === 'lan' ? 'LAN' : env && env.tonight === 'online' ? 'online' : '';
-    if (/^(atp|wta|itf|ufc|nba|nfl|mls)(?![a-z])/.test(comp)) comp = comp.replace(/^[a-z]+/, function (w) { return w.toUpperCase(); });   /* 'atp' -> 'ATP' */
     var when = dateText(r.event.start_utc);
     return '<p class="v3p-meta"><span class="sc-chip">' + esc(SPORT[r.sport] || r.sport) + '</span>'
       + (comp || tw ? '<span class="sc-muted">' + esc(comp) + (comp && tw ? ', ' : '') + esc(tw) + '</span>' : '')
       + (when ? '<b>' + esc(when) + '</b>' : '') + '</p>';
   }
+  /* qa 1120: the delta's arrow follows its sign, its colour follows good / poor for Scout's side (an Under pick's −0.1 is good: green,
+     pointing down; it was a green up arrow beside a minus) */
+  var dir = function (d) { var c = String(d || '').charAt(0); return c === MINUS ? 'v3p-dn' : c === '+' ? 'v3p-up' : ''; };
   function statRow(label, value, d, t) {
-    return '<div class="sc-stat' + (t ? ' is-' + t : '') + '"><dt>' + esc(label) + '</dt><dd><b>' + value + '</b>' + (d ? '<i>' + d + '</i>' : '') + '</dd></div>';
+    return '<div class="sc-stat' + (t ? ' is-' + t : '') + '"><dt>' + esc(label) + '</dt><dd><b>' + value + '</b>' + (d ? '<i class="' + dir(d) + '">' + d + '</i>' : '') + '</dd></div>';
   }
   /* a read that is still running or failed is never shown as "—" (that means HLTV has no data): a quiet line, then a retry */
   function hmState(e) {
@@ -368,7 +403,7 @@
       + '<p class="sc-statgrid__legend">' + esc(legend.join(' · ')) + '</p></div>';
   }
   function genericGrid(r, doc) {
-    var all = series(doc), line = r.offer.line, inv = r.scout && r.scout.side === 'under';
+    var all = series(doc), line = lineNum(r.offer.line), inv = r.scout && r.scout.side === 'under';
     if (!all.length) return '';
     var avg = function (n) { var w = all.slice(0, n); return w.length ? w.reduce(function (a, g) { return a + g.value; }, 0) / w.length : null; };
     var w10 = all.slice(0, 10).map(function (g) { return g.value; }).sort(function (a, b) { return a - b; }), mid = Math.floor(w10.length / 2);
@@ -376,9 +411,9 @@
     var vs = function (v) { return num(v) && num(line) ? v - line : null; };
     var row = function (label, v, n) { return n ? statRow(label, fx(v, 1), delta(vs(v), 1), tone(vs(v), line, inv)) : ''; };
     var left = [statRow('Games on file', esc(all.length), '', ''), row('Average L5', avg(5), Math.min(5, all.length)), row('Average L10', avg(10), Math.min(10, all.length))];
-    var right = [row('Median L10', med, w10.length), all.length > 10 ? row('Average L20', avg(20), 1) : '', w10.length ? statRow('Range L10', fx(w10[0], 0) + '–' + fx(w10[w10.length - 1], 0), '', '') : ''];
+    var right = [row('Median L10', med, w10.length), all.length > 10 ? row('Average L20', avg(20), 1) : '', w10.length ? statRow('Range L10', raw(w10[0]) + '–' + raw(w10[w10.length - 1]), '', '') : ''];
     return '<div class="sc-statgrid v3p-grid"><dl>' + left.join('') + '</dl><dl>' + right.join('') + '</dl>'
-      + '<p class="sc-statgrid__legend">' + esc('Past results, ' + (r.market.stat_label || '') + ' · ' + (r.market.period_label || '') + (num(line) ? '; averages and median vs the line ' + line : '')) + '</p></div>';
+      + '<p class="sc-statgrid__legend">' + esc('Past results' + ([r.market.stat_label, r.market.period_label].filter(Boolean).length ? ', ' + [r.market.stat_label, r.market.period_label].filter(Boolean).join(' · ') : '') + (num(line) ? '; averages and median vs the line ' + line : '')) + '</p></div>';
   }
   function sparkHtml(r, doc, side) {
     var all = series(doc).slice(0, 10), line = r.offer.line;
@@ -391,6 +426,14 @@
   }
   /* a sports line with Scout's side but no published letter ("No grade yet"): the sub-threshold rule of the other sports, Lean Over /
      Lean Under with Stake 0U, in place of the hold chip (the board row reads the same) */
+  /* qa 1120: the sports grade "Lean" (sub-threshold, Stake 0U) is drawn by the hub as a bare "Lean" chip; the owner's wording is
+     "Lean Over" / "Lean Under", so the side word is added on screen (the letter itself is the record's, unchanged) */
+  function bareLean(r) { var s = r && r.scout; return !!(s && (s.side === 'over' || s.side === 'under') && /^\s*Lean\s*$/.test(String(s.grade || ''))); }
+  function leanSide(ch, r, side) {
+    var g = ch.querySelector(':scope > .h-dec-pick .h-grade, :scope > .h-dec-pick .h-grade-text');
+    if (!g || !bareLean(r) || r.scout.side !== side) return;
+    if (/^\s*Lean\s*$/.test(g.textContent)) g.textContent = 'Lean ' + (side === 'over' ? 'Over' : 'Under');
+  }
   function leanOnly(r) {
     var s = r && r.scout;
     return !!(s && (s.side === 'over' || s.side === 'under') && !s.grade && s.hold && s.hold.short === 'No grade yet' && !r.extra);
@@ -399,11 +442,12 @@
     if (!st || !st.side) return '';
     var side = st.side.toLowerCase(), scout = r.scout && r.scout.side === side;
     if (scout && leanOnly(r)) st = Object.assign({}, st, {pick: '<span class="h-grade-text">Lean ' + (side === 'over' ? 'Over' : 'Under') + '</span>', stake: 'Stake 0U'});
+    else if (scout && bareLean(r)) st = Object.assign({}, st, {pick: st.pick.replace(/>\s*Lean\s*</, '>Lean ' + (side === 'over' ? 'Over' : 'Under') + '<')});
     var pct = parseFloat(st.chance), hasChance = isFinite(pct);
     /* polish2: no Scout chance (player research only) = no side headline and no status chip: the prop itself leads */
     var noRead = !hasChance && !(r.scout && r.scout.side);
     if (noRead) { scout = false; st = Object.assign({}, st, {pick: /Player research/.test(st.pick || '') ? '' : st.pick}); }
-    var book = r.offer.platform_label ? esc(r.offer.platform_label) + (r.offer.seen_at ? ' · checked ' + esc(age(r.offer.seen_at)) : '') : '';
+    var book = esc(bookAge(r.offer));
     return '<div class="sc-pick v3p-pick" aria-label="Pick summary">'
       + '<div class="sc-pick__side">' + (scout ? '<span class="sc-scout-tag">Scout</span>' : '') + '<b>' + esc((!noRead ? st.side : (r.market.stat_label || '')) + (r.offer.line != null ? ' ' + r.offer.line : '')) + '</b><small>' + esc((r.market.stat_label || '') + ' · ' + (r.market.period_label || '')) + '</small></div>'
       + '<div class="sc-pick__chance"><b>' + esc(st.chance || '—') + '</b>' + (hasChance ? '<span class="sc-meter"><i style="width:' + Math.max(0, Math.min(100, pct)) + '%"></i></span><small>Model estimate</small>' : (st.proj && st.proj !== '—' ? '<small>Projection ' + esc(st.proj) + ' · Model estimate</small>' : '')) + '</div>'
@@ -502,7 +546,7 @@
     return SEL[k];
   }
   function sceneStat(label, value, d, t) {
-    return '<div class="sc-scene__stat"><span>' + esc(label) + '</span><b' + (t ? ' class="sc-v-' + t + '"' : '') + '>' + value + '</b>' + (d ? '<i class="' + (t ? 'sc-v-' + t : '') + '">' + d + '</i>' : '') + '</div>';
+    return '<div class="sc-scene__stat"><span>' + esc(label) + '</span><b' + (t ? ' class="sc-v-' + t + '"' : '') + '>' + value + '</b>' + (d ? '<i class="' + ((t ? 'sc-v-' + t + ' ' : '') + dir(d)).trim() + '">' + d + '</i>' : '') + '</div>';
   }
   var pctText = function (v) { return num(v) ? fx(v, 1) + '%' : '—'; };
   /* the four card stats of one map's totals, deltas vs his all-maps 12-month numbers (the legend says so) */
@@ -615,13 +659,20 @@
     return '<small>' + esc((r.market.stat_label || '') + (r.market.period_label ? ', ' + r.market.period_label : '')) + '</small><b class="sc-num">' + esc(r.offer.line) + '</b>';
   }
   function lineMetaHtml(r) {
-    var book = r.offer.platform_label ? esc(r.offer.platform_label) + (r.offer.seen_at && age(r.offer.seen_at) ? ' · checked ' + esc(age(r.offer.seen_at)) : '') : '';
+    var book = esc(bookAge(r.offer));
     var lt = LINE_TYPE[String(r.market.line_type || '').toLowerCase()] || '';
     return book || lt ? '<span>' + book + '</span><span>' + esc(lt) + '</span>' : '';
   }
   function marketChance(r, doc, side) {
     var mc = r.market_chance;
     if (mc && (side === 'over' || side === 'under') && num(mc['p_' + side])) return {v: (mc['p_' + side] * 100).toFixed(1) + '%', src: num(mc.sources) && mc.sources > 0 ? 'From ' + mc.sources + (mc.sources === 1 ? ' book' : ' books') : 'From book prices'};
+    /* qa 1120: the line doc's own market read (doc.market, the number the Lines tab prints as "Market chance from Underdog prices ...:
+       Over 50.0%"): the strip no longer says — while the Lines tab gives a figure (CS2 records carry no market_chance of their own) */
+    var dm = doc && doc.market;
+    if (dm && dm.available && (side === 'over' || side === 'under') && num(dm['p_' + side])) {
+      var n = /^(\d+) market sources? at this line$/i.exec(String(dm.source || '')), bk = /^(.+?) prices\b/i.exec(String(dm.source || ''));
+      return {v: (dm['p_' + side] * 100).toFixed(1) + '%', src: n ? 'From ' + n[1] + (n[1] === '1' ? ' book' : ' books') : bk ? 'From ' + bk[1] + ' prices' : 'From book prices'};
+    }
     var fs = (doc && doc.grade_inputs && doc.grade_inputs.factors) || [];
     for (var i = 0; i < fs.length; i++) if (fs[i] && /market chance/i.test(fs[i].label || '') && fs[i].value != null) return {v: String(fs[i].value), src: fs[i].label};
     return null;
@@ -630,7 +681,7 @@
     var side = st && st.side ? st.side.toLowerCase() : '', proj = r.scout && r.scout.projection, line = r.offer.line;
     if (!num(proj) && !num(line)) return '';
     var tile = function (label, v, sub) { return '<div><span>' + esc(label) + '</span><b class="sc-num">' + v + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>'; };
-    var gap = num(proj) && num(+line) ? Math.round((proj - +line) * 10) / 10 : null;
+    var ln = lineNum(line), gap = num(proj) && ln != null ? Math.round((proj - ln) * 10) / 10 : null;
     var out = [tile('Projection', num(proj) ? esc(proj.toFixed(1)) : '—', r.market.period_label || '')];
     if (gap == null) out.push(tile('Gap to line', '—', ''));
     else out.push(tile('Gap to line', (gap > 0 ? '+' : gap < 0 ? MINUS : '') + Math.abs(gap).toFixed(1), gap > 0 ? 'above the line' : gap < 0 ? 'below the line' : 'at the line'));
@@ -641,7 +692,8 @@
   }
   function hitsHtml(r, doc, st) {
     var side = st && st.side ? st.side.toLowerCase() : (r.scout && r.scout.side) || '', line = r.offer.line;
-    if ((side !== 'over' && side !== 'under') || !num(+line)) return '';
+    if ((side !== 'over' && side !== 'under') || lineNum(line) == null) return '';
+    line = lineNum(line);
     var h = r.history || {}, all = series(doc), word = side === 'over' ? 'Over' : 'Under';
     var cell = function (n) {
       var t = h['l' + n], hit = null, of = null;
@@ -674,6 +726,7 @@
       var hold = ch.querySelector('.h-hold-why');
       if (hold) hold.classList.toggle('v3p-hide', lean || /^Player research$/.test(hold.textContent.trim()));   /* a status label, not drawn */
       addIn(ch, 'v3p-lean', lean ? '<span class="h-grade-text">Lean ' + (side === 'over' ? 'Over' : 'Under') + '</span>' : '', null);
+      leanSide(ch, r, side);
       /* polish2 (mocks 05 / 10): three labelled cells, Chance <side> + Model estimate | Grade | Stake. The hub's own nodes keep their
          place and text (its stake text stays for screen readers); the labels and the big stake figure are aria-hidden copies */
       ch.classList.add('v3p-cgs');
@@ -712,7 +765,7 @@
     var who = '<b>' + esc(r.player.name) + '</b> ' + esc((st && st.side ? st.side + ' ' : '') + (r.offer.line != null ? r.offer.line + ' ' : '') + (r.market.stat_label || ''));
     var sub = '';
     if (r.sport === 'cs2' && doc) { var pool = mapPool(r, doc); if (pool.state === 'ok') sub = comboText(r, pool, (SEL[k] || []).filter(function (x) { return pool.by[x] && pool.by[x].n > 0; })); }
-    if (!sub && r.offer.platform_label) sub = r.offer.platform_label + (r.offer.seen_at ? ' · checked ' + age(r.offer.seen_at) : '');
+    if (!sub) sub = bookAge(r.offer);
     return '<div class="sc-dock__ctx">' + who + (sub ? '<small data-v3p-combo>' + esc(sub) + '</small>' : '') + '</div><button type="button" class="sc-btn v3p-dock-slip" data-v3p="slip">Slip</button>';
   }
 
@@ -790,10 +843,12 @@
     if (!body || r.sport !== 'cs2' || !doc) return;
     var mc = ((doc.map_chances && doc.map_chances.maps) || []).filter(function (x) { return x && num(Number(x.pct)); }).slice(0, 3);
     if (!mc.length) return;
-    var w = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null), t, host = null;
-    while ((t = w.nextNode())) { if (/^\s*Likely maps: /.test(t.nodeValue) && t.parentNode && t.parentNode.firstChild === t) { host = t.parentNode; break; } }
-    if (!host || host.getAttribute('data-v3p-lm') === host.innerHTML) return;
-    var tail = host.innerHTML, i = tail.indexOf('. His ');
+    var w = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null), t, host = body.querySelector('[data-v3p-lm]');
+    while (!host && (t = w.nextNode())) { if (/^\s*Likely maps: /.test(t.nodeValue) && t.parentNode && t.parentNode.firstChild === t) { host = t.parentNode; break; } }
+    if (!host) return;
+    /* the hub's own wording is kept on the node, so a later paint (the HLTV map read landing after the first paint) rewrites it again */
+    if (host.getAttribute('data-v3p-lm') !== host.innerHTML) host.__v3pOrig = host.innerHTML;
+    var tail = host.__v3pOrig || host.innerHTML, i = tail.indexOf('. His ');
     tail = i >= 0 ? tail.slice(i) : '';
     var hltv = mc.map(function (x) { return esc(x.name) + ' <b>' + esc(Number(x.pct).toFixed(1)) + '%</b>'; }).join(' · ');
     var pool = mapPool(r, doc), per = String(r.market.period_label || 'these maps');
@@ -804,6 +859,8 @@
       if (top.length) lead = 'Likely in ' + esc(per) + ' (Scout’s simulated veto): ' + top.join(' · ') + '. ';
     }
     var html = lead + (lead ? 'HLTV map chance for the series: ' : 'Likely maps (HLTV map chance): ') + hltv + tail;
+    if (host.getAttribute('data-v3p-lm') === host.innerHTML && host.__v3pHtml === html) return;
+    host.__v3pHtml = html;
     host.innerHTML = html;
     host.setAttribute('data-v3p-lm', host.innerHTML);
   }
@@ -830,6 +887,15 @@
     }
     var h = body.querySelector('.h-best-lines h4');
     if (h && h.textContent === 'Best line per side') h.textContent = 'Best sportsbook price per side';
+    /* qa 1120: the Books and lines table's Seen column in the same words ("5 min ago"), and "Across 1 books" in the singular */
+    body.querySelectorAll('.h-line-shop tbody td:last-child').forEach(function (n) {
+      if (n.children.length) return;
+      var w = wordAge(n.textContent); if (n.textContent !== w) n.textContent = w;
+    });
+    body.querySelectorAll('.h-best-lines .h-history-note').forEach(function (n) {
+      var f = n.firstChild;
+      if (f && f.nodeType === 3 && /^Across 1 books:/.test(f.nodeValue)) f.nodeValue = f.nodeValue.replace(/^Across 1 books:/, 'Across 1 book:');
+    });
   }
   function paint() {
     var cur = current();
@@ -837,6 +903,8 @@
     var box = cur.box, doc = cur.doc, head = box.querySelector(':scope > .h-card-head');
     if (!head) return;
     var id = box.dataset.id, r = doc ? doc.record : null;
+    /* a record missing a part (no event / player / market block) still gets the v3 blocks, with dashes, never a thrown paint */
+    if (r && !(r.event && r.player && r.market && r.offer)) r = Object.assign({}, r, {event: r.event || {}, player: r.player || {}, market: r.market || {}, offer: r.offer || {}});
     if (!r) { drop(box, 'v3p-lead'); drop(box, 'v3p-maps'); drop(box, 'v3p-dock'); return; }
     try { V.setSport(r.sport); } catch (e) { /* accent only */ }
     /* sports with no headshot get the approved initial avatar beside the hub's own name (added beside, nothing replaced) */
@@ -849,7 +917,9 @@
        below carry those once each (see .v3p-head in player.css). */
     var hid = head.querySelector(':scope > .h-card-id'), h3 = hid && hid.querySelector('h3');
     if (h3) {
-      var who = [String(r.player.role || '').trim(), String(r.player.team || '').trim()].filter(Boolean).join(', ');
+      /* tennis feeds send role "Player" and the player's own name as his team: neither is said under his name */
+      var nm = String(r.player.name || '').trim(), rl = String(r.player.role || '').trim(), tm = String(r.player.team || '').trim();
+      var who = [/^player$/i.test(rl) ? '' : rl, tm === nm ? '' : tm].filter(Boolean).join(', ');
       var mv = r.offer.moved_from != null ? 'Line moved from ' + r.offer.moved_from : '';
       var wh = esc(who) + (who && mv ? ' · ' : '') + esc(mv), wn = hid.querySelector(':scope > .v3p-who');
       if (wh) {
