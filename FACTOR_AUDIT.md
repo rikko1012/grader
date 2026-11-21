@@ -441,7 +441,11 @@ as round 1 (`holdout/cs2/score.py`: paired day-clustered bootstrap 10,000 draws,
 | R2_moved_staked | 3rd+ staked line of the same player / prop / scope / match -> 0U | staked +0.23 [-0.13, +0.57], p 0.21; gated 146-152 49.0% | staked 1158-1023 53.09% -> 1103-976 53.05%, -0.04 [-0.58, +0.61], Holm p 1.0; gated 55-47 53.9% | **Fails** |
 | R2_late_first | first grade < 6 h before start, staked -> 0U | staked +0.72 [-0.30, +1.75], p 0.17; gated 512-514 49.9% | staked 53.09% -> 53.00%, -0.09 [-2.22, +2.03], Holm p 1.0; gated 258-225 53.4%; bad days 4 -> 5 | **Fails** |
 
-Dropped before the freeze for lack of train support: 0 maps in the 3-month form window (staked 36-31, 53.7%), Map 1
-spread widening, a mean shift on all Map 1 lines (Over share fell to 5-24%: a side flip in disguise), moved-line rank
-across all lines (no effect). Not used: line_books / side_conflict_across_books (look-ahead). Disclosure: round-1
+Dropped before the freeze: 0 maps in the 3-month form window (no train support: staked 36-31, 53.7%); moved-line rank
+across all lines (no train effect); Map 1 spread widening (same population as R2_m1_0u, not a separate test); a mean
+shift on all Map 1 lines (Under skew: Over share fell to 5-24%, a side flip in disguise). Far-from-line Map 1 Overs were
+not frozen separately: the projection bias sits in BO1 (kills actual/projection 0.919 vs 0.993 on BO3 Map 1) and the
+holdout has 87 Map 1 lines, under the testability floor. Map 1 gate after Oct 21 on train: gated 39-58 (40.2%); by
+format (train staked Map 1): BO1 kills 41-58, BO1 HS 22-40, BO3 Map 1 kills 19-37, BO3 Map 1 HS 13-14. The 100-row
+floor is a testability minimum, not a power target. Not used: line_books / side_conflict_across_books (look-ahead). Disclosure: round-1
 holdout aggregate results (F02, F15) were read before this freeze. No grader, flag or member-path change.
