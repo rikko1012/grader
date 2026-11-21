@@ -57,3 +57,50 @@ def mass(values, support, pop, k):
     out = [(values.count(s) + k * p) / (n + k) for s, p in zip(support, pop)]
     total = sum(out)
     return [p / total for p in out]
+
+
+# tp-shrink-1 (exp-proj-1121): the count model (5+ exact matches) spreads ONE pseudo-match uniformly over the score
+# support, which lifts the minority score (tie-breaks, a third set, a 0-set loss) and leaves a lumpy 5-20 match pmf for
+# games played. With TENNIS_POP_SHRINK=1 the pmf is (count_k + K * pop_k) / (n + K) instead: pop = every best-of-3
+# ESPN ATP / WTA singles player-match before 2026-08-22 (+0.5 smoothing per score), K = 40 pseudo-matches chosen by log
+# loss on 2026-06-01..08-21 with pop fitted before 06-01 (grid 1u/2/5/10/20/40: 40 for every stat - the grid edge).
+# Recon holdout 2026-08-22..11-19 scored once (synthetic lines, NOT offered lines): book-like lines 64.19% -> 66.49%
+# (+2.30, day CI +1.66..+2.96, 12,377 rows), letters 66.3% -> 67.7%, days < 53% 0 -> 0. Real offered lines could not be
+# re-scored (87% Challenger, no stored history in the test data), so the flag defaults OFF (binding rule).
+# Challenger / WTA 125 use their tour's pmf (untested there). Best of 5: no pmf, unchanged.
+# Evidence: cs2_scout_ops/logs/audit_1121/round2/expansion/wf_tennis.py, wf_tennis_results.json.
+SHRINK_VERSION = 'tp-shrink-1'
+SHRINK_K = 40
+SHRINK_POP = {
+    'm|full_game|games_played': [0.001292, 0.006763, 0.015274, 0.037462, 0.051748, 0.079103, 0.084271, 0.088526, 0.075456, 0.050228, 0.066945, 0.057827, 0.01345, 0.037766, 0.045365, 0.025, 0.031687, 0.037462, 0.037766, 0.044149, 0.03503, 0.023784, 0.01193, 0.018313, 0.011626, 0.002204, 0.004939, 0.004635],
+    'm|full_game|games_won': [0.000684, 0.003421, 0.007679, 0.018779, 0.025926, 0.041283, 0.04843, 0.054968, 0.047366, 0.037938, 0.036722, 0.026686, 0.223447, 0.148939, 0.063636, 0.054968, 0.056489, 0.04174, 0.037026, 0.019539, 0.004334],
+    'm|full_game|sets_played': [0.639028, 0.360972],
+    'm|full_game|sets_won': [0.319528, 0.18051, 0.499962],
+    'm|full_game|tie_breakers_played': [0.665423, 0.282658, 0.047275, 0.004644],
+    'm|set1|games_played': [0.030822, 0.088661, 0.14376, 0.234475, 0.246347, 7.6e-05, 0.090487, 0.165373],
+    'm|set1|games_won': [0.015449, 0.044368, 0.071918, 0.117275, 0.123212, 0.045282, 0.454566, 0.12793],
+    'w|full_game|games_played': [0.005206, 0.021709, 0.037426, 0.058644, 0.081434, 0.094794, 0.097151, 0.083006, 0.070825, 0.042141, 0.049607, 0.033104, 0.024853, 0.031139, 0.038605, 0.037819, 0.038998, 0.032711, 0.035069, 0.025246, 0.017387, 0.016208, 0.009136, 0.009921, 0.004028, 0.001277, 0.00167, 0.000884],
+    'w|full_game|games_won': [0.002654, 0.010911, 0.018775, 0.029392, 0.040794, 0.050821, 0.058292, 0.049051, 0.040008, 0.031751, 0.028998, 0.025853, 0.271012, 0.127494, 0.051017, 0.048462, 0.048068, 0.036076, 0.020938, 0.008355, 0.001278],
+    'w|full_game|sets_played': [0.674119, 0.325881],
+    'w|full_game|sets_won': [0.337075, 0.162974, 0.499951],
+    'w|full_game|tie_breakers_played': [0.801989, 0.179697, 0.017428, 0.000886],
+    'w|set1|games_played': [0.059154, 0.13002, 0.181201, 0.207972, 0.224902, 9.8e-05, 0.100098, 0.096555],
+    'w|set1|games_won': [0.029626, 0.065059, 0.09065, 0.104035, 0.1125, 0.050098, 0.449705, 0.098327],
+}
+
+
+def shrink_on():
+    import os
+    return os.environ.get('TENNIS_POP_SHRINK', '0') == '1'
+
+
+def shrink_prior(competition, best_of, scope, stat, support):
+    """(population pmf aligned to `support`, K) for tp-shrink-1, or None (flag off / no tested pmf for this line)."""
+    g = GENDER.get(competition)
+    bo = best_of if best_of in (3, 5) else (3 if scope == 'set1' else None)   # set-1 lines often carry no format
+    if not shrink_on() or g is None or bo != 3:
+        return None
+    pop = SHRINK_POP.get(f'{g}|{scope}|{stat}')
+    if pop is None or len(pop) != len(support):
+        return None
+    return pop, SHRINK_K

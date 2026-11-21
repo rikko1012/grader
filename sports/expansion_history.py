@@ -1202,6 +1202,40 @@ def _event(con, path, signature, event_id, before):
     return event
 
 
+# fm-zero-1 (exp-proj-1121): FotMob lists accurate_crosses / dribbles_succeeded only when non-zero (verified on the
+# stored FotMob raw match files: 1,251 player-matches with minutes, crosses present 539 / dribbles 573 times, never with
+# a 0; tackles present 1,251 times; the audit_1121 cache: 89,931 player-games, 0 explicit zeros for either field), and
+# a PrizePicks line on such a player settles at 0. History used to treat the omitted field as a MISSING game, so the
+# L5/L10/L20 and the projection sat on the non-zero games only (audit_1121: dribbles Over letters 46.9% hit vs 67.5%
+# printed). With the flag on, a FotMob 'minutes' game (0 < minutes <= 90, the parser's rule) without the stat row is a
+# 0 game - the same rule expansion_stats already uses for the FotMob component parts. Rollback: SOCCER_FM_ZERO_FILL=0.
+FM_ZERO_STATS = frozenset({'crosses', 'attempted_dribbles'})
+
+
+def fm_zero_fill_on():
+    return os.environ.get('SOCCER_FM_ZERO_FILL', '0') == '1'
+
+
+def zero_fill(games, minutes, limit=20):
+    """games (newest first, one stat) plus a 0 game for every FotMob minutes game without that stat - pure."""
+    have = {g['event_id'] for g in games}
+    extra = [{'event_id': m['event_id'], 'date': m['date'], 'value': 0.0, 'source': 'fotmob',
+              'known_at': m['known_at'], 'zero_filled': True}
+             for m in minutes if m.get('source') == 'fotmob' and m['event_id'] not in have
+             and isinstance(m.get('value'), (int, float)) and 0 < m['value'] <= 90]
+    if not extra:
+        return games
+    return sorted(games + extra, key=lambda r: r['date'], reverse=True)[:limit]
+
+
+def history_games(path, signature, player, stat, scope, before):
+    """_history, with FotMob-omitted zeros filled in for FM_ZERO_STATS when SOCCER_FM_ZERO_FILL=1."""
+    games = _history(path, signature, player, stat, scope, before)
+    if stat in FM_ZERO_STATS and scope == 'regulation' and fm_zero_fill_on():
+        games = zero_fill(games, _history(path, signature, player, 'minutes', scope, before))
+    return games
+
+
 @lru_cache(maxsize=64)
 def _history(path, signature, player, stat, scope, before):
     con = store.connect(path, read_only=True)
@@ -1265,7 +1299,7 @@ def history(req):
     # known by this boundary. Newly saved facts become visible next minute.
     before = parse_utc(before).replace(second=0, microsecond=0).isoformat().replace('+00:00','Z')
     try:
-        games = _history(str(path), _file_signature(path), identity['player_id'], offer['stat'], scope, before)
+        games = history_games(str(path), _file_signature(path), identity['player_id'], offer['stat'], scope, before)
     except (OSError, ValueError, sqlite3.Error):
         return 503, {'error':'history_temporarily_unavailable'}
     response.update(games=games, scope=scope, state='ready' if games else 'no_exact_stat',
