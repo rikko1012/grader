@@ -148,7 +148,15 @@ small DOM additions from the group's own JS. Every field the page shows today mu
 - the hub's nav: Board · Slips · EV · Arbitrage · Sportsbooks · My picks · Record · Tools. EV, Arbitrage and Sportsbooks show only when the hub has them, i.e. their flag is on;
 - search, the Slip pill and the theme toggle.
 
-**Phone bottom bar (<1024px).** Board · Slip · My picks · Record · More.
+**Phone bottom bar (<1024px).** Board · Slips · Edge · My picks · More (org 2026-11-20). Edge opens the last edge tool used (EV,
+then Arbitrage, then Sportsbooks by default); Record is in More's Scout group. With no edge tool at all the bar is Board · Slips ·
+My picks · Record · More.
+
+**Edge (org 2026-11-20, owner: "fix the organization").** EV, Arbitrage, Line moves, Lines differ, Sportsbooks and Moneylines are one
+group. The desktop header keeps EV / Arbitrage / Sportsbooks together between hairlines. On whichever edge tool is on screen, the
+Edge strip (`.sc-v3-edge`, inside `#hub-center` under the page title) switches between them in one tap. Each pill presses the hub's
+own control: a sidebar section, the views' `#hub-more` entries (`data-v3x-more-view`, `data-v3x-ml`) when present, else the hub's
+own quick filters `#hub-movedOnly` / `#hub-diff` (one board view at a time). `tests/test_ui_v3_org_browser.py`.
 
 **How it drives the hub.**
 - Nav items press the hub's own sidebar buttons, so routes, history and paint stay the hub's.
@@ -162,6 +170,11 @@ small DOM additions from the group's own JS. Every field the page shows today mu
   - the sidebar's EV and Arbitrage (when their flag is on);
   - the sidebar foot.
 - Each row presses that hub control, so it behaves exactly as today. The hub's own More sheet is hidden under v3.
+- Grouped **Edge · Slips · Research · Scout** by each item's attributes (`data-hub`, `data-id`, `href`, `data-v3x-*`), never by
+  label; an unknown item lands in Scout. A destination already in that surface's bar is not listed again (desktop: the header nav;
+  phone: the bottom bar). "Tools" reads "All tools" in the phone sheet.
+- Tools (v3): with EV / Arbitrage on, the combined price sheet (`#hub-market-tools[data-mode=all]`) is not repeated there; its two
+  cards read "EV" and "Arbitrage" and open those pages.
 - Without a hub (classic view) the sheet is a short list of plain links: hub routes (By game, Tools, Alerts) and the classic tools (Moneylines, Single prop grader, Match research, Classic board).
 
 **Hub overlays.** `#u-hub` gets `transform: translateZ(0)`, so its fixed layers (player card, popovers) start below the header. The phone card sheet ends above the bottom bar.

@@ -45,6 +45,8 @@
     account: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="7.5" r="3.2"/><path d="M4 16.5c1.2-2.9 3.4-4.2 6-4.2s4.8 1.3 6 4.2"/></svg>',
     help: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M8 8a2 2 0 113 1.7c-.7.4-1 .9-1 1.6M10 13.8v.1"/></svg>',
     tools: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M4 10h12M4 14h12"/><circle cx="7" cy="6" r="1.4"/><circle cx="13" cy="10" r="1.4"/><circle cx="9" cy="14" r="1.4"/></svg>',
+    moves: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 14.5l4.5-4.5 3 3 5.5-6"/><path d="M12.5 7h4v4"/></svg>',
+    differ: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 7h12M4 13h7"/><circle cx="14.5" cy="13" r="1.5"/></svg>',
     ext: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 5h7v7M15 5l-9 9"/></svg>',
     games: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="5" rx="1.5"/><rect x="3" y="11" width="14" height="5" rx="1.5"/></svg>',
     alert: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 6.5v4.2M10 13.4v.1"/></svg>',
@@ -56,12 +58,21 @@
   var NAV = [['board', 'Board', 'board', '#/board'], ['slips', 'Slips', 'studio', '#/slips'], ['ev', 'EV', 'ev', '#/ev'], ['arb', 'Arbitrage', 'arb', '#/arb'],
     ['books', 'Sportsbooks', 'books', '#/books'], ['picks', 'My picks', 'picks', '#/picks'], ['record', 'Record', 'record', '#/record'], ['tools', 'Tools', 'tools', '#/tools']];
   var OPTIONAL = {ev: 1, arb: 1, books: 1};
-  var TABS = [['board', 'Board', 'board'], ['slips', 'Slip', 'slip'], ['picks', 'My picks', 'picks'], ['record', 'Record', 'record'], ['more', 'More', 'more']];
+  /* Phone bottom bar (org 2026-11-20, owner: "fix the organization"): Board · Slips · Edge · My picks · More. Edge opens the last
+     edge tool used (EV first) with the Edge strip on top (EV, Arbitrage, Line moves, Lines differ, Sportsbooks, Moneylines), so EV
+     and Arbitrage are one tap away and the rest one more. Record moves to More. Without any edge tool (their flags off) the bar is
+     the previous one: Board · Slips · My picks · Record · More. */
+  var TABS = [['board', 'Board', 'board'], ['slips', 'Slips', 'slip'], ['edge', 'Edge', 'ev'], ['picks', 'My picks', 'picks'], ['record', 'Record', 'record'], ['more', 'More', 'more']];
+  /* Edge: the related price tools, one group everywhere (desktop header cluster, phone Edge tab, the Edge strip, the More group).
+     key -> [label, icon]. Order is the strip's and the More group's. */
+  var EDGE = [['ev', 'EV', 'ev'], ['arb', 'Arbitrage', 'arb'], ['moves', 'Line moves', 'moves'], ['differ', 'Lines differ', 'differ'], ['books', 'Sportsbooks', 'books'],
+    ['moneylines', 'Moneylines', 'moneyline']];
+  var EDGE_KEY = 'scout-v3-edge';
   /* the More sheet without a hub (classic view): plain links to the hub's sections and the classic tools. With a hub the sheet is
      built from the hub's own More list and sidebar instead, so it holds every item the hub has (flags included). */
-  var MORE_LINKS = [['Prices', [['moneyline', 'Moneylines', '/?view=classic#moneylines', 1]]],
-    ['Tools', [['games', 'By game', '#/games', 0], ['tools', 'Tools', '#/tools', 0], ['alerts', 'Alerts', '#/alerts', 0], ['grader', 'Single prop grader', '/?view=classic#one', 1],
-      ['board', 'Match research', '/?view=classic#matches', 1], ['classic', 'Classic board', '/?view=classic', 1]]]];
+  var MORE_LINKS = [['Edge', [['moneyline', 'Moneylines', '/?view=classic#moneylines', 1]]],
+    ['Research', [['games', 'By game', '#/games', 0], ['tools', 'All tools', '#/tools', 0], ['alerts', 'Alerts', '#/alerts', 0], ['grader', 'Single prop grader', '/?view=classic#one', 1],
+      ['board', 'Match research', '/?view=classic#matches', 1]]], ['Scout', [['classic', 'Classic board', '/?view=classic', 1]]]];
   var ART = ['dust2', 'mirage', 'inferno', 'nuke', 'ancient', 'anubis', 'train', 'overpass', 'cache', 'nba', 'nba-home', 'nfl', 'soccer',
     'tennis-hard', 'tennis-clay', 'tennis-grass', 'tennis-indoor', 'rift-blue', 'rift-red'];
   var HUE = {dust2: 30, mirage: 18, inferno: 10, nuke: 212, ancient: 150, anubis: 182, train: 214, overpass: 176, cache: 80};
@@ -142,7 +153,7 @@
   var B = base();
   document.body.classList.add('sc-v3', 'sc-v3-shell');
   var nav = NAV.map(function (n) {
-    return '<a class="sc-nav__a" href="' + B + n[3] + '" data-v3-nav="' + n[0] + '"' + (OPTIONAL[n[0]] ? ' hidden' : '') + '>' + n[1] +
+    return '<a class="sc-nav__a' + (OPTIONAL[n[0]] ? ' sc-nav__a--edge' : '') + '" href="' + B + n[3] + '" data-v3-nav="' + n[0] + '"' + (OPTIONAL[n[0]] ? ' hidden' : '') + '>' + n[1] +
       (n[0] === 'tools' ? '<span class="sc-nav__n" data-v3-count="alerts"></span>' : '') + '</a>';
   }).join('');
   var bar = document.createElement('div');                  /* not <header>/<nav>: the pages style those tags globally */
@@ -159,8 +170,8 @@
   tabs.setAttribute('role', 'navigation');
   tabs.setAttribute('aria-label', 'Sections');
   tabs.innerHTML = TABS.map(function (t) {
-    var href = t[0] === 'more' ? '#' : B + NAV.filter(function (n) { return n[0] === t[0]; })[0][3];
-    return '<a href="' + href + '" ' + (t[0] === 'more' ? 'data-v3="more" role="button" aria-expanded="false"' : 'data-v3-nav="' + t[0] + '"') + '>' + ICON[t[2]] + '<span>' + t[1] +
+    var href = t[0] === 'more' ? '#' : t[0] === 'edge' ? B + '#/ev' : B + NAV.filter(function (n) { return n[0] === t[0]; })[0][3];
+    return '<a href="' + href + '" ' + (t[0] === 'more' ? 'data-v3="more" role="button" aria-expanded="false"' : 'data-v3-nav="' + t[0] + '"') + (t[0] === 'edge' ? ' hidden' : '') + '>' + ICON[t[2]] + '<span>' + t[1] +
       (t[0] === 'slips' ? ' <b class="sc-num" data-v3-count="slip">0</b>' : '') + '</span>' + (t[0] === 'more' ? '<span class="sc-nav__n" data-v3-count="alerts-m"></span>' : '') + '</a>';
   }).join('');
   document.body.insertBefore(bar, document.body.firstChild);
@@ -178,37 +189,122 @@
      plus the sidebar's EV / Arbitrage (when their flag is on) and the sidebar foot; each row presses that item, so it does exactly
      what it does today. Read fresh on every open (the hub adds items by flag). */
   var sheet = null, scrim = null, moreItems = [];
-  var MORE_ICON = [[/sportsbook/i, 'books'], [/^ev$/i, 'ev'], [/arbitrage/i, 'arb'], [/moneyline/i, 'moneyline'], [/by game/i, 'games'], [/^tools/i, 'tools'],
-    [/alert|highlight/i, 'alerts'], [/auto-build/i, 'slip'], [/tracked/i, 'picks'], [/grader/i, 'grader'], [/match research/i, 'board'], [/classic/i, 'classic']];
-  var PRICES = /sportsbook|^ev$|arbitrage|moneyline/i;
+  /* Every hub destination gets one kind from its own attributes (data-hub / data-id / href / the views' data-v3x-* marks), never
+     from its label, so a renamed or newly added hub item still lands in the right group; an item of no known kind lands in the
+     Scout group, so nothing the hub adds ever disappears. -> [group, key] */
+  var EDGE_IDS = {ev: 1, arb: 1, books: 1};
   function label(el) { return (el.textContent || '').replace(/[↗→]/g, '').replace(/\s+/g, ' ').trim(); }
-  function hubMore() {
+  function kindOf(el) {
+    var act = el.getAttribute('data-hub') || '', id = el.getAttribute('data-id') || '', href = el.getAttribute('href') || '';
+    if (el.hasAttribute('data-v3x-more-view')) return ['edge', el.getAttribute('data-v3x-more-view')];
+    if (el.hasAttribute('data-v3x-ml') || /#moneylines$|[?&]v3=moneylines$/.test(href)) return ['edge', 'moneylines'];
+    if (act === 'section') {
+      if (EDGE_IDS[id]) return ['edge', id];
+      if (id === 'tools' || id === 'alerts') return ['research', id];
+      if (id === 'record') return ['scout', 'record'];
+      return ['nav', id];
+    }
+    if (act === 'studio-open' || act === 'studio-tab') return ['slips', 'studio-' + id];
+    if (act === 'view') return ['research', 'view-' + id];
+    if (/#one$/.test(href)) return ['research', 'grader'];
+    if (/#matches$/.test(href)) return ['research', 'matches'];
+    if (act === 'close') return ['scout', 'classic'];
+    return ['scout', 'x-' + label(el).toLowerCase()];
+  }
+  /* the hub's destinations, one per key: the sidebar's sections, its More list, its foot (+ what the views add to the More list) */
+  function hubItems() {
     var h = document.getElementById('u-hub');
     if (!h) return null;
     var out = [], seen = {};
     function add(el) {
-      var t = label(el).replace(/\s*\d+$/, '');
-      if (!t || seen[t.toLowerCase()]) return;
-      seen[t.toLowerCase()] = 1;
-      out.push({el: el, text: t, ext: /↗/.test(el.textContent || '') || (el.tagName === 'A' && /view=classic/.test(el.getAttribute('href') || ''))});
+      var t = label(el).replace(/\s*\d+$/, ''), k = kindOf(el);
+      if (!t || seen[k[1]]) return;
+      seen[k[1]] = 1;
+      out.push({el: el, text: t, group: k[0], key: k[1], ext: /↗/.test(el.textContent || '') || (el.tagName === 'A' && /view=classic/.test(el.getAttribute('href') || ''))});
     }
-    ['ev', 'arb'].forEach(function (id) { var b = hubBtn(id); if (b) add(b); });
-    h.querySelectorAll('#hub-more > button, #hub-more > a, .h-sidebar-foot > button, .h-sidebar-foot > a').forEach(add);
+    h.querySelectorAll('#hub-more [data-v3x-more-view], #hub-more [data-v3x-ml]').forEach(add);      /* the views' own entries win their key */
+    h.querySelectorAll('.h-sidebar nav [data-hub="section"], #hub-more > button, #hub-more > a, .h-sidebar-foot > button, .h-sidebar-foot > a').forEach(add);
+    /* Line moves / Lines differ without the views' entries: the hub's own quick filters on the board (as the views open them) */
+    [['moves', 'hub-movedOnly'], ['differ', 'hub-diff']].forEach(function (v) {
+      var q = document.getElementById(v[1]);
+      if (q && !seen[v[0]]) { seen[v[0]] = 1; out.push({el: q, text: EDGE.filter(function (e) { return e[0] === v[0]; })[0][1], group: 'edge', key: v[0], quick: true}); }
+    });
     return out;
+  }
+  function edgeItems() {
+    var all = hubItems() || [];
+    return EDGE.map(function (e) {
+      var it = all.filter(function (x) { return x.key === e[0]; })[0];
+      return it ? {el: it.el, key: e[0], text: e[1], icon: e[2], ext: it.ext, quick: it.quick} : null;
+    }).filter(Boolean);
+  }
+  /* an edge item: a hub section button, a views entry or link (their own handlers), or a quick filter (board first, then filter on) */
+  /* an edge item that leaves v3 (a classic page: the hub's ↗ link or any view=classic href) is never remembered, so the Edge tab
+     cannot later send the member out of v3 */
+  function leavesV3(it) {
+    return !!it && (!!it.ext || /(?:^|[?&])view=classic(?:&|#|$)/.test((it.el && it.el.getAttribute && it.el.getAttribute('href')) || ''));
+  }
+  function pressEdge(it) {
+    if (!it || !it.el.isConnected) return;
+    if (!leavesV3(it)) { try { localStorage.setItem(EDGE_KEY, it.key); } catch (e) { /* storage blocked: EV stays the default */ } }
+    var other = {moves: 'hub-diff', differ: 'hub-movedOnly'}[it.key], q = other && document.getElementById(other);
+    if (q && q.getAttribute('aria-pressed') === 'true') q.click();   /* one board view at a time, as the strip shows one current tool */
+    if (it.quick) {
+      var bs = document.getElementById('hub-board-section'), board = hubBtn('board');
+      if (bs && bs.hidden && board) board.click();
+      if (it.el.getAttribute('aria-pressed') !== 'true') it.el.click();
+      return;
+    }
+    it.el.click();
+  }
+  /* which edge tool is on screen now ('' = none) */
+  function edgeNow() {
+    var h = hub();
+    if (!h) return '';
+    var tools = document.getElementById('hub-tools-section');
+    if (/^#\/tools\?(?:.*&)?v3=moneylines(?:&|$)/.test(location.hash) && tools && !tools.hidden) return 'moneylines';
+    var cur = h.querySelector('.h-sidebar [data-hub="section"][aria-current="page"]'), id = cur ? cur.getAttribute('data-id') : '';
+    if (EDGE_IDS[id]) return id;
+    var bs = document.getElementById('hub-board-section');
+    if (bs && !bs.hidden) {
+      var mv = document.getElementById('hub-movedOnly'), df = document.getElementById('hub-diff');
+      if (mv && mv.getAttribute('aria-pressed') === 'true') return 'moves';
+      if (df && df.getAttribute('aria-pressed') === 'true') return 'differ';
+    }
+    return '';
+  }
+  /* the More groups: Edge · Slips · Research · Scout. A destination already in this surface's bar is left out (desktop: the header
+     nav; phone: the bottom bar), so nothing is listed twice on one screen. */
+  var GROUPS = [['edge', 'Edge'], ['slips', 'Slips'], ['research', 'Research'], ['scout', 'Scout']];
+  var MORE_ICON = {ev: 'ev', arb: 'arb', books: 'books', moneylines: 'moneyline', moves: 'moves', differ: 'differ', tools: 'tools', alerts: 'alerts', 'view-games': 'games',
+    'studio-build': 'slip', 'studio-tracked': 'picks', grader: 'grader', matches: 'board', record: 'record', classic: 'classic'};
+  var MORE_TEXT = {tools: 'All tools'};
+  function desk() { return matchMedia('(min-width:1024px)').matches; }
+  function inBar(key) {
+    if (desk()) return !!{board: 1, studio: 1, picks: 1, record: 1, tools: 1, ev: !!hubBtn('ev'), arb: !!hubBtn('arb'), books: !!hubBtn('books')}[key];
+    var t = tabs.querySelector('[data-v3-nav="record"]');
+    return key === 'board' || key === 'studio' || key === 'picks' || (key === 'record' && !!t && !t.hidden);
   }
   function closeMore() {
     if (sheet) { sheet.hidden = true; scrim.hidden = true; }
     document.querySelectorAll('.sc-v3-bar [data-v3="more"], .sc-v3-tabs [data-v3="more"]').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
   }
   function paintMore() {
-    var items = hubMore(), groups;
-    moreItems = items || [];
+    var items = hubItems(), groups;
+    moreItems = [];
     if (items) {
-      var icon = function (t) { for (var i = 0; i < MORE_ICON.length; i++) if (MORE_ICON[i][0].test(t)) return MORE_ICON[i][1]; return 'chev'; };
-      var row = function (it, i) { return '<button type="button" class="sc-more__a" data-v3-more="' + i + '">' + ICON[icon(it.text)] + '<span>' + esc(it.text) + '</span>' + (it.ext ? ICON.ext : '') + '</button>'; };
-      var prices = [], tools = [];
-      items.forEach(function (it, i) { (PRICES.test(it.text) ? prices : tools).push(row(it, i)); });
-      groups = [['Prices', prices.join('')], ['Tools', tools.join('')]];
+      var row = function (it) {
+        moreItems.push(it);
+        return '<button type="button" class="sc-more__a" data-v3-more="' + (moreItems.length - 1) + '" data-v3-more-key="' + esc(it.key) + '">' + (ICON[MORE_ICON[it.key]] || ICON.chev) +
+          '<span>' + esc(it.text) + '</span>' + (it.ext ? ICON.ext : '') + '</button>';
+      };
+      var edge = edgeItems().filter(function (it) { return !inBar(it.key); });
+      groups = GROUPS.map(function (g) {
+        var list = g[0] === 'edge' ? edge : items.filter(function (it) {
+          return it.group === g[0] && !inBar(it.key);
+        }).map(function (it) { return {el: it.el, key: it.key, text: MORE_TEXT[it.key] || it.text, ext: it.ext}; });
+        return [g[1], list.map(row).join('')];
+      });
     } else {
       groups = MORE_LINKS.map(function (g) {
         return [g[0], g[1].map(function (i) {
@@ -219,6 +315,51 @@
     sheet.innerHTML = '<div class="sc-more__grab" aria-hidden="true"></div>' + groups.filter(function (g) { return g[1]; }).map(function (g) {
       return '<div class="sc-more__g" role="group" aria-label="' + g[0] + '"><div class="sc-more__h" aria-hidden="true">' + g[0] + '</div><div class="sc-more__list">' + g[1] + '</div></div>';
     }).join('');
+  }
+  /* The Edge strip: one row of the edge tools on top of whichever one is on screen (EV, Arbitrage, Sportsbooks, Moneylines, or the
+     board in Line moves / Lines differ), phone and desktop. Inside the hub (not inert); each button presses the hub's own control. */
+  var strip = null, stripItems = [];
+  function paintStrip() {
+    var center = document.getElementById('hub-center');
+    if (!center) return;
+    if (!strip) {
+      strip = document.createElement('div');
+      strip.className = 'sc-v3-edge';
+      strip.setAttribute('role', 'navigation');
+      strip.setAttribute('aria-label', 'Edge tools');
+      strip.hidden = true;
+      strip.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-v3-edge]');
+        if (!b) return;
+        var it = stripItems.filter(function (x) { return x.key === b.getAttribute('data-v3-edge'); })[0];
+        if (it) { pressEdge(it); sync(); }
+      });
+    }
+    /* under the page title (the hub's .h-top), above the tool itself: it reads as that page's tabs */
+    var top = center.querySelector(':scope > .h-top'), after = top || null;
+    if (strip.parentNode !== center || (after ? strip.previousElementSibling !== after : strip !== center.firstElementChild))
+      center.insertBefore(strip, after ? after.nextSibling : center.firstChild);
+    var now = edgeNow(), items = now ? edgeItems() : [];
+    var sig = now + '|' + items.map(function (it) { return it.key + (it.ext ? '^' : ''); }).join(',');
+    if (strip.getAttribute('data-sig') !== sig) {
+      stripItems = items;
+      strip.setAttribute('data-sig', sig);
+      strip.innerHTML = '<span class="sc-v3-edge__h" aria-hidden="true">Edge</span><div class="sc-v3-edge__list">' + items.map(function (it) {
+        return '<button type="button" class="sc-pill" data-v3-edge="' + it.key + '"' + (it.key === now ? ' aria-current="page"' : '') + '>' + ICON[it.icon] + '<span>' + esc(it.text) + '</span>' +
+          (it.ext ? ICON.ext : '') + '</button>';
+      }).join('') + '</div>';
+      var list = strip.lastChild, cur = strip.querySelector('[aria-current]');   /* the current tool in view on a narrow strip */
+      if (cur && list.scrollWidth > list.clientWidth) list.scrollLeft = Math.max(0, cur.offsetLeft - list.offsetLeft - 8);
+    }
+    var show = !!now && items.length > 1;
+    if (strip.hidden === show) strip.hidden = !show;
+    if (root.classList.contains('sc-v3-edge-on') !== show) root.classList.toggle('sc-v3-edge-on', show);
+  }
+  function lastEdge(items) {
+    var k = null;
+    try { k = localStorage.getItem(EDGE_KEY); } catch (e) { /* storage blocked */ }
+    var pick = function (key) { return items.filter(function (it) { return it.key === key && !leavesV3(it); })[0]; };   /* a saved key outside v3 is ignored */
+    return pick(k) || pick('ev') || pick('arb') || pick('books') || items.filter(function (it) { return !leavesV3(it); })[0] || items[0];   /* a page of its own before a board view */
   }
   function openMore(btn) {
     if (!sheet) {
@@ -232,7 +373,7 @@
         if (b) {
           var it = moreItems[+b.getAttribute('data-v3-more')];
           closeMore();
-          if (it && it.el.isConnected) it.el.click();                 /* the hub's own control: its own route / dialog / link */
+          if (it && it.el.isConnected) { if (it.icon || it.quick) pressEdge(it); else it.el.click(); }   /* the hub's own control: its own route / dialog / link */
           return;
         }
         if (e.target.closest('a')) closeMore();
@@ -247,6 +388,11 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && sheet && !sheet.hidden) closeMore(); });
 
   function go(key, e) {
+    if (key === 'edge') {                                     /* the phone Edge tab: the last edge tool used, EV first */
+      var items = hub() ? edgeItems() : [];
+      if (items.length) { if (e) e.preventDefault(); pressEdge(lastEdge(items)); sync(); }
+      return;
+    }
     var n = NAV.filter(function (x) { return x[0] === key; })[0];
     if (!n) return;
     var b = hub() && hubBtn(n[2]);
@@ -280,10 +426,11 @@
     return {slips: 'slips', results: 'record', record: 'record', picks: 'picks', tools: 'tools', alerts: 'tools', ev: 'ev', arb: 'arb', books: 'books'}[k] || 'board';
   }
   function paintCurrent() {
-    var k = currentKey();
+    var k = currentKey(), ek = edgeNow();                     /* header: the hub section on screen; the Edge strip marks the tool */
     bar.querySelectorAll('.sc-nav [data-v3-nav]').forEach(function (a) { if (a.getAttribute('data-v3-nav') === k) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     var inTabs = false;
-    tabs.querySelectorAll('[data-v3-nav]').forEach(function (a) { var on = a.getAttribute('data-v3-nav') === k; inTabs = inTabs || on; if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+    var tk = ek ? 'edge' : k;
+    tabs.querySelectorAll('[data-v3-nav]').forEach(function (a) { var on = !a.hidden && a.getAttribute('data-v3-nav') === tk; inTabs = inTabs || on; if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
     var more = tabs.querySelector('[data-v3="more"]');
     if (inTabs) more.removeAttribute('aria-current'); else more.setAttribute('aria-current', 'page');
   }
@@ -303,17 +450,40 @@
       var k = a.getAttribute('data-v3-nav');
       if (OPTIONAL[k]) a.hidden = !(h && hubBtn(NAV.filter(function (n) { return n[0] === k; })[0][2]));
     });
+    /* phone: Edge takes Record's place once the hub has an edge tool (Record is then in More's Scout group) */
+    var edge = !!(h && hubBtn('ev') || h && hubBtn('arb') || h && hubBtn('books')), et = tabs.querySelector('[data-v3-nav="edge"]'), rt = tabs.querySelector('[data-v3-nav="record"]');
+    if (et.hidden === edge) et.hidden = !edge;
+    if (rt.hidden !== edge) rt.hidden = edge;
+  }
+  /* Tools (v3 only): with EV / Arbitrage on, the combined price sheet is not repeated in Tools (it is those two pages) and the two
+     cards that led to it
+     name them: "EV" and "Arbitrage", opening the pages. The hub repaints Tools, so this runs on each sync; the CSS does the hiding. */
+  function tidyTools() {
+    var body = document.getElementById('hub-tools-body'), h = document.getElementById('u-hub');
+    if (!body || !h) return;
+    var ev = !!hubBtn('ev'), arb = !!hubBtn('arb');
+    root.classList.toggle('sc-v3-has-edge', ev || arb);
+    body.querySelectorAll('.h-tool-grid article').forEach(function (art) {
+      var to = art.querySelector('[data-hub="section"][data-id="ev"]') ? 'ev' : art.querySelector('[data-hub="mt-jump"]') && arb ? 'arb' : '';
+      if (!to || art.getAttribute('data-v3-tool') === to) return;
+      art.setAttribute('data-v3-tool', to);
+      var eye = art.querySelector('.h-eyebrow'), t = art.querySelector('h2'), p = art.querySelector('p'), links = art.querySelector('.h-tool-links');
+      if (eye) eye.textContent = 'EDGE';
+      if (t) t.textContent = to === 'ev' ? 'EV' : 'Arbitrage';
+      if (to === 'arb' && p) p.textContent = 'Lines where two books let you bet both sides and win either way.';
+      if (links) links.innerHTML = '<button data-hub="section" data-id="' + to + '">Open ' + (to === 'ev' ? 'EV' : 'Arbitrage') + '</button>';
+    });
   }
   var queued = false;
   function sync() {
     if (queued) return; queued = true;
-    (window.requestAnimationFrame || setTimeout)(function () { queued = false; paintNav(); paintCurrent(); paintCounts(); });
+    (window.requestAnimationFrame || setTimeout)(function () { queued = false; paintNav(); paintStrip(); paintCurrent(); paintCounts(); tidyTools(); });
   }
   var watching = null;
   function watchHub(h) {
     if (watching === h) return;
     watching = h;
-    new MutationObserver(sync).observe(h, {subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['aria-current', 'hidden', 'aria-expanded']});
+    new MutationObserver(sync).observe(h, {subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['aria-current', 'hidden', 'aria-expanded', 'aria-pressed']});
     var fns = hubFns; hubFns = [];
     fns.forEach(function (fn) { try { fn(h); } catch (e) { /* page group bug: keep the shell */ } });
     sync();

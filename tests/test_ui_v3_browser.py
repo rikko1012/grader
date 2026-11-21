@@ -70,7 +70,7 @@ def test_v3_shell_on_every_page_group(browser, env, monkeypatch, group, size, th
                 assert p.evaluate("getComputedStyle(document.querySelector('#u-hub .h-tabbar')).display") == "none"
             if size is PHONE:
                 assert p.locator(".sc-v3-tabs").is_visible() and not p.locator(".sc-v3-bar .sc-nav").is_visible()
-                assert p.locator(".sc-v3-tabs a").count() == 5
+                assert p.locator(".sc-v3-tabs a:visible").count() == 5          # Board Slips Edge|Record My-picks More (org 11-20)
             else:
                 assert p.locator(".sc-v3-bar .sc-nav").is_visible() and not p.locator(".sc-v3-tabs").is_visible()
                 if hub is not None:
@@ -98,7 +98,11 @@ def test_v3_nav_presses_the_hubs_own_buttons_and_mirrors_its_state(browser, env,
         p.wait_for_selector("#hub-picks-section:not([hidden])")
         p.wait_for_function(f"document.querySelector('{bar} [data-v3-nav=picks]').getAttribute('aria-current')==='page'")
         assert p.url.split("#", 1)[1] in ("/picks", "scout/picks")                   # the hub's own route, as its own nav sets it
-        p.locator(f"{bar} [data-v3-nav=record]").click()
+        if p.locator(f"{bar} [data-v3-nav=record]").is_visible():
+            p.locator(f"{bar} [data-v3-nav=record]").click()
+        else:                                                      # phone with an edge tool: Record sits in More's Scout group
+            p.locator(".sc-v3-tabs [data-v3=more]").click()
+            p.locator(".sc-v3-more [data-v3-more-key=record]").click()
         p.wait_for_selector("#hub-record-section:not([hidden])")
         p.locator(f"{bar} [data-v3-nav=board]").click()
         p.wait_for_selector("#hub-board-section:not([hidden])")
@@ -110,15 +114,25 @@ def test_v3_nav_presses_the_hubs_own_buttons_and_mirrors_its_state(browser, env,
         p.locator(".sc-v3-bar [data-v3=theme]").click()
         assert p.evaluate("document.documentElement.dataset.theme") == "light"
         assert p.evaluate("localStorage.getItem('scout-theme')") == "light"
-        # More (phone tab / desktop header button): every item of the hub's own More list, each pressing that item
+        # More (phone tab / desktop header button): every item of the hub's own More list is reachable on this surface, in More or in
+        # the bar (org 11-20: a destination already in the bar is not listed again), each pressing that item
         more = ".sc-v3-tabs [data-v3=more]" if size is PHONE else ".sc-v3-bar [data-v3=more]"
         p.locator(more).click()
         p.wait_for_selector(".sc-v3-more:not([hidden])")
         rows = [t.strip() for t in p.locator(".sc-v3-more .sc-more__a").all_inner_texts()]
+        barl = [t.strip().split(" ")[0] for t in p.locator(f"{bar} [data-v3-nav]:visible").all_inner_texts()]
         hub_items = p.evaluate(r"[...document.querySelectorAll('#hub-more > button, #hub-more > a')].map(e=>e.textContent.replace(/[↗→]/g,'').replace(/\s+/g,' ').trim().replace(/\s*\d+$/,''))")
-        assert hub_items and all(h in rows for h in hub_items), (hub_items, rows)
+        alias = {"Tools": "All tools"}
+        assert hub_items and all(h in rows or alias.get(h) in rows or h.split(" ")[0] in barl for h in hub_items), (hub_items, rows, barl)
+        assert len(rows) == len(set(rows)), rows
         assert "Classic board" in rows and "Results" not in rows and not any("Lab" == r for r in rows)
-        p.locator(".sc-v3-more .sc-more__a", has_text="Tools").first.click()
+        if size is PHONE:
+            p.locator(".sc-v3-more .sc-more__a", has_text="All tools").first.click()
+        else:
+            p.locator(".sc-v3-more .sc-more__a", has_text="By game").first.click()
+            p.wait_for_selector("#hub-board-section:not([hidden])")
+            assert p.locator(".sc-v3-more").is_hidden()
+            p.locator(".sc-v3-bar [data-v3-nav=tools]").click()
         p.wait_for_selector("#hub-tools-section:not([hidden])")
         assert p.locator(".sc-v3-more").is_hidden()
         if size is DESK:
