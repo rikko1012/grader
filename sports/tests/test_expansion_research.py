@@ -102,9 +102,18 @@ def test_fresh_resolved_entries_are_carried_and_unresolved_ones_retried(tmp_path
             research.key(offers[2]): {'identity': {'competition': 'usa.1', 'event_id': 'x', 'player_id': 'w'},
                                       'games': [], 'checked_at': '2026-01-01T00:00:00Z', 'scope': 'regulation'}}
     atomic_json(tmp_path / 'soccer' / 'research.json', {'sport': 'soccer', 'players': prev})
+    same = '-|-|-|-'                                          # usa.1 store, its WAL, matches.json, stages.json: absent
+    atomic_json(tmp_path / 'soccer' / 'research-carry.json', {research.key(o): same for o in offers})
     research.publish('soccer', budget_s=60)
     assert order == ['P2', 'P1']                              # old first, then the failed one; the fresh one carried
     assert research.saved('soccer')['players'][research.key(offers[0])] == prev[research.key(offers[0])]
+    # new inputs (stage evidence written): the fresh entry is read again at once
+    atomic_json(tmp_path / 'soccer' / 'research.json', {'sport': 'soccer', 'players': prev})
+    atomic_json(tmp_path / 'soccer' / 'research-carry.json', {research.key(o): same for o in offers})
+    (tmp_path / 'soccer' / 'stages.json').write_text('{}', encoding='utf-8')
+    order.clear()
+    research.publish('soccer', budget_s=60)
+    assert 'P0' in order
 
 
 def test_event_lookup_is_memoised_per_store_signature_with_identical_answers(monkeypatch):

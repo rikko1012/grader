@@ -235,7 +235,7 @@ def test_all_research_off_soccer_is_the_53dad0b_plan(monkeypatch, tmp_path):
 
 
 def test_every_phase_switch_off_equals_the_global_switch(monkeypatch, tmp_path):
-    env = {f'SCOUT_EXPANSION_PHASE_{n}': '0' for n in ('FOTMOB', 'FOOTBALL_DATA', 'EXCHANGES')}
+    env = {f'SCOUT_EXPANSION_PHASE_{n}': '0' for n in ('FOTMOB', 'FOOTBALL_DATA', 'EXCHANGES', 'SQUADS')}
     world, calls, stored, out = _run(monkeypatch, tmp_path, 'soccer', env)
     assert normalized_plan(calls, world['now']) == EXPECTED_53DAD0B_SOCCER and out['sources'] == {}
 

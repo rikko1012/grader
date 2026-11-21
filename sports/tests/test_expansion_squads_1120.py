@@ -178,3 +178,16 @@ def test_fotmob_fixture_by_one_exact_side_and_the_same_kickoff_minute():
     neither = {'leagues': [{'primaryId': 230, 'matches': [dict(listing['leagues'][0]['matches'][0],
                                                             away={'id': 9, 'name': 'La Máquina'})]}]}
     assert squads._fotmob_team(neither, 'mex.1', match, match['participants'][0]) is None   # no side exact: never
+
+
+def test_fotmob_switched_off_means_stored_rosters_only_and_no_request(tmp_path):
+    match, _ = _mx_setup(tmp_path)
+    calls = []
+
+    def get(url, params):
+        calls.append(url)
+        raise AssertionError('no request while FotMob is off')
+    out = squads.collect({'mex.1': {}}, get, tmp_path, [match], fotmob=False)
+    assert calls == [] and out['linked'] == 0
+    doc = json.loads((tmp_path / squads.PATH).read_text(encoding='utf-8'))
+    assert doc['links'] == {} and doc['misses'] == {}                                 # nothing cached either

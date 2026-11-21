@@ -179,9 +179,10 @@ def espn_by_shirt_dob(roster_doc, team_id, shirt, dob):
     return {'id': f"soccer:player:espn:{a['id']}", 'name': a.get('displayName'), 'team_id': team_id}
 
 
-def collect(catalogs, get, directory, matches, now=None):
+def collect(catalogs, get, directory, matches, now=None, fotmob=True):
     """Write links for unresolved offered players. `get(url, params)` is the phase's capped GET (raises StopIteration
-    at its cap). -> {'errors': [...], 'linked': n, 'checked': n}"""
+    at its cap). fotmob=False (FotMob switched off): the stored-roster step only, no request. -> {'errors': [...],
+    'linked': n, 'checked': n}"""
     from . import net
     directory = Path(directory)
     now = now or datetime.now(timezone.utc)
@@ -212,6 +213,8 @@ def collect(catalogs, get, directory, matches, now=None):
                             'competition': competition, 'basis': 'espn_past_roster', 'checked_at': stamp}
                 out['linked'] += 1
                 misses.pop(k, None)
+                continue
+            if not fotmob:
                 continue
             try:
                 # FotMob's day listing follows its own clock: the UTC date first, then the day before

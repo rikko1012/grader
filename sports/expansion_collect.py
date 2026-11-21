@@ -84,7 +84,8 @@ def _phase(name, sport, catalogs, persist, directory, get, get_text):
         from .expansion_squads import collect
         earliest = (datetime.now(timezone.utc) - timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M:%SZ')
         current = [m for rows in catalogs.values() for m in rows.values() if (m.get('start') or '') >= earliest]
-        return collect(catalogs, get, directory, current)
+        # FotMob requests only while FotMob itself is on (graded switch and its research switch); else stored rosters
+        return collect(catalogs, get, directory, current, fotmob=graded_enabled() and enabled('fotmob'))
     if name == 'exchanges':
         from .expansion_exchanges import collect
         return collect(sport, get, directory, catalogs, offered(directory) if sport == 'soccer' else None)

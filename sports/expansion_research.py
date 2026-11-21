@@ -232,13 +232,46 @@ def _publish(sport, budget_s=20, results_at=None):
     # less than RECHECK_S ago is carried as is (it costs nothing); (2) the rest form two queues, count and component,
     # each least-recently-checked first (never-checked first); (3) the component queue gets COMPONENT_SHARE of the time
     # spent while both queues have work, and either queue takes all the time when the other one is empty.
+    # A carried entry also needs the SAME inputs it was read from (research-carry.json: the signature of its
+    # competition store + catalog, stages.json for soccer, doubles-matches.json for a pair) - new results, new stage
+    # evidence or a new fixture state re-read it at once.
     now_ts = parse_utc(now_utc()).timestamp()
+    root = boards.root(sport)
+    carry_path = root / 'research-carry.json'
+    try:
+        old_sigs = json.loads(carry_path.read_text(encoding='utf-8')) if carry_path.stat().st_size <= 1_000_000 else {}
+        old_sigs = old_sigs if isinstance(old_sigs, dict) else {}
+    except (OSError, ValueError):
+        old_sigs = {}
+    new_sigs, sig_cache = {}, {}
+
+    def input_sig(identity, pair):
+        if not identity:
+            return None
+        name = 'doubles' if pair else identity.get('competition')
+        if name not in sig_cache:
+            try:
+                if pair:
+                    files = [root / 'doubles-matches.json']
+                else:
+                    db = isolated_database(root.parent, name)
+                    files = [db, Path(str(db) + '-wal'), db.parent / 'matches.json'] + (
+                        [root / 'stages.json'] if sport == 'soccer' else [])
+                sig_cache[name] = '|'.join(f'{f.stat().st_mtime_ns}:{f.stat().st_size}' if f.exists() else '-'
+                                           for f in files)
+            except (OSError, KeyError, ValueError):
+                sig_cache[name] = None
+        return sig_cache[name]
+
     queues = {False: [], True: []}
     for k in sorted(unique, key=lambda k: (previous.get(k, {}).get('checked_at', ''), k)):
         old = previous.get(k)
         if old is not None and _fresh(old, now_ts):
-            players[k] = old
-            continue
+            sig = input_sig(old.get('identity'), bool(old.get('doubles')))
+            if sig is not None and old_sigs.get(k) == sig:
+                players[k] = old
+                new_sigs[k] = sig
+                continue
         queues[model_of(unique[k]) is not None].append(k)
     spent = {False: 0.0, True: 0.0}
     matches_path = boards.root(sport) / 'current-matches.json'
@@ -262,15 +295,23 @@ def _publish(sport, budget_s=20, results_at=None):
         if time.monotonic() >= deadline:
             if k in previous:
                 players[k] = previous[k]
+                if k in old_sigs:
+                    new_sigs[k] = old_sigs[k]
             continue
         started = time.monotonic()
         offer = unique[k]
         if sport == 'tennis' and doubles.is_pair(offer):
             # doubles-1: a pair line - fixture from doubles-matches.json, no singles store read (expansion_doubles)
+            sig = input_sig(True, True)
             players[k] = doubles.facts(offer, doubles_fixtures, now_utc())
+            if sig is not None:
+                new_sigs[k] = sig
             spent[group] += time.monotonic() - started
             continue
         identity = history.resolve(offer, matches, links)
+        sig = input_sig(identity, False)                 # read BEFORE the store is read: a later write re-reads it
+        if sig is not None:
+            new_sigs[k] = sig
         scope = 'regulation' if sport == 'soccer' and offer['scope'] == 'full_game' else offer['scope']
         component = model_of(offer)
         if component:
@@ -368,6 +409,7 @@ def _publish(sport, budget_s=20, results_at=None):
                    results_at or history.results_at(sport))
     players = doc['players']
     history.atomic_json(boards.root(sport) / 'research.json', doc)
+    history.atomic_json(carry_path, {k: v for k, v in new_sigs.items() if k in players})
     out = {'offers': len(board['offers']), 'markets': len(players),
            'with_history': sum(bool(x['games']) for x in players.values()), 'at': doc['at']}
     if researched > len(players):

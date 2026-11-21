@@ -125,12 +125,12 @@ def test_kill_switches_stop_one_phase_or_all(monkeypatch, tmp_path):
     monkeypatch.setattr(phases, '_phase', lambda name, *a: ran.append(name) or {'errors': []})
     monkeypatch.setenv('SCOUT_EXPANSION_PHASE_EXCHANGES', '0')
     out = phases.run('soccer', {}, lambda *a: True, tmp_path, time.monotonic() + 60)
-    assert ran == ['fotmob', 'football_data'] and out['exchanges']['state'] == 'off'
+    assert ran == ['fotmob', 'squads', 'football_data'] and out['exchanges']['state'] == 'off'
     monkeypatch.setenv('SCOUT_EXPANSION_SOURCES', '0')
     out = phases.run('tennis', {}, lambda *a: True, tmp_path, time.monotonic() + 60)
     # research off never stops a graded input: theScore still runs for the finals counts (graded_only)
-    assert ran == ['fotmob', 'football_data', 'thescore'] and out['thescore']['state'] == 'graded_only'
+    assert ran == ['fotmob', 'squads', 'football_data', 'thescore'] and out['thescore']['state'] == 'graded_only'
     assert out['exchanges']['state'] == 'off'
     monkeypatch.setenv('SCOUT_EXPANSION_GRADED_SOURCES', '0')
     out = phases.run('tennis', {}, lambda *a: True, tmp_path, time.monotonic() + 60)
-    assert ran == ['fotmob', 'football_data', 'thescore'] and all(v['state'] == 'off' for v in out.values())
+    assert ran == ['fotmob', 'squads', 'football_data', 'thescore'] and all(v['state'] == 'off' for v in out.values())
