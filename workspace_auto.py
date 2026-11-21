@@ -286,6 +286,8 @@ def _build_part(srv, key, pace=None):
     allowed = dict.fromkeys(sports, True)
     import workspace_ev as we
     we._PACE.fn = pace                                   # this thread only: the shared pricing yields too
+    if pace is not None:
+        pace()                                           # never start a part in the middle of a member burst
     try:
         part = ev_part(srv, allowed, pace) if kind == "ev" else arb_part(srv, allowed, t0, pace)
     except Exception as e:                               # noqa: BLE001

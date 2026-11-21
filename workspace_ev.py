@@ -44,7 +44,7 @@ _FAIR = {}                          # (board token, fair params) -> {(sport, app
 _PACE = threading.local()           # workspace_auto's background scan sets .fn on its own thread: called every YIELD_EVERY legs
 
 
-YIELD_EVERY = 200
+YIELD_EVERY = 25                    # ~30 ms of pricing between checks
 
 
 def _yield(i):
@@ -343,7 +343,8 @@ def build(srv, p, allowed, now=None):
             memo[key] = ev_board.pickem_break_even(a, e, k, m, config=cfg)
         return memo[key]
     rows, model_rows, hidden, plays = [], [], {}, {a: 0 for a in APPS}
-    for leg in legs:
+    for i, leg in enumerate(legs, 1):
+        _yield(i)
         if not allowed.get(leg["sport"]):
             continue
         sel = p if leg["app"] == app else None
