@@ -239,9 +239,14 @@
     }).filter(Boolean);
   }
   /* an edge item: a hub section button, a views entry or link (their own handlers), or a quick filter (board first, then filter on) */
+  /* an edge item that leaves v3 (a classic page: the hub's ↗ link or any view=classic href) is never remembered, so the Edge tab
+     cannot later send the member out of v3 */
+  function leavesV3(it) {
+    return !!it && (!!it.ext || /(?:^|[?&])view=classic(?:&|#|$)/.test((it.el && it.el.getAttribute && it.el.getAttribute('href')) || ''));
+  }
   function pressEdge(it) {
     if (!it || !it.el.isConnected) return;
-    try { localStorage.setItem(EDGE_KEY, it.key); } catch (e) { /* storage blocked: EV stays the default */ }
+    if (!leavesV3(it)) { try { localStorage.setItem(EDGE_KEY, it.key); } catch (e) { /* storage blocked: EV stays the default */ } }
     var other = {moves: 'hub-diff', differ: 'hub-movedOnly'}[it.key], q = other && document.getElementById(other);
     if (q && q.getAttribute('aria-pressed') === 'true') q.click();   /* one board view at a time, as the strip shows one current tool */
     if (it.quick) {
@@ -353,7 +358,7 @@
   function lastEdge(items) {
     var k = null;
     try { k = localStorage.getItem(EDGE_KEY); } catch (e) { /* storage blocked */ }
-    var pick = function (key) { return items.filter(function (it) { return it.key === key; })[0]; };
+    var pick = function (key) { return items.filter(function (it) { return it.key === key && !leavesV3(it); })[0]; };   /* a saved key outside v3 is ignored */
     return pick(k) || pick('ev') || pick('arb') || pick('books') || items[0];   /* a page of its own before a board view */
   }
   function openMore(btn) {
