@@ -9,6 +9,7 @@ import math
 import time
 from datetime import datetime, timezone
 
+import expansion_leagues
 import workspace_sports as remote
 
 SPORTS = ('soccer', 'tennis')
@@ -84,7 +85,8 @@ def _record(o, research, forecast=None):
     record = {'sport': o['sport'], 'key': '|'.join([identity['event_id'], identity['player_id'], o['stat'], period, str(o['line'])]),
         'event': {'id': identity['event_id'], 'id_kind': 'canonical', 'label': o['match'],
                   'teams': [v for v in (o.get('team'), o.get('opponent')) if v],
-                  'competition': identity['competition'], 'best_of': research.get('context', {}).get('best_of'),
+                  'competition': identity['competition'], 'competition_label': expansion_leagues.label(identity['competition']),
+                  'best_of': research.get('context', {}).get('best_of'),
                   'start_utc': o['start'], 'lock_utc': o['start'], 'status': 'scheduled'},
         'player': {'id': identity['player_id'], 'key': identity['player_id'], 'name': o['player'],
                    'team': o.get('team') or '', 'opponent': o.get('opponent') or '', 'role': research.get('role') or o.get('role') or ''},
