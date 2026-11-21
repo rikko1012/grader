@@ -342,7 +342,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     tw = _tw1(league, art["sha"])                                             # tw-1 per-market layer (REGISTER A7 8)
     f12 = (nflfix.F12Recorder(forecast_at) if league == "nfl" and (nflfix.f12_on() or nflfix.rush1_on())
            else None)                                                         # F12 / rush-1 SHADOW log (both off)
-    cap = league == "nfl" and nflfix.cap_on()                                  # pc-cap (audit_1121 r2)
+    cap = league == "nfl" and nflfix.cap_on()                    # pc-cap (audit_1121 r2, default OFF)
     if tw is not None:
         out["tw1"] = {"sha": tw["sha"], "markets": sorted(tw["markets"])}
     cur_hl, df = None, None
@@ -409,7 +409,10 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
                 codes.append("tw-1")
             pmf_o = pmf                                  # pc-cap repairs only this offer's sm-1 PMF (mi-1 keeps pmf)
             if cap:
-                pmf_o, w_cap = nflfix.cap_repair(pmf, lo, o.line)
+                try:
+                    pmf_o, w_cap = nflfix.cap_repair(pmf, lo, o.line)
+                except Exception:                       # noqa: BLE001 - a repair failure keeps the raw PMF
+                    pmf_o, w_cap = pmf, 0.0
                 if w_cap > 0:
                     codes.append(nflfix.CAP_CODE)
             shown_mean, code = shown_projection_mean(pmf_o, ks, mean, bool(tw_m))

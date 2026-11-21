@@ -43,11 +43,11 @@ def test_cap_is_deterministic_for_replay():
     assert wa == wb and np.array_equal(a, b)
 
 
-def test_cap_flag_default_on_and_rollback(monkeypatch):
+def test_cap_flag_default_off_and_switch(monkeypatch):
     monkeypatch.delenv("SPORTS_NFL_PMF_CAP", raising=False)
+    assert not nflfix.cap_on()                           # calibration-only evidence: owner decision, off by default
+    monkeypatch.setenv("SPORTS_NFL_PMF_CAP", "1")
     assert nflfix.cap_on()
-    monkeypatch.setenv("SPORTS_NFL_PMF_CAP", "0")
-    assert not nflfix.cap_on()
 
 
 def test_shadow_flags_default_off(monkeypatch):
@@ -58,7 +58,7 @@ def test_shadow_flags_default_off(monkeypatch):
 
 def test_forward_wires_cap_for_nfl_only_and_replay_reapplies_it():
     src = open(forward.__file__, encoding="utf-8").read()
-    assert 'cap = league == "nfl" and nflfix.cap_on()' in src
+    assert 'cap = league == "nfl" and nflfix.cap_on()' in src and "a repair failure keeps the raw PMF" in src
     assert "nflfix.CAP_CODE in (orig.reason_codes or ())" in src
 
 
@@ -106,3 +106,17 @@ def test_rush1_shadow_logs_rb_rush_only(tmp_path, monkeypatch):
     q = nflfix.rush1_layer(pmf, lo, 50.5, "rush_yds")
     po, pu, _ = dists.line_probs(q, lo, 50.5)
     assert sorted(x for x in v if x is not None) == [pytest.approx(po / (po + pu))] and v.count(None) == 2
+
+
+def test_f12_ranks_on_the_raw_pmf_not_the_saved_capped_chance(tmp_path, monkeypatch):
+    import sqlite3
+    monkeypatch.setenv("SPORTS_NFL_F12_SHADOW", "1")
+    lo, p = _pmf_rec_zero()
+    o = h.offer(line=0.5, stat="rec", player_id="nfl:player:1")
+    fc = h.forecast(stat="rec", line=0.5, player_id=o.player_id, p_over=0.1, p_under=0.9, p_push=0.0,
+                    p_over_given_no_push=0.1, p_under_given_no_push=0.9)       # as saved after a cap
+    rec = nflfix.F12Recorder("2026-11-22T17:00:00Z", path=tmp_path / "f12.db")
+    rec.add(fc, o, {"team": "KC", "position": "WR", "start_utc": "2026-11-22T18:00:00Z"}, p, lo)
+    rec.close()
+    ps, st = sqlite3.connect(tmp_path / "f12.db").execute("SELECT p_side, start_utc FROM f12_shadow").fetchone()
+    assert ps == pytest.approx(0.998) and st == "2026-11-22T18:00:00Z"

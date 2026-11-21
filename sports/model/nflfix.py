@@ -1,14 +1,18 @@
 """NFL round-2 repairs (audit_1121, branch claude/nfl-r2-1121). Pure numpy on one sm-1 PMF row; the forward worker
 calls these per offer, replay() re-applies them from the reason codes, so a replay stays bit-identical.
 
-1. pc-cap (SPORTS_NFL_PMF_CAP, default ON - passed its walk-forward, calibration objective):
+1. pc-cap (SPORTS_NFL_PMF_CAP, default OFF - calibration evidence only, owner decision; never on without a board
+   preview - grades-accuracy-not-fewer, Nov 5 rollback of calibrated chances):
    a degenerate PMF (the model's larger side >= CAP given no push at the offered line) is repaired by mixing in the
    same PMF shifted so its mean sits on the line (the book's view of the role), with the smallest weight that brings
-   the larger side down to CAP. Side and letter never move (CAP >= the A band 0.60); only the extreme chance does.
-   Cause: stale role history vs a new starter's line (rec 0.5 Under at 99.8%, rush_att 16.5 Under at 100% on a back
-   with 2 carries/game, pass_yds for a backup QB). p >= 0.99 rows went 42-41; p >= 0.95 went 55-63 (stated 98.9%).
-   Walk-forward (cap chosen on earlier days by log loss from {none, .99, .97, .95, .92, .90}): 0.90 in 9 of 9 folds,
-   paired log-loss -0.048 per row, game-clustered 95% CI [-0.101, -0.013], 6,710 rows / 43 games.
+   the larger side down to CAP. The raw side and gp-1 band never move (CAP >= the A band 0.60); it cannot change the
+   hit rate, so it is not a grading passer. Cause: stale role history vs a new starter's line (rec 0.5 Under at
+   99.8%, rush_att 16.5 Under at 100% on a back with 2 carries/game, pass_yds for a backup QB).
+   p >= 0.99 rows went 42-41; p >= 0.95 went 55-63 (stated 98.9%). Walk-forward (cap chosen on earlier days by log
+   loss from {none, .99, .97, .95, .92, .90}, grid set after the 42-41 rows were seen, no PREREG): 0.90 (grid edge)
+   in 9 of 9 folds, paired log-loss -0.048 per row, game-clustered 95% CI [-0.101, -0.013], 6,710 rows / 43 games.
+   When on, the repaired PMF is what the inputs DB stores (card quantiles / other-line re-reads) and what the
+   sm-nfl-2 shadow gets as its sm-1 baseline. Any error falls back to the raw PMF.
    Evidence: C:/Users/tikic/cs2_scout_ops/logs/audit_1121/round2/nfl/cap/. Rollback: SPORTS_NFL_PMF_CAP=0.
 
 2. rush-1 (SPORTS_NFL_RUSH1, default OFF - SHADOW: failed its walk-forward, see RUSH1 below). Logged as rush1_p_over
@@ -40,7 +44,7 @@ def _flag(name, default):
 
 
 def cap_on():
-    return _flag("SPORTS_NFL_PMF_CAP", "1")
+    return _flag("SPORTS_NFL_PMF_CAP", "0")
 
 
 def _shift_to(pmf, lo, ks, target):
@@ -203,10 +207,16 @@ class F12Recorder:
             dec = (fc.p_over or 0) + (fc.p_under or 0)
             if dec <= 0:
                 return
-            side = "over" if fc.p_over >= fc.p_under else "under"
+            po, pu = fc.p_over, fc.p_under
+            if pmf is not None:                        # the RAW sm-1 PMF (never the pc-cap repaired one)
+                po, pu, _ = dists.line_probs(pmf, lo, o.line)
+                dec = po + pu
+                if dec <= 0:
+                    return
+            side = "over" if po >= pu else "under"
             self.rows.append({"forecast_id": fc.forecast_id, "event": o.event_id, "team": row.get("team"),
                               "position_group": position_group(row.get("position")), "side": side,
-                              "p_side": (fc.p_over if side == "over" else fc.p_under) / dec,
+                              "p_side": (po if side == "over" else pu) / dec, "start_utc": row.get("start_utc"),
                               "prop_id": f"{o.event_id}:{o.player_id}:{o.stat}", "book": o.platform,
                               "variant": variant_group(o.variant), "forecast_at": fc.forecast_at, "stat": o.stat,
                               "line": o.line, "player_id": o.player_id, "chosen_side": fc.chosen_side,
@@ -235,15 +245,15 @@ class F12Recorder:
                     con.execute("""CREATE TABLE IF NOT EXISTS f12_shadow (shadow_id TEXT PRIMARY KEY, version TEXT,
                         run_at TEXT, forecast_id TEXT, event_id TEXT, player_id TEXT, stat TEXT, line REAL, book TEXT,
                         team TEXT, position_group TEXT, side TEXT, chosen_side TEXT, p_side REAL, variant TEXT,
-                        fresh INTEGER, cell_rank INTEGER, keep INTEGER, grade TEXT, stake REAL, rush1_p_over REAL)""")
+                        fresh INTEGER, cell_rank INTEGER, keep INTEGER, grade TEXT, stake REAL, rush1_p_over REAL, start_utc TEXT)""")
                     for r, d in zip(self.rows, dec):
                         sid = hashlib.sha256(json.dumps([F12_VERSION, r["forecast_id"], self.forecast_at])
                                              .encode()).hexdigest()[:24]
-                        con.execute("INSERT OR IGNORE INTO f12_shadow VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        con.execute("INSERT OR IGNORE INTO f12_shadow VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                                     (sid, F12_VERSION, self.forecast_at, r["forecast_id"], r["event"], r["player_id"],
                                      r["stat"], r["line"], r["book"], r["team"], r["position_group"], r["side"],
                                      r["chosen_side"], r["p_side"], r["variant"], int(d["fresh"]), d["cell_rank"],
-                                     int(d["keep"]), d["grade"], d["stake"], r["rush1"]))
+                                     int(d["keep"]), d["grade"], d["stake"], r["rush1"], r["start_utc"]))
                         n += 1
                     con.commit()
                 finally:
