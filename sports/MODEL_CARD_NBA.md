@@ -164,3 +164,33 @@ Live grade bands at L_ref (evaluation block):  points: A 742 p 0.664 hit 0.685, 
   book-line warning that the strongest disagreements with the book (A band) are over-confident. bl-1 could not be
   fitted (no prop had settled before these forecasts). Production settled props (service learning.db) were not
   reachable from this workstation (HTTP 401).
+
+## nba8-1: the eight stats sm-1 does not model (NBA_STATS8, 2026-11-21)
+
+`sports/model/nba8.py`, frozen artifact `artifacts/nba8_nba.json` (sha 69e5e27b376e5485, ds-1 through 2026-10-22).
+PRA, P+R, P+A, R+A, steals, blocks, Blks+Stls, turnovers. Per component: EW minutes x shrunk per-minute rate x tune
+calibration; outcome = a shared minutes draw (40 train quantiles) with negative-binomial components and the fitted
+within-player residual correlation per position group, so a combo is a JOINT distribution (history: joint beats
+independent CRPS for PRA / P+R / R+A / Blks+Stls, game-clustered CIs below 0; P+A CI includes 0).
+
+Real-line walk-forward (pre-registered, cs2_scout_ops/logs/audit_1121/round2/nba-stats/PREREG.md + ADDENDUM.md):
+closing PrizePicks standard / Underdog balanced lines, settled from ESPN box scores, TEST game days 2026-11-10..20
+(partial: the offers route could not serve every recent event), pass = graded hit >= 53% with game-clustered CI low
+> 50%, >= 100 rows / 20 games, A8a balance <= 0.15, beats the L10-vs-line side.
+
+| Stat | TEST graded W-L | hit | game 95% CI | games | A8a (all rows) | L10 baseline | DEV graded | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| steals | 273-149 | 64.7 | 59.8-69.9 | 48 | 0.026 | 58.2 | 772-508 (60.3) | PASS |
+| pr | 346-296-2 | 53.9 | 49.3-58.6 | 55 | 0.239 | 49.0 | 873-830 (51.3) | fail |
+| pra | 378-366 | 50.8 | 45.9-55.6 | 54 | 0.139 | 48.4 | 1284-1250 (50.7) | fail |
+| ra | 303-281-16 | 51.9 | 47.3-56.5 | 54 | 0.196 | 53.0 | 778-713 (52.2) | fail |
+| pa | 291-311-1 | 48.3 | 43.5-53.5 | 55 | 0.243 | 47.1 | 701-671 (51.1) | fail |
+| blocks | 43-24 | 64.2 | 50.0-78.3 | 38 | 0.235 | 51.7 | 112-79 (58.6) | short / unbalanced |
+| stocks | 51-37 | 58.0 | 46.9-68.8 | 37 | 0.198 | 51.8 | 167-138 (54.8) | short / unbalanced |
+| turnovers | 18-15 | 54.5 | 37.9-69.1 | 14 | 0.022 | 46.2 | 86-73 (54.1) | short |
+
+Only steals is gradable (capabilities.NBA_STATS8_PASSED); it is lettered like points (rg-1 letter, 0U, model_version
+nba8-1, raw chance - the sm-1 pc-1 / cal-mi-1 layers do not apply). Caveat: the steals hit rate comes from priced
+Underdog lines where nba8-1 takes the book's short-priced side 92-95% of the time (that favourite hit 63.6% DEV /
+67.5% TEST); at even-money lines (PrizePicks standard + Underdog 1.0x) steals went 168-169 DEV and 61-47 TEST.
+Rollback: NBA_STATS8=0 (cap-2 exactly as before; no nba8-1 forecast is written).

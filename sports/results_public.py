@@ -965,7 +965,7 @@ def build_if_stale(con, force=False, base=None):
 #   difference Scout minus market per pair (Brier / log loss: negative = Scout better); 95% bootstrap interval over
 #              GAMES (all pairs of a game resampled together, 1,000 draws, seed 7)
 HH_VERSION = "hh-1"
-SCOUT = ("sm-1", "mi-1")
+SCOUT = ("sm-1", "mi-1", "nba8-1")
 
 
 def _is_market(mv):

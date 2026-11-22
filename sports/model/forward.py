@@ -478,6 +478,12 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
         if rec4 is not None:
             rec4.market(mk, df, hl, rowpos, sh_items, events, base_of, pmf_of)
         log({"league": league, "market": mk, "written": out["written"]})
+    if league == "nba" and capabilities.nba_stats8_markets():
+        try:                                     # NBA_STATS8: nba8-1 for the walk-forward-passed stats; never breaks sm-1
+            _nba8_league(scon, hcon, forecast_at, up, idmap, events, out, icon, log)
+        except Exception as e:                   # noqa: BLE001
+            out["nba8_error"] = str(e)[:300]
+            log({"league": league, "nba8_error": str(e)[:300]})
     icon.close()
     if rec is not None:
         out["shadow"] = rec.close()
@@ -488,6 +494,114 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     if rec4 is not None:
         out["shadow_nrm1"] = rec4.close()
     return out
+
+
+NBA8_COLS = ("min", "pts", "reb", "ast", "stl", "blk", "tov")
+
+
+def nba8_logs(hcon, player_id, before):
+    """nba8-1 inputs for one player: ds-1 PLAYED games (min > 0) that started before `before`, oldest -> newest, and
+    the player's latest listed position. Same rows the real-line walk-forward read (round2/nba-stats/score_wf.py)."""
+    logs, pos = [], None
+    for r in hcon.execute("SELECT p.position, p.played, p.min, p.pts, p.reb, p.ast, p.stl, p.blk, p.tov, g.start_utc "
+                          "FROM nba_pg p JOIN games g ON g.league = 'nba' AND g.game_id = p.game_id "
+                          "WHERE p.player_id = ? AND g.status = 'final' AND g.start_utc < ? "
+                          "ORDER BY g.start_utc", (player_id, before)):
+        if r["position"]:
+            pos = r["position"]
+        if r["played"] == 1 and (r["min"] or 0) > 0:
+            logs.append({"start": r["start_utc"], **{c: float(r[c] or 0.0) for c in NBA8_COLS}})
+    return logs, pos
+
+
+def nba8_pmf_from_row(art, market, row):
+    """nba8-1 PMF (lo = 0) from one saved input row - the forecast and the replay path."""
+    from . import nba8
+    mus = {c: [row["mu"][c]] for c in nba8.MARKETS[market]}
+    return nba8.pmf(art, market, mus, row["pos_g"])[0]
+
+
+def _nba8_league(scon, hcon, forecast_at, up, idmap, events, out, icon, log):
+    """nba8-1 forecasts for every gradable NBA target offer of a NBA_STATS8 stat (round2 nba-stats PREREG.md).
+    model_version nba8-1, research_only, sports-gp-1 policy with the registry's nba8-1 validation state (stakes stay
+    0U, sports-sp-1). Saved inputs = the per-component calibrated means + position group, so replay rebuilds the
+    identical PMF."""
+    from . import nba8
+    art = nba8.load()
+    if art is None:
+        out["nba8_error"] = "no nba8 artifact"
+        return
+    live = capabilities.nba_stats8_markets()
+    av = f"{nba8.VERSION}:{art['sha']}"
+    cv = "nba8-cal:" + ",".join(f"{c}={art['components'][c]['cal']:.4f}" for c in nba8.COMPONENTS)
+    feats = {}
+    w = out.setdefault("written", {})
+    for mk in sorted(live):
+        for rid, o in list(store.iter_offers(scon, league="nba", stat=mk, platforms=TARGETS, limit=500000)):
+            if o.platform not in TARGETS or (o.event_id, o.player_id) not in idmap:
+                continue
+            ok, _ = capabilities.gate(o)
+            ev = events.get(o.event_id)
+            if not ok or ev is None or ev.start_utc <= forecast_at:
+                continue
+            pid = idmap[(o.event_id, o.player_id)]
+            fk = (pid, ev.start_utc)
+            if fk not in feats:
+                lg, pos = nba8_logs(hcon, pid, ev.start_utc)
+                if not lg:
+                    feats[fk] = None
+                else:
+                    f = nba8.features(lg, art)
+                    pg = nba8.pos_group(pos or "G")
+                    feats[fk] = {"mu": {c: float(v) for c, v in nba8.component_means(art, f, pg).items()},
+                                 "pos_g": pg, "prior_n": int(f["prior_n"]), "l10_min": float(f["l10_min"]),
+                                 "ew_min": float(f["ew_min"]), "in_pop": bool(nba8.in_population(f))}
+            row = feats[fk]
+            if row is None or not (row["ew_min"] == row["ew_min"]):
+                out["why_none"][f"{o.event_id}|{o.player_id}|{mk}"] = "no played games in the player history"
+                continue
+            pmf = nba8_pmf_from_row(art, mk, row)
+            mean = float(dists.mean_of(pmf[None, :], np.arange(len(pmf), dtype=float))[0])
+            codes = ["statistical_only", "joint_minutes_mixture", "nba_stats8"]
+            if not row["in_pop"]:
+                codes.append("outside_validated_population")
+            if row["prior_n"] < 10:
+                codes.append("thin_history")
+            data_version = "ds-1:" + _sha(row)[:16]
+            fc, pol = build_forecast(o, rid, forecast_at, nba8.VERSION, av, pmf, 0, mean, (rid,), codes, data_version,
+                                     cv, (("family_fit", "nb-joint-minutes"),), capabilities.NBA_STATS8_STATE)
+            store.assert_known_before(scon, fc.input_snapshot_ids, forecast_at)
+            try:
+                res = store.put(scon, fc)
+            except ContractError as e:
+                k = f"nba8-1|{mk}"
+                out.setdefault("contract_errors", {})[k] = out.get("contract_errors", {}).get(k, 0) + 1
+                log({"league": "nba", "market": mk, "model": "nba8-1", "offer": rid, "contract_error": str(e)[:300]})
+                continue
+            if res["status"] == "inserted":
+                icon.execute("INSERT OR IGNORE INTO inputs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                             (fc.forecast_id, nba8.VERSION, "nba", mk, rid, art["sha"], forecast_at,
+                              json.dumps(row), None, 0, json.dumps([float(x) for x in pmf]),
+                              json.dumps(pol, default=str), now_utc()))
+            w["nba8-1"] = w.get("nba8-1", 0) + (1 if res["status"] == "inserted" else 0)
+            if res["status"] == "unchanged":
+                out["unchanged"]["nba8-1"] = out["unchanged"].get("nba8-1", 0) + 1
+        icon.commit()
+        log({"league": "nba", "market": mk, "model": "nba8-1", "written": w.get("nba8-1", 0)})
+
+
+def _nba8_replay(r, row, orig, offer, vstate):
+    from . import nba8
+    art = nba8.load()
+    if art is None or art["sha"] != r["artifact_sha"]:
+        raise RuntimeError("nba8 artifact changed since this forecast (replay needs the saved artifact version)")
+    pmf = nba8_pmf_from_row(art, r["market"], row)
+    mean = float(dists.mean_of(pmf[None, :], np.arange(len(pmf), dtype=float))[0])
+    codes = [c for c in orig.reason_codes if not c.startswith("gp:") and not c.startswith("gp_band:")]
+    fc, _ = build_forecast(offer, r["offer_record_id"], r["forecast_at"], nba8.VERSION, orig.artifact_version, pmf, 0,
+                           mean, orig.input_snapshot_ids, codes, orig.data_version, orig.calibration_version,
+                           (("family_fit", "nb-joint-minutes"),), vstate)
+    return fc
 
 
 def _tw1(league, sm1_sha):
@@ -600,7 +714,8 @@ def replay(forecast_id, scon=None):
     cols = ["forecast_id", "model_version", "league", "market", "offer_record_id", "artifact_sha", "forecast_at",
             "row_json", "market_json", "pmf_lo", "pmf_json", "policy_json", "created_at"]
     r = dict(zip(cols, r))
-    art = load_artifact(r["league"])
+    # nba8-1 checks its own artifact in _nba8_replay
+    art = load_artifact(r["league"]) if r["model_version"] != "nba8-1" else {"sha": r["artifact_sha"]}
     if art is None or art["sha"] != r["artifact_sha"]:
         raise RuntimeError("artifact changed since this forecast (replay needs the saved artifact version)")
     own = scon is None
@@ -613,6 +728,8 @@ def replay(forecast_id, scon=None):
             scon.close()
     row = json.loads(r["row_json"])
     vstate = json.loads(r["policy_json"]).get("validation_state")
+    if r["model_version"] == "nba8-1":
+        return orig, _nba8_replay(r, row, orig, offer, vstate)
     pmf, mean = pmf_from_row(art["markets"][r["market"]], row, r["market"], r["league"])
     am = art["markets"][r["market"]]
     lo, ks = dists.grid(r["market"])

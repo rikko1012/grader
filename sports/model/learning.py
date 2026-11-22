@@ -486,7 +486,7 @@ def forward_gate(lcon=None, *, scored=None):
     by = {(r["model_version"], r["league"], r["stat"]): r for r in sc}
     out = []
     for (mv, lg, st), r in by.items():
-        if mv not in ("sm-1", "mi-1", "mc-1"):
+        if mv not in ("sm-1", "mi-1", "mc-1", "nba8-1"):
             continue
         res = {"model_version": mv, "league": lg, "stat": st, "graded": r["graded"], "games": r["games"]}
         if r["graded"] < 300 or r["games"] < 100:

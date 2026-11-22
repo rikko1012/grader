@@ -15,7 +15,7 @@ why, in member language, for the "N markets hidden: ..." note.
 from __future__ import annotations
 
 DEFINITION = "sc-1"
-MODELS = ("sm-1", "mi-1")
+MODELS = ("sm-1", "mi-1", "nba8-1")
 TEXT = ("A Scout chance is a sm-1 / mi-1 forecast on an offered, current line of a game that has not started "
         "(ordinary pick'em / book lines; Kalshi rungs, alternate and promotional lines excluded).")
 

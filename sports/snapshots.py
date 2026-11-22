@@ -61,7 +61,7 @@ LADDER_TOL = 0.005                                 # distribution must reproduce
 MAX_GAMES = 60
 # display preference when several models forecast one offer: Scout's own model first (owner 2026-10-24: a projection
 # is not a market estimate; market estimates are shown separately as "Market estimate")
-DEFAULT_MODELS = ("sm-1", "mi-1", "sharp-2")
+DEFAULT_MODELS = ("sm-1", "nba8-1", "mi-1", "sharp-2")
 PRIMARY_STATS = capabilities.SUPPORTED
 EXTRA_PAIRS = {"fieldGoalsMade-fieldGoalsAttempted": ("fgm", "fga"),
                "freeThrowsMade-freeThrowsAttempted": ("ftm", "fta")}
@@ -851,7 +851,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
                 "role": role_of(o.player_id, p.name if p else o.player_name, p.position if p else None, o.team),
                 "team": o.team, "team_id": cur_team.get(o.player_id), "stat": o.stat,
                 "stat_label": (markets.market(fam, o.stat) or {}).get("label", o.stat), "scope": o.scope,
-                "primary": o.stat in PRIMARY_STATS.get(league, ()) and o.scope == "full_game",
+                "primary": o.stat in capabilities.gradable_stats(league) and o.scope == "full_game",
                 "capability": capabilities.classify(league, o.stat).status,
                 "capability_reason": capabilities.classify(league, o.stat).reason,
                 "quotes": [], "kalshi": [], "alternates": [], "promotional": []}

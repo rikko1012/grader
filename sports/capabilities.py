@@ -17,6 +17,7 @@ ordinary lines) - the only case where prices from two books may be aligned or co
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 SUPPORTED = {
@@ -34,6 +35,34 @@ ORDINARY_VARIANTS = {"standard", "balanced", "main", "ladder_rung", "one_sided"}
 UNGRADED_VARIANTS = {"one_sided"}
 ONE_SIDED_REASON = "one-sided line (Over only or Under only): not graded"
 CAPABILITY_VERSION = "cap-2"
+# NBA_STATS8 (round 2 2026-11-21, track nba-stats): the nba8-1 joint model (sports/model/nba8.py) covers PRA, P+R, P+A,
+# R+A, steals, blocks, Blks+Stls and turnovers. Only the stats that PASSED the pre-registered real-line walk-forward
+# (cs2_scout_ops/logs/audit_1121/round2/nba-stats/PREREG.md + walkforward_results.json) are listed here; with the
+# flag on (default) they are gradable exactly like points (0U, rg-1 letter). NBA_STATS8=0 -> cap-2 unchanged.
+# The failed stats stay research_only with their existing reason. Frozen list: never edited without a new test.
+NBA_STATS8_PASSED = frozenset({"steals"})       # walk-forward 2026-11-21: steals PASS; the other 7 failed
+NBA_STATS8_VERSION = "nba8-1"
+# The validation state nba8-1 carries for a passed stat - the same state as sm-1's NBA stats (gate passed on history /
+# real lines, stakes stay 0U). Kept here, not in model/artifacts/registry.json: that file is part of the frozen
+# artifact package (sports/model/fwd.py verifies its sha256).
+NBA_STATS8_STATE = "history-validated"
+
+
+def nba_stats8_on():
+    return os.environ.get("NBA_STATS8", "1").strip().lower() not in ("0", "false", "off", "no")
+
+
+def nba_stats8_markets():
+    """The nba8-1 stats gradable right now (empty with NBA_STATS8=0)."""
+    return NBA_STATS8_PASSED if nba_stats8_on() else frozenset()
+
+
+def gradable_stats(league):
+    """SUPPORTED plus the live NBA_STATS8 stats (same order; flag off / nothing passed -> SUPPORTED[league])."""
+    base = tuple(SUPPORTED.get(league, ()))
+    if league != "nba":
+        return base
+    return base + tuple(sorted(nba_stats8_markets() - set(base)))
 ONE_SIDED_PLATFORMS = {"underdog"}
 
 
@@ -81,6 +110,7 @@ HANDLERS = {
     "single": Handler("single", "single", True),
     "single_research": Handler("single_research", "single", False,
                                "single stat outside the supported list: recorded for research, not graded"),
+    "joint": Handler("joint", "combo", True),
     "combo": Handler("combo", "combo", False,
                      "combo market: needs a validated joint (covariance) model - sums of independent chances refused"),
     "touchdown": Handler("touchdown", "binary", False,
@@ -121,6 +151,8 @@ def classify(league, stat, source_stat=None) -> Capability:
         return Capability("unsupported", HANDLERS["unknown"], HANDLERS["unknown"].reason)
     if stat in SUPPORTED.get(league, ()):
         return Capability("supported", HANDLERS["single"], None)
+    if league == "nba" and stat in nba_stats8_markets():          # NBA_STATS8: walk-forward-passed nba8-1 stats
+        return Capability("supported", HANDLERS["joint" if stat in COMBOS else "single"], None)
     if stat in COMBOS:
         return Capability("research_only", HANDLERS["combo"], HANDLERS["combo"].reason)
     return Capability("research_only", HANDLERS["single_research"], HANDLERS["single_research"].reason)

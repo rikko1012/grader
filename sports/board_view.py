@@ -35,7 +35,7 @@ WINDOWS = (10, 5)
 GATE_VERSION = "vg-1"
 GATE_PASSED = _gp_states[1:]                                   # history or forward validated (grade_policy.STATES)
 GATE_TEXT = "{LG} model not validated - projection only"
-SCOUT_MODELS = ("sm-1", "mi-1")
+SCOUT_MODELS = ("sm-1", "mi-1", "nba8-1")      # nba8-1: NBA_STATS8 stats only (a forecast exists only for them)
 _REGISTRY = Path(__file__).resolve().parent / "model" / "artifacts" / "registry.json"
 _reg_cache = {}
 
@@ -51,6 +51,9 @@ def _registry():
 
 def gate_state(stat):
     """sm-1's registered validation state for this stat ("unvalidated" when the stat is not registered)."""
+    from . import capabilities
+    if stat in capabilities.nba_stats8_markets():          # NBA_STATS8: walk-forward-passed nba8-1 stat
+        return capabilities.NBA_STATS8_STATE
     v = ((_registry().get("versions") or {}).get("sm-1") or {}).get("validation") or {}
     return v.get(stat, "unvalidated")
 
