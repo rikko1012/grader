@@ -176,9 +176,12 @@ TENNIS_CAP_VERSION = 'tt-cap-1'
 
 
 def tennis_thin_cap_on():
-    """tt-cap-1: owner-directed (failed-test letters capped at Lean, like soccer thin-3); default ON, rollback =0."""
+    """tt-cap-1: failed-test thin letters capped at Lean, like soccer thin-3. Default OFF (prover, exp-proj-1121): no
+    real-line walk-forward exists (0 settled real thin rows) and the cap removes letters (recon: 16,430-7,404 train,
+    2,915-1,241 holdout on synthetic lines) - an open owner call that needs a board preview (grades-accuracy-not-fewer).
+    TENNIS_THIN_LEAN_CAP=1 turns it on."""
     import os
-    return os.environ.get('TENNIS_THIN_LEAN_CAP', '1') != '0'
+    return os.environ.get('TENNIS_THIN_LEAN_CAP', '0') == '1'
 
 
 UD_CHANCE_VERSION = 'ud-chance-1'
@@ -526,7 +529,7 @@ def make_forecast(offer, facts, now):
           result['grade'] not in (None, policy.LEAN)):
         # tt-cap-1 (exp-proj-1121, owner open item): tennis thin-t1 / thin-t2 (under 5 exact past matches) missed their
         # walk-forward for every stat, yet printed A+..B letters. Same rule as soccer thin-3 and doubles-1: kept as a
-        # letter, capped at Lean; side and chance unchanged. Rollback: TENNIS_THIN_LEAN_CAP=0.
+        # letter, capped at Lean; side and chance unchanged. Default OFF; on with TENNIS_THIN_LEAN_CAP=1.
         result.update(grade=policy.LEAN, lean_cap={'version': TENNIS_CAP_VERSION, 'model_letter': result['grade']},
                       grade_reason=[*result['grade_reason'], 'Lean: fewer than 5 past matches at this stat.'])
     elif fitted.get('doubles_model') and fitted['stake_tier'] == 'failed' and result['grade'] not in (None, policy.LEAN):

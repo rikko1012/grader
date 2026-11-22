@@ -156,8 +156,11 @@ def _thin_tennis():
     return offer, facts
 
 
-def test_tennis_thin_letters_capped_at_lean_by_default(monkeypatch):
+def test_tennis_thin_letters_capped_at_lean_only_with_the_flag(monkeypatch):
     offer, facts = _thin_tennis()
+    d, _ = model.make_forecast(offer, facts, NOW)            # default OFF: main's letter, no lean_cap key
+    assert 'lean_cap' not in d and d['grade'] not in (None, policy.LEAN)
+    monkeypatch.setenv('TENNIS_THIN_LEAN_CAP', '1')
     f, _ = model.make_forecast(offer, facts, NOW)
     assert f['thin_model']['version'] == tt.VERSION and f['grade'] == policy.LEAN
     assert f['lean_cap']['version'] == model.TENNIS_CAP_VERSION and f['lean_cap']['model_letter'] not in (None, policy.LEAN)
@@ -166,6 +169,7 @@ def test_tennis_thin_letters_capped_at_lean_by_default(monkeypatch):
     g, _ = model.make_forecast(offer, facts, NOW)
     assert g['grade'] == f['lean_cap']['model_letter'] and 'lean_cap' not in g
     assert g['p_side'] == f['p_side'] and g['side'] == f['side']
+    assert g == d
 
 
 def test_tennis_count_model_and_soccer_are_not_capped():
