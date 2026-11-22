@@ -617,10 +617,12 @@ def _nba8_shadow(scon, hcon, forecast_at, idmap, events, path=None):
         return {"model_version": nba8.VERSION, "error": "no nba8 artifact"}
     live = capabilities.nba_stats8_markets()
     mks = [m for m in capabilities.NBA_STATS8_ALL if m not in live]
-    feats, n, seen, why = {}, 0, 0, {}
+    feats, pmfs, n, seen, known, why = {}, {}, 0, 0, 0, {}
     con = shadow.db(path)
     try:
         for mk in mks:
+            # the in-population offers first (a small list), so the store cursor is closed before any model work
+            todo = []
             for rid, o in store.iter_offers(scon, league="nba", stat=mk, platforms=TARGETS, limit=500000):
                 ev = events.get(o.event_id)
                 if ev is None or ev.start_utc <= forecast_at or not capabilities.nba8_tested(o):
@@ -628,17 +630,26 @@ def _nba8_shadow(scon, hcon, forecast_at, idmap, events, path=None):
                 if (o.event_id, o.player_id) not in idmap:
                     why["no_history_id"] = why.get("no_history_id", 0) + 1
                     continue
+                todo.append((rid, o, ev))
+            for rid, o, ev in todo:
                 seen += 1
-                row = _nba8_row(hcon, art, feats, idmap[(o.event_id, o.player_id)], ev.start_utc)
+                pid = idmap[(o.event_id, o.player_id)]
+                row = _nba8_row(hcon, art, feats, pid, ev.start_utc)
                 if row is None or not (row["ew_min"] == row["ew_min"]):
                     why["no_played_games"] = why.get("no_played_games", 0) + 1
                     continue
-                pmf = nba8_pmf_from_row(art, mk, row)
-                mean = float(dists.mean_of(pmf[None, :], np.arange(len(pmf), dtype=float))[0])
+                sid = _sha([nba8.VERSION, art["sha"], rid, float(o.line), _sha(row)])[:24]
+                if con.execute("SELECT 1 FROM shadow_forecasts WHERE shadow_id = ?", (sid,)).fetchone():
+                    known += 1                       # same offer, line and inputs as an earlier run: nothing to do
+                    continue
+                pk = (pid, ev.start_utc, mk)
+                if pk not in pmfs:                   # one PMF per player-game-stat (every line reads the same one)
+                    pmf = nba8_pmf_from_row(art, mk, row)
+                    pmfs[pk] = (pmf, float(dists.mean_of(pmf[None, :], np.arange(len(pmf), dtype=float))[0]))
+                pmf, mean = pmfs[pk]
                 po, pu, pp = dists.line_probs(pmf, 0, o.line)
                 sides = o.offered_sides()
                 pol = grade_policy.apply(po, pu, sides, "unvalidated")
-                sid = _sha([nba8.VERSION, art["sha"], rid, float(o.line), _sha(row)])[:24]
                 fac = {"pos_g": row["pos_g"], "prior_n": row["prior_n"], "l10_min": row["l10_min"],
                        "ew_min": row["ew_min"], "in_pop": row["in_pop"], "mu": row["mu"],
                        "variant": capabilities.variant_of(o)}
@@ -652,7 +663,7 @@ def _nba8_shadow(scon, hcon, forecast_at, idmap, events, path=None):
     finally:
         con.close()
     return {"model_version": nba8.VERSION, "artifact": art["sha"], "display": "never (shadow only)", "markets": mks,
-            "offers_in_population": seen, "written": n, "skipped": why, "seconds": round(time.time() - t0, 2)}
+            "offers_in_population": seen, "written": n, "already_recorded": known, "skipped": why, "seconds": round(time.time() - t0, 2)}
 
 
 def _nba8_replay(r, row, orig, offer, vstate):

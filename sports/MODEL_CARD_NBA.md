@@ -204,13 +204,18 @@ steals since Nov 19. On PrizePicks standard - the line members would actually se
 TEST / 112-103 DEV, 148-134 together (52.5%, game CI 47.2-57.9): fails pass rules 1-2. So nothing is lettered by default.
 - Unset (default): cap-2 exactly; no canonical nba8-1 forecast is written; a stored one is never attached; every model
   list a member file reads (board_view.scout_models, scout_chance.models, results_public._scout, learning.forward_gate)
-  equals the pre-nba8 tuple. Verified: board / board_more / players / slate / forecasts / results / slip pools /
-  public record byte-identical to origin/main 7be1957 on the same seeded store (timing fields excluded).
+  equals the pre-nba8 tuple. Verified: every board / player / slate / forecasts / results file byte-identical to
+  origin/main 7be1957 on the same seeded store (timing fields excluded), also with leftover nba8-1 forecasts stored.
+  Slip pool and public record matched too, but that seed had no legs / settled rows (their code reads the same
+  model lists as main).
 - Forward shadow (NBA_STATS8_SHADOW, default on; rollback NBA_STATS8_SHADOW=0): every forecast run records nba8-1 for
   all 8 stats on the walk-forward population (PrizePicks standard / Underdog balanced, both sides offered, full game, not
   promotional, game not started) into model/shadow.db shadow_forecasts only - never the canonical store or a member
-  route. shadow.settle scores them under model_version nba8-1 (admin grade-band report). One row per (offer record,
-  line, inputs): unchanged inputs are not re-written. Re-test before any NBA_STATS8=1: last pre-tip forecast per
+  route. The worker settles every PrizePicks / Underdog offer with a settlement spec (steals / blocks / combos included,
+  research_only or not), and shadow.settle scores each shadow row under model_version nba8-1 (admin grade-band report;
+  tested). One row per (offer record, line, inputs): a row already recorded is skipped before any model work, one PMF
+  per player-game-stat (~8-13 ms each locally); a cold first run on a full slate is ~10 ms x player-games x 8 stats
+  (production size not measured). Re-test before any NBA_STATS8=1: last pre-tip forecast per
   (player, game, stat, PrizePicks standard), graded A-C >= 100 rows, >= 20 games, hit >= 53% and game CI low > 50%.
 - NBA_STATS8=1 (not to be set without that forward pass): only the passed stat, and only on the tested population -
   a canonical forecast is written only for PrizePicks standard / Underdog balanced offers with both sides offered, and

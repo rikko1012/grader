@@ -376,6 +376,8 @@ def test_flag_on_letters_only_the_tested_population(tmp_path, monkeypatch):
                                     variant="main", sides=both))["record_id"]
         pm = store.put(con, h.offer(platform="polymarket", oid="pm:stl", stat="steals", line=1.5, source_stat="Steals",
                                     variant="main", sides=both))["record_id"]
+        alt = store.put(con, h.offer(platform="underdog", oid="ud:alt", stat="steals", line=2.5, source_stat="Steals",
+                                     variant="balanced"))["record_id"]       # tested line, no forecast of its own
         # each Underdog line has its OWN nba8-1 forecast (the suspended-Under line: one made for its Over side only)
         for rid, sides, side in ((ud2, ("over", "under"), "under"), (ud1, ("over",), "over")):
             store.put(con, h.forecast(line=1.5, stat="steals", offer_snapshot_ids=(rid,), model_version="nba8-1",
@@ -386,7 +388,50 @@ def test_flag_on_letters_only_the_tested_population(tmp_path, monkeypatch):
     qs = {q["r"]: q for q in _row_quotes(tmp_path / "on", "steals")}
     assert qs[pp].get("f") and (qs[pp].get("x") or {}).get("gr"), qs[pp]
     assert qs[ud2].get("f") and (qs[ud2].get("x") or {}).get("gr"), qs[ud2]
-    for rid in (ud1, fd, pm):
-        if rid in qs:
-            assert not qs[rid].get("f") and not (qs[rid].get("x") or {}).get("gr"), qs[rid]
-            assert not qs[rid].get("line_read"), qs[rid]
+    assert alt in qs and not qs[alt].get("line_read") and not qs[alt].get("f"), qs.get(alt)   # never read at a new line
+    for rid in (ud1, fd, pm):                                    # all three sit in the steals row (not vacuous)
+        assert rid in qs, (rid, sorted(qs))
+        assert not qs[rid].get("f") and not (qs[rid].get("x") or {}).get("gr"), qs[rid]
+        assert not qs[rid].get("line_read"), qs[rid]
+
+
+def test_shadow_rows_are_scored_by_shadow_settle(tmp_path):
+    """The worker settles every PrizePicks / Underdog offer whose market has a settlement spec (steals included, even
+    research_only); shadow.settle then scores the nba8-1 shadow row under its own model_version."""
+    from sports import settlement
+    from sports.model import shadow
+    with store.opened(tmp_path / "s.db") as con:
+        ev = h.event(status="final")
+        store.put(con, ev)
+        o = h.offer(oid="pp:stl", stat="steals", line=1.5, source_stat="Steals")
+        rid = store.put(con, o)["record_id"]
+        obs = {"stl": h.stat(part="stl", value=3.0)}
+        sts = settlement.settle_offer(o, obs, ev, "2026-10-24T03:30:00Z")
+        assert sts and all(x.status == "settled" or x.outcome for x in sts), sts
+        settlement.record(con, sts)
+        sh = shadow.db()
+        sh.execute("INSERT INTO shadow_forecasts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                   ("sid1", "nba8-1", "69e5e27b376e5485", "nba", "steals", o.event_id, o.player_id, rid, "prizepicks",
+                    1.5, "2026-10-23T20:00:00Z", ev.start_utc, 1.2, 0.45, 0.55, 0.0, "over,under", "under", 0.55,
+                    "C", "{}", 0, "[]", None))
+        sh.commit()
+        sh.close()
+        out = shadow.settle(con)
+    assert out["shadow_scored"] == 1, out
+    rows = [r for r in shadow.scorecard_rows() if r["model_version"] == "nba8-1"]
+    assert len(rows) == 1 and rows[0]["stat"] == "steals" and rows[0]["status"] == "loss", rows    # 3 > 1.5: Under lost
+
+
+def test_nba8_forecast_is_never_shared_or_read_at_another_line():
+    """Unit check of the two N10 sharing rules: an sm-1 forecast is shared / line-read as before; nba8-1 never is."""
+    from sports import snapshots
+    pmf = (0, [0.3, 0.4, 0.2, 0.1])
+    for mv, shared in (("sm-1", True), ("nba8-1", False)):
+        fcs = {"f": {"forecast_id": "f", "model_version": mv, "kind": "scout", "forecast_at": "2026-10-24T10:00:00Z",
+                     "line": 1.5, "detail": {"pmf": pmf}}}
+        row = {"quotes": [{"platform": "prizepicks", "line": 1.5, "forecast_id": "f", "gradable": True},
+                          {"platform": "fanduel", "line": 1.5, "forecast_id": None, "gradable": True},
+                          {"platform": "underdog", "line": 2.5, "forecast_id": None, "gradable": True}]}
+        assert snapshots.same_line_forecasts(row, fcs) == (1 if shared else 0), mv
+        snapshots.scout_line_reads(row, fcs)
+        assert bool(row["quotes"][2].get("line_read")) is shared, (mv, row["quotes"][2])
