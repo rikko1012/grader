@@ -1923,7 +1923,7 @@ def results_view(con, league, setts, now, base_meta, rows_only=False):
                     continue
                 if (getattr(fc, "scope", "full_game") or "full_game") != "full_game":
                     continue                            # S1/S2: quarter / half lines never count
-                if plat in ("underdog", "prizepicks") and one_sided_forecast(con, fc, os_cache):   # PP: os-2 FROM only
+                if (plat == "underdog" or (plat == "prizepicks" and grade_rules.pp_onesided_on()))                         and one_sided_forecast(con, fc, os_cache):     # os-2 PP: flag on + SPORTS_PP_ONESIDED_FROM only
                     continue                            # cap-2 (owner 2026-11-06): one-sided lines are not graded
                 seen.add(fid)
                 sides = {x.side: x for x in ss}

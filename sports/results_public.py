@@ -302,7 +302,9 @@ def _rows_from(con, league, setts):
         plats = sorted({s.platform for s in ss if getattr(s, "platform", None)})
         # cap-2 (owner 2026-11-06): a one-sided line is not graded, so a forecast saved for one is not in the record.
         # Read from the STORED offer variant, never today's offered sides (a suspended side never drops a line)
-        if any(p in PICKEM for p in plats) and snapshots.one_sided_forecast(con, fc, os_cache):
+        # os-2: a PrizePicks row is only looked at with SPORTS_PP_ONESIDED on (and then only from its FROM date);
+        # at the default the condition is main's exactly
+        if ("underdog" in plats or ("prizepicks" in plats and grade_rules.pp_onesided_on()))                 and snapshots.one_sided_forecast(con, fc, os_cache):
             continue
         outcome = None
         for s in ss:

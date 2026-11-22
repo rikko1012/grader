@@ -462,7 +462,8 @@ def test_record_drop_of_prizepicks_one_sided_forecasts_needs_the_flag_and_a_from
     from sports import snapshots, store
     pp = h.offer(sides=OVER_ONLY)
     ud = h.offer(platform="underdog", oid="ud:1", sides=OVER_ONLY, variant="one_sided")
-    offers = {"offer:prizepicks:pp:1:r1:a": pp, "offer:underdog:ud:1:r1:a": ud}
+    ud2 = h.offer(platform="underdog", oid="ud:2", sides=OVER_ONLY)        # standard, Under suspended right now
+    offers = {"offer:prizepicks:pp:1:r1:a": pp, "offer:underdog:ud:1:r1:a": ud, "offer:underdog:ud:2:r1:a": ud2}
     monkeypatch.setattr(store, "get", lambda con, rid: offers.get(rid))
 
     def fc(rid, at="2026-11-20T12:00:00Z"):
@@ -475,3 +476,9 @@ def test_record_drop_of_prizepicks_one_sided_forecasts_needs_the_flag_and_a_from
     monkeypatch.setenv("SPORTS_PP_ONESIDED_FROM", "2026-11-21T00:00:00Z")
     assert not snapshots.one_sided_forecast(None, pp_fc)                   # saved before FROM: kept
     assert snapshots.one_sided_forecast(None, fc("offer:prizepicks:pp:1:r1:a", "2026-11-21T06:00:00Z"))
+    mixed = h.forecast(forecast_at="2026-11-20T12:00:00Z", sides_available=("over",),
+                       offer_snapshot_ids=("offer:underdog:ud:2:r1:a", "offer:prizepicks:pp:1:r1:a"))
+    assert not snapshots.one_sided_forecast(None, mixed)                   # before FROM: kept
+    for k in ("SPORTS_PP_ONESIDED", "SPORTS_PP_ONESIDED_FROM"):
+        monkeypatch.delenv(k)
+    assert not snapshots.one_sided_forecast(None, mixed)                   # default: main's answer (kept)
