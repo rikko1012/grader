@@ -10,6 +10,7 @@ forward  a streaming offer cursor stayed open across store.put -> a concurrent b
          IMMEDIATE fail with SQLITE_BUSY_SNAPSHOT ("database is locked"). The run must survive and write the same."""
 import argparse
 import json
+import os
 import random
 import sqlite3
 import tracemalloc
@@ -170,6 +171,8 @@ def season(tmp_path):
 
 
 def test_results_public_file_is_identical_to_the_old_build(season, monkeypatch):
+    monkeypatch.setenv("SPORTS_LATEST_LINE", "0")        # audit_1121 rules off = the ecfa81a build exactly
+    monkeypatch.setenv("NBA_MVLEAN1", "0")
     with store.opened(read_only=True) as con:
         new = _built(con, monkeypatch, old=False)
         old = _built(con, monkeypatch, old=True)
@@ -218,6 +221,8 @@ def _hand_rows(seed=3):
 @pytest.mark.parametrize("seed", range(3))
 def test_results_public_ties_and_duplicates_keep_the_original_choice(monkeypatch, seed):
     """The spill build (SQL choices + streamed summaries) on hand-made rows equals the ecfa81a list build on them."""
+    monkeypatch.setenv("SPORTS_LATEST_LINE", "0")        # audit_1121 rules off = the ecfa81a build exactly
+    monkeypatch.setenv("NBA_MVLEAN1", "0")
     rows = _hand_rows(seed)
     monkeypatch.setattr(rp, "settlement_chunks", lambda con, lg: iter([[1], [2]] if lg == "nba" else []))
     halves = iter([rows[:70], rows[70:]])
@@ -228,6 +233,40 @@ def test_results_public_ties_and_duplicates_keep_the_original_choice(monkeypatch
     assert new == old
     nba = new["leagues"]["nba"]
     assert nba["head_to_head"]["rows"] and nba["recent"] and len(nba["models"]) == 4
+
+
+@pytest.mark.parametrize("seed", range(3))
+def test_spill_build_equals_the_list_rules_with_the_audit_1121_rules_on(monkeypatch, seed):
+    """SPORTS_LATEST_LINE + NBA_MVLEAN1 on: the spill build (SQL lat / opn tables) equals the list build when the list
+    build uses the current representative() and grades() (latest line + mvlean-1 open line)."""
+    monkeypatch.setenv("SPORTS_LATEST_LINE", "1")
+    monkeypatch.setenv("NBA_MVLEAN1", "1")               # default off: turned on here with an effective time
+    monkeypatch.setenv("NBA_MVLEAN1_FROM", "2026-01-01T00:00:00Z")
+    rows = _hand_rows(seed)
+    for i, r in enumerate(rows):                          # spread the runs so lines are superseded / moved
+        r["forecast_at"] = f"2026-11-01T{i % 24:02d}:00:00Z"
+    # one prop whose PrizePicks line moved +1.0 toward the Over Scout graded A: mvlean-1 shows it as Lean on the board,
+    # so the record's Grades table AND its recent list must say Lean (both builds)
+    base = dict(rows[0], event_id="nba:99", player_id="p-mv", stat="points", model="sm-1", platforms=["prizepicks"],
+                mean=24.0, p_over=0.66, p_under=0.34, research_only=True, status="settled", outcome="over",
+                lean="over", lean_result="win", lean_p=0.66, settled_at="2026-11-09T04:00:00Z", error=1.0)
+    rows += [dict(base, forecast_id="fc-mv-open", line=19.5, forecast_at="2026-10-31T00:00:00Z"),
+             dict(base, forecast_id="fc-mv-now", line=20.5, forecast_at="2026-11-02T00:00:00Z")]
+    monkeypatch.setattr(rp, "settlement_chunks", lambda con, lg: iter([[1], [2]] if lg == "nba" else []))
+    halves = iter([rows[:70], rows[70:]])
+    monkeypatch.setattr(rp, "_rows_from", lambda con, lg, setts: next(halves))
+    monkeypatch.setattr(rp_ref, "rows_for", lambda con, lg: list(rows) if lg == "nba" else [])
+    monkeypatch.setattr(rp_ref, "representative", rp.representative)
+    monkeypatch.setattr(rp_ref, "grades", rp.grades)
+    monkeypatch.setattr(rp_ref, "recent", rp.recent)      # mvlean-1: the recent list shows the board's Lean too
+    new = _built(None, monkeypatch, old=False)
+    old = _built(None, monkeypatch, old=True)
+    assert new == old
+    mv = [r for r in new["leagues"]["nba"]["recent"] if r["forecast_id"] == "fc-mv-now"]
+    assert mv and mv[0]["grade"] == "Lean" and mv[0].get("grade_why")       # recent list = the board's Lean
+    off = dict(os.environ, SPORTS_LATEST_LINE="0")
+    monkeypatch.setattr(os, "environ", off)
+    assert len(rp.representative(rows)) >= len([1 for _ in rp.one_per_prop(rp.representative(rows))])
 
 
 @pytest.mark.parametrize("seed", range(4))
@@ -798,9 +837,14 @@ def test_links_through_archived_offers_read_no_archive_file_and_match(monkeypatc
             assert snapshots.settled_forecast_links(con, setts)[0] == links
         assert decodes
         after = _built(con, monkeypatch, old=False)
-        old_after = _built(con, monkeypatch, old=True)
+        with monkeypatch.context() as m:                # the ecfa81a reference = the audit_1121 rules off
+            m.setenv("SPORTS_LATEST_LINE", "0")
+            m.setenv("NBA_MVLEAN1", "0")
+            after_off = _built(con, monkeypatch, old=False)
+            old_after = _built(con, monkeypatch, old=True)
         led1 = {lg: snapshots.write_results(con, lg, now=NOW, base=tmp_path / "b") for lg in ("nba", "nfl")}
-    assert after == before == old_after
+    assert after == before, "archive changed the record"
+    assert after_off == old_after
     assert led1 == led0
     for lg in ("nba", "nfl"):
         a = json.loads((tmp_path / "a" / lg / "results.json").read_text())

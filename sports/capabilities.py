@@ -102,16 +102,40 @@ def gradable_stats(league):
     if league != "nba":
         return base
     return base + tuple(sorted(nba_stats8_markets() - set(base)))
-ONE_SIDED_PLATFORMS = {"underdog"}
+ONE_SIDED_PLATFORMS = {"underdog", "prizepicks"}
+# os-2 (audit_1121 round 2, SPORTS_PP_ONESIDED default OFF - shadow, owner call; =1 turns it on): a PrizePicks line whose stored sides list ONE
+# side (allowed_wager_types "over" or "under") is one-sided too. PrizePicks has no per-side suspension - the adapter sets
+# a side's `offered` from the listing itself (sports/adapters.pp_offers) - so the listed sides ARE the line's type here.
+# Live 2026-11-21 these were "standard" More-only lines lettered on the unlisted Under (audit: Unders on PrizePicks lines
+# below Underdog's hit 44.6%, Overs above it 39.2%). The display bug alone (a letter on the UNLISTED side) is fixed by
+# grade_rules.side_hold (SPORTS_PP_SIDE_HOLD, default on), which leaves the listed side lettered and the line graded.
+PP_STANDARD = ("standard", None, "")
+
+
+def _pp_one_sided(get):
+    if get("platform") != "prizepicks" or get("variant") not in PP_STANDARD:
+        return False
+    from . import grade_rules
+    if not grade_rules.pp_onesided_on():
+        return False
+    on = set()
+    for x in get("sides") or ():
+        side = x.get("side") if isinstance(x, dict) else getattr(x, "side", None)
+        if (x.get("offered") if isinstance(x, dict) else getattr(x, "offered", False)):
+            on.add(side)
+    return len(on & {"over", "under"}) == 1
 
 
 def variant_of(offer):
-    """The line's stored type. 'one_sided' comes only from the adapter, which reads the sides Underdog LISTS (offered
+    """The line's stored type. 'one_sided' comes from the adapter, which reads the sides Underdog LISTS (offered
     or suspended), so a passing suspension of one side never changes the type (audit follow-up 2026-11-06: the
     earlier re-read of stored 'balanced' rows by OFFERED sides flipped a two-sided line to one_sided while one side
-    was suspended). offer = OfferSnapshot or an offer view dict."""
+    was suspended) - and (os-2) from a PrizePicks line that lists one side. offer = OfferSnapshot or an offer view dict."""
     get = offer.get if isinstance(offer, dict) else (lambda k, d=None: getattr(offer, k, d))
-    return get("variant")
+    v = get("variant")
+    if _pp_one_sided(get):
+        return "one_sided"
+    return v
 
 
 def is_ordinary(offer):

@@ -282,7 +282,7 @@ def build_forecast(o, rid, forecast_at, model_version, artifact_version, pmf, lo
     ks = np.arange(lo, lo + len(pmf))
     po, pu, pp = dists.line_probs(pmf, lo, o.line)
     sides = o.offered_sides()
-    pol = grade_policy.apply(po, pu, sides, vstate or _validation_state(model_version, o.stat))
+    pol = grade_policy.apply(po, pu, sides, vstate or _validation_state(model_version, o.stat), mean=mean, line=o.line)
     dec = 1 - pp
     med = float(dists.quantile(pmf[None, :], ks.astype(float), 0.5)[0])
     fc = Forecast.build(

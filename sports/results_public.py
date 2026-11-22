@@ -54,7 +54,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from . import snapshots, store
+from . import grade_rules, snapshots, store
 from .contracts import now_utc
 
 VERSION = "rp-2"
@@ -302,7 +302,9 @@ def _rows_from(con, league, setts):
         plats = sorted({s.platform for s in ss if getattr(s, "platform", None)})
         # cap-2 (owner 2026-11-06): a one-sided line is not graded, so a forecast saved for one is not in the record.
         # Read from the STORED offer variant, never today's offered sides (a suspended side never drops a line)
-        if "underdog" in plats and snapshots.one_sided_forecast(con, fc, os_cache):
+        # os-2: a PrizePicks row is only looked at with SPORTS_PP_ONESIDED on (and then only from its FROM date);
+        # at the default the condition is main's exactly
+        if ("underdog" in plats or ("prizepicks" in plats and grade_rules.pp_onesided_on()))                 and snapshots.one_sided_forecast(con, fc, os_cache):
             continue
         outcome = None
         for s in ss:
@@ -349,11 +351,68 @@ def _closeness(r):
 
 
 def representative(rows):
-    """rp-2 steps 1-3: one forecast per (game, player, stat, model) - see the module doc."""
-    newest = {}
+    """rp-2 steps 1-3: one forecast per (game, player, stat, model) - see the module doc. SPORTS_LATEST_LINE (default
+    off; grade_rules.latest_line_on): when on, only lines that are their book's latest (current_lines) can be chosen."""
+    newest, latest, opens = {}, {}, {}
     for r in rows:
         _rep_newest_add(newest, r)
-    return _rep_select(newest)
+        _latest_add(latest, r)
+        _open_add(opens, r)
+    cur = _current_set(latest)
+    newest = {k: r for k, r in newest.items()
+              if (k[:4], k[4]) in cur or not grade_rules.latest_line_on(str(k[0]).split(":", 1)[0])}
+    out = _rep_select(newest)
+    for r in out:
+        r["mv_open"] = _open_of(opens, r)
+    return out
+
+
+def _open_keys(r):
+    """mvlean-1: (game, player, stat, platform) keys of an sm-1 pick'em row, else []."""
+    if r.get("model") != "sm-1":
+        return []
+    return [(r["event_id"], r["player_id"], r["stat"], p) for p in (r.get("platforms") or ()) if p in PICKEM]
+
+
+def _open_add(opens, r):
+    """mvlean-1: the first sm-1 forecast's line per (game, player, stat, platform) (grade_rules.OpenLines' key)."""
+    fa = r.get("forecast_at") or ""
+    for k in _open_keys(r):
+        if k not in opens or (fa, r["forecast_id"]) < opens[k][1:]:
+            opens[k] = (float(r["line"]), fa, r["forecast_id"])
+
+
+def _open_of(opens, r):
+    """The open line for a representative row (its single pick'em platform), or None."""
+    ks = [k for k in _open_keys(r) if k in opens]
+    return opens[ks[0]][0] if len(ks) == 1 else None
+
+
+def _plat_keys(r):
+    """(game, player, stat, model, platform) for each platform a row settled on (one key with platform None if none)."""
+    k4 = (r["event_id"], r["player_id"], r["stat"], r.get("model"))
+    return [k4 + (p,) for p in (r.get("platforms") or [None])]
+
+
+def _latest_add(latest, r):
+    """SPORTS_LATEST_LINE: {(game, player, stat, model, platform): {line: newest forecast_at}} - a book's latest line is
+    the line of its newest forecast (several lines at that same newest time are all current)."""
+    ln, fa = round(float(r["line"]), 3), r.get("forecast_at") or ""
+    for kp in _plat_keys(r):
+        d = latest.setdefault(kp, {})
+        if fa > d.get(ln, ""):
+            d[ln] = fa
+
+
+def _current_set(latest):
+    """-> {((game, player, stat, model), line)} for every line that is some platform's latest line."""
+    out = set()
+    for kp, d in latest.items():
+        top = max(d.values())
+        for ln, fa in d.items():
+            if fa == top:
+                out.add((kp[:4], ln))
+    return out
 
 
 def _rep_key(r):
@@ -585,8 +644,9 @@ class Grades:
         from . import board_view
         if not (r["status"] == "settled" and r["lean"] and not _contained(self.league, r.get("stat"))):
             return
-        b = self.g.get(board_view.research_grade(r["p_over"] if r["lean"] == "over" else r["p_under"],
-                                                 self.league, r.get("stat")))
+        g = board_view.research_grade(r["p_over"] if r["lean"] == "over" else r["p_under"], self.league, r.get("stat"))
+        g = grade_rules.shown_letter(self.league, r, g)     # mvlean-1 (default off): the board's Lean (= recent())
+        b = self.g.get(g)
         if b is None:
             return
         res = r["lean_result"]
@@ -660,12 +720,13 @@ def recent(rows, names=None, n=RECENT_N, league=None):
     out = []
     for r in sorted(best.values(), key=lambda x: (x.get("settled_at") or "", x["forecast_id"]), reverse=True)[:n]:
         p_side = r["p_over"] if r["lean"] == "over" else r["p_under"]
+        g0 = None if _contained(league, r.get("stat")) else board_view.research_grade(p_side, league, r["stat"])
+        g = grade_rules.shown_letter(league, r, g0)     # mvlean-1 (default off): the board's Lean, as the Grades table
         out.append({"forecast_id": r["forecast_id"], "model": r["model"], "event_id": r["event_id"],
                     "player_id": r["player_id"], "player": (names or {}).get(r["player_id"]), "stat": r["stat"],
                     "line": r["line"], "side": r["lean"], "result": r["lean_result"], "outcome": r["outcome"],
                     "actual": r.get("actual"), "p_side": _r(p_side),
-                    "grade": None if _contained(league, r.get("stat")) else board_view.research_grade(p_side, league,
-                                                                                                       r["stat"]),
+                    "grade": g, **({"grade_why": grade_rules.MV_WHY} if g != g0 else {}),
                     "settled_at": r.get("settled_at"), "forecast_at": r.get("forecast_at")})
     return out
 
@@ -719,7 +780,12 @@ def _league(con, lg, now):
 # row dicts. The file is identical to the list build's (sports/tests/test_sports_jobs_1108.py, against ecfa81a).
 _SPILL_SCHEMA = (
     # rp-2 step 1: newest forecast per (game, player, stat, model, line); k_seq = the key's first arrival (dict order)
-    "CREATE TABLE rep (k TEXT PRIMARY KEY, k_seq INTEGER, fa TEXT, fid TEXT, r0 INTEGER, r1 REAL, k4 TEXT, blob BLOB)",
+    "CREATE TABLE rep (k TEXT PRIMARY KEY, k_seq INTEGER, fa TEXT, fid TEXT, r0 INTEGER, r1 REAL, k4 TEXT, blob BLOB, "
+    "ln REAL)",
+    # SPORTS_LATEST_LINE: newest forecast time per (game, player, stat, model, platform) and line (= _latest_add)
+    "CREATE TABLE lat (kp TEXT, k4 TEXT, ln REAL, fa TEXT, PRIMARY KEY (kp, ln))",
+    # mvlean-1: the first sm-1 forecast per (game, player, stat, platform) and its line (= _open_add)
+    "CREATE TABLE opn (k TEXT PRIMARY KEY, fa TEXT, fid TEXT, ln REAL)",
     # head_to_head's newest per (game, player, stat, line, model) of settled / void rows (first row kept on a tie)
     "CREATE TABLE hh (k TEXT PRIMARY KEY, k_seq INTEGER, fa TEXT, prefix TEXT, k4m TEXT, ln REAL, mkt INTEGER, "
     "blob BLOB)",
@@ -732,7 +798,11 @@ _SPILL_SCHEMA = (
     # walk joined to the blobs: the sorts carry only the keys, never the row blobs
     "CREATE TABLE ord (pos INTEGER PRIMARY KEY, id INTEGER)",
 )
-_REP_UPSERT = ("INSERT INTO rep VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(k) DO UPDATE SET fa=excluded.fa, fid=excluded.fid, "
+_OPN_UPSERT = ("INSERT INTO opn VALUES (?,?,?,?) ON CONFLICT(k) DO UPDATE SET fa=excluded.fa, fid=excluded.fid, "
+               "ln=excluded.ln WHERE excluded.fa < opn.fa OR (excluded.fa = opn.fa AND excluded.fid < opn.fid)")
+_LAT_UPSERT = ("INSERT INTO lat VALUES (?,?,?,?) ON CONFLICT(kp, ln) DO UPDATE SET fa=excluded.fa "
+               "WHERE excluded.fa > lat.fa")
+_REP_UPSERT = ("INSERT INTO rep VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(k) DO UPDATE SET fa=excluded.fa, fid=excluded.fid, "
                "r0=excluded.r0, r1=excluded.r1, blob=excluded.blob "
                "WHERE excluded.fa > rep.fa OR (excluded.fa = rep.fa AND excluded.fid > rep.fid)")   # = _rep_newest_add
 _HH_UPSERT = ("INSERT INTO hh VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(k) DO UPDATE SET fa=excluded.fa, blob=excluded.blob "
@@ -753,9 +823,12 @@ def league_block(con, lg, now, rows):
         raw = _spill_rows(sp, rows)
         # rp-2 steps 2-3 (_rep_order): newest first, then a stable sort on (source rank, closeness), ties on the forecast
         # id, then the key's arrival; the first row per (game, player, stat, model) is its representative
+        # SPORTS_LATEST_LINE: only a line that is some book's latest (_current_set) can be the representative
+        cur = ("WHERE (k4, ln) IN (SELECT k4, ln FROM (SELECT k4, ln, fa, MAX(fa) OVER (PARTITION BY kp) AS top "
+               "FROM lat) WHERE fa = top)") if grade_rules.latest_line_on(lg) else ""
         reps = _ordered(sp, "rep", "SELECT id FROM (SELECT rowid AS id, r0, r1, fa, fid, k_seq, ROW_NUMBER() OVER "
-                                   "(PARTITION BY k4 ORDER BY r0, r1, fa DESC, fid, k_seq) AS rn FROM rep) WHERE rn = 1 "
-                                   "ORDER BY r0, r1, fa DESC, fid, k_seq")
+                                   "(PARTITION BY k4 ORDER BY r0, r1, fa DESC, fid, k_seq) AS rn FROM rep " + cur +
+                                   ") WHERE rn = 1 ORDER BY r0, r1, fa DESC, fid, k_seq")
         rank = _model_rank()
         models, research = {}, {}
         batch_opp, batch_own, batch_lines = [], [], []
@@ -795,6 +868,11 @@ def league_block(con, lg, now, rows):
             acc.add(r)
             cal.add(r)
             bnd.add(r)
+            if lg == "nba" and r.get("model") == "sm-1":    # mvlean-1: the open line of the row's single pick'em book
+                oks = _open_keys(r)
+                got = sp.execute("SELECT ln FROM opn WHERE k = ?", (repr(oks[0]),)).fetchone() if len(oks) == 1 else None
+                r["mv_open"] = got[0] if got else None
+                blob = spill.pack(r)                    # recent() reads this blob: it carries mv_open too
             grd.add(r)
             batch_cal.append((pos, r.get("settled_at"), r.get("lean_result")))
             if r["status"] == "settled" and r["lean"]:
@@ -840,7 +918,7 @@ def _spill_rows(sp, rows):
     from . import spill
     n = settled = leans = 0
     games = set()
-    rep_b, hh_b = [], []
+    rep_b, hh_b, lat_b = [], [], []
     for r in rows:
         n += 1
         if r["status"] == "settled":
@@ -850,7 +928,11 @@ def _spill_rows(sp, rows):
         blob = spill.pack(r)
         k = _rep_key(r)
         rep_b.append((repr(k), n, r.get("forecast_at") or "", r["forecast_id"], _source_rank(r), _closeness(r),
-                      repr(k[:4]), blob))
+                      repr(k[:4]), blob, k[4]))
+        for kp in _plat_keys(r):
+            lat_b.append((repr(kp), repr(k[:4]), k[4], r.get("forecast_at") or ""))
+        for ok in _open_keys(r):
+            lat_b.append(("opn", repr(ok), r.get("forecast_at") or "", r["forecast_id"], float(r["line"])))
         hk = _hh_key(r)
         if hk is not None:
             ev, pid, st, ln, mv = hk
@@ -858,14 +940,18 @@ def _spill_rows(sp, rows):
                          repr((ev, pid, st, r.get("model") or r.get("model_version") or "")), ln,
                          1 if _is_market(mv) else 0, blob))
         if len(rep_b) >= _SPILL_BATCH:
-            _flush_spill(sp, rep_b, hh_b)
-    _flush_spill(sp, rep_b, hh_b)
+            _flush_spill(sp, rep_b, hh_b, lat_b)
+    _flush_spill(sp, rep_b, hh_b, lat_b)
     return {"forecasts": n, "settled": settled, "leans": leans, "games": len(games),
             "per_game": round(settled / max(1, len(games)), 1)}
 
 
-def _flush_spill(sp, rep_b, hh_b):
+def _flush_spill(sp, rep_b, hh_b, lat_b=None):
     # executemany applies the rows in order, so a later row of a key meets the earlier one as the list build does
+    if lat_b:
+        sp.executemany(_LAT_UPSERT, [x for x in lat_b if x[0] != "opn"])
+        sp.executemany(_OPN_UPSERT, [x[1:] for x in lat_b if x[0] == "opn"])
+        lat_b.clear()
     if rep_b:
         sp.executemany(_REP_UPSERT, rep_b)
         rep_b.clear()

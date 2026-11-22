@@ -242,10 +242,10 @@
     var s = side === "over" ? "Over" : side === "under" ? "Under" : "";
     return (g === "Lean" ? "Lean" : g) + (s ? " " + s : "");
   }
-  function gradeHtml(g, side, nv) {               // nv: the contained wording (only while a league is contained)
-    if (!g) return "";
+  function gradeHtml(g, side, nv, why) {          // nv: the contained wording (only while a league is contained)
+    if (!g) return "";                            // why: the server's reason a Lean sits in a letter band (mvlean-1 x.mw)
     var e = function (x) { return String(x).replace(/[&<>"']/g, function (c) { return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]; }); };
-    return '<span class="sw-grade sw-grade-' + (g === "Lean" ? "lean" : g.toLowerCase()) + '" data-grade="' + e(g) + '" title="' + e(GRADE_TAG + " (" + GRADE_BANDS + "). Stake 0.") + '">' +
+    return '<span class="sw-grade sw-grade-' + (g === "Lean" ? "lean" : g.toLowerCase()) + '" data-grade="' + e(g) + '" title="' + e(GRADE_TAG + " (" + GRADE_BANDS + "). " + (g === "Lean" && why ? why + ". " : "") + "Stake 0.") + '">' +
       e(gradeWords(g, side)) + "</span>" + (nv ? ' <span class="sw-grade-nv">' + e(nv) + "</span>" : "");
   }
 

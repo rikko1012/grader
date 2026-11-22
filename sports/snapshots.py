@@ -46,7 +46,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from . import (availability, board_view, cache, capabilities, config, context_reconcile, fair, flags, forecast_detail, game_lines,
-               identity, market_view, markets, role_display, scout_chance, store)
+               grade_rules, identity, market_view, markets, role_display, scout_chance, store)
 from .names import team_abbr
 from .contracts import (ContractError, Event, Membership, SourceId, StatObservation, from_dict, now_utc, parse_utc,
                         utc)
@@ -765,7 +765,9 @@ def build(con, league, now=None, base=None, history=True, results=True):
     # (offer, model) - the only ones _choose can pick - so memory follows offers x models, not every forecast ever
     # made on the slate (model-forward re-forecasts every 30 min)
     best = {}
+    opens = grade_rules.OpenLines()                         # mvlean-1: first sm-1 line per (game, player, stat, platform)
     for fc in _all_forecasts(con, league, now, ev_ids):
+        opens.add(fc)
         for orid in fc.offer_snapshot_ids:
             if orid in by_rid:
                 hit = (fc, orid, None)
@@ -1078,7 +1080,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
 
     stage("slate+board files")
     # players
-    n_players = 0
+    n_players = n_featured = 0
     pl_dir, hi_dir = root / "players", root / "history"
     ctx_by_pid, ctx_summary = _engine_context(league, fam, now, pids, markets_rows, events, cur_team, root)
     manifest["player_context"] = ctx_summary
@@ -1116,9 +1118,12 @@ def build(con, league, now=None, base=None, history=True, results=True):
                                    av_lineup.get((pid, str(r["event_id"]).rsplit(":", 1)[-1])))
             if av:
                 av_held[av] = av_held.get(av, 0) + 1
-            log = guard_row(league, r, forecasts, vrows.get(r["key"]) if history else None, now, avail=av)
+            log = guard_row(league, r, forecasts, vrows.get(r["key"]) if history else None, now, avail=av, opens=opens)
             if events[r["event_id"]][1].start_utc > now:      # the admin log lists games still on the board
                 sanity_log.extend(log)
+        # bp-1 (display only): this player's featured best prop per game, before the player file is written, so the
+        # card and the board carry the same mark (the rows are the board's own row objects)
+        n_featured += grade_rules.feature_best(league, rows)
         tid = cur_team.get(pid)
         mates_out = []
         for mate in sorted(team_players.get(tid, ())):
@@ -1158,6 +1163,15 @@ def build(con, league, now=None, base=None, history=True, results=True):
         _write(hi_dir / f"{safe_name(pid)}.json", {**base_meta, "player_id": pid, "family": fam, "games": games})
         n_players += 1
     sizes["board_view"] = view_out.close()
+    # bp-1 (display only): one featured best prop per NBA player and game, from the guarded signals (grade_rules)
+    manifest["grade_rules"] = {"mvlean": {"version": grade_rules.MVLEAN_VERSION, "on": grade_rules.mvlean_on(league),
+                                          "from": grade_rules.mvlean_from(),
+                                          "open_keys": len(opens)},
+                               "pp_side_hold": grade_rules.pp_side_hold_on(), "pp_onesided": grade_rules.pp_onesided_on(),
+                               "gp_side_fix": grade_rules.side_fix_on(),
+                               "best_prop": {"version": grade_rules.BEST_VERSION, "on": grade_rules.best_prop_on(league),
+                                             "featured": n_featured}}
+    manifest["grade_rules"]["marks"] = write_grade_marks(root, base_meta, board_rows)
     # board files AFTER the player pass: each quote carries its guard result (x) computed with the player's history
     prim = [r for r in board_rows if r["primary"]]
     sec = [r for r in board_rows if not r["primary"]]
@@ -1260,7 +1274,7 @@ def _view_push(q, forecasts, fid):
     return (q.get("line_read") or {}).get("pp") or 0.0
 
 
-def guard_row(league, row, forecasts, view_row, now, avail=None):
+def guard_row(league, row, forecasts, view_row, now, avail=None, opens=None):
     """Row signal for every quote of one market row with a Scout view (sports/board_view.quote_x): q["x"] = a hold
     {"b", "t", "v"} (vg-1 gate / sg-1 sanity: no lean, edge, confidence or edge rank anywhere - board, sheets, slip
     pool) or the cf-2 signal {"ln", "pl", "e", "g", "c", "cw", "s", "n", "v"}. -> sanity log entries (sg-1 holds with
@@ -1296,6 +1310,10 @@ def guard_row(league, row, forecasts, view_row, now, avail=None):
                                      now=now, platform=q.get("platform"), own_po=board_view.own_chance(q))
         if avail:                                        # av-1: ruled out / inactive - no side, letter, stake or leg
             x, code = availability.x_of(avail), avail
+        else:
+            x = grade_rules.side_hold(q, x) or x         # os-2 (SPORTS_PP_SIDE_HOLD): no letter on a side PP does not list
+            grade_rules.mark_quote(league, row, q, x, opens,    # mvlean-1 (NBA, default off): moved toward Scout's side
+                                   (forecasts.get(fid or "") or {}).get("forecast_at"))   # -> Lean (same test as the record)
         q["x"] = x
         if code:
             out.append({"at": now, "event_id": row["event_id"], "key": row["key"], "player": row.get("player"),
@@ -1309,6 +1327,20 @@ def guard_row(league, row, forecasts, view_row, now, avail=None):
 
 SANITY_MAX = 3000
 SANITY_LOG_MAX_BYTES = 8 * 1024 * 1024
+
+
+def write_grade_marks(root, base_meta, board_rows):
+    """<root>/grade_marks.json = {record_id: {gr, bp, mr, b, ln}} for every pick'em quote a grade_rules rule touched
+    (mvlean-1 Lean, os-2 side hold, bp-1 featured) - read by the slip pool and tracked picks so they carry the board's
+    own letter. -> manifest summary."""
+    marks = grade_rules.marks_of(board_rows)
+    try:
+        _write(root / "grade_marks.json", {**base_meta, "marks": marks})
+    except OSError as e:                                 # never breaks the snapshot
+        return {"error": type(e).__name__}
+    return {"quotes": len(marks), "mvlean": sum(1 for v in marks.values() if v.get("mr")),
+            "side_held": sum(1 for v in marks.values() if v.get("b") == "side"),
+            "featured": sum(1 for v in marks.values() if v.get("bp"))}
 
 
 def write_cal_index(root, base_meta, board_rows):
@@ -1879,9 +1911,16 @@ def one_sided_forecast(con, fc, cache=None):
                 o = store.get(con, orid)
             except Exception:                           # noqa: BLE001 - an unreadable revision is not evidence
                 o = None
-            cache[orid] = bool(o is not None and getattr(o, "KIND", None) == "offer" and capabilities.is_one_sided(o))
-        if cache[orid]:
+            if o is None or getattr(o, "KIND", None) != "offer" or not capabilities.is_one_sided(o):
+                cache[orid] = None
+            elif getattr(o, "variant", None) == "one_sided":
+                cache[orid] = "stored"                  # cap-2: the adapter stored it one-sided (Underdog) - main's rule
+            else:
+                cache[orid] = "pp"                      # os-2 reclassification (SPORTS_PP_ONESIDED on)
+        if cache[orid] == "stored":
             return True
+        if cache[orid] == "pp" and grade_rules.pp_onesided_record_drop(getattr(fc, "forecast_at", None)):
+            return True                                 # os-2: only forecasts at / after SPORTS_PP_ONESIDED_FROM
     return False
 
 
@@ -1903,7 +1942,7 @@ def results_view(con, league, setts, now, base_meta, rows_only=False):
                     continue
                 if (getattr(fc, "scope", "full_game") or "full_game") != "full_game":
                     continue                            # S1/S2: quarter / half lines never count
-                if plat == "underdog" and one_sided_forecast(con, fc, os_cache):
+                if (plat == "underdog" or (plat == "prizepicks" and grade_rules.pp_onesided_on()))                         and one_sided_forecast(con, fc, os_cache):     # os-2 PP: flag on + SPORTS_PP_ONESIDED_FROM only
                     continue                            # cap-2 (owner 2026-11-06): one-sided lines are not graded
                 seen.add(fid)
                 sides = {x.side: x for x in ss}
