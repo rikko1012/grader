@@ -569,6 +569,8 @@ def record_of(lg, doc, m, q, view):
                      "over": _side_prices(q, 0), "under": _side_prices(q, 1), "moved_from": None, "moved_at": None},
            "scout": {"side": lean, "read_rev": read_rev(lean, sc, held, grade), "p_side": side_p, "p_over": sc["po"] if sc else None, "p_under": sc["pu"] if sc else None, "p_push": sc["pp"] if sc else None,
                      "projection": sc.get("mu") if sc else None, "range80": sc.get("iv") if sc else None, "grade": grade, "units": 0 if grade else None, "stake_reason": "Stakes remain 0." if grade else None,
+                     # bp-1 (NBA_BEST_PROP, display only): Sports marked this quote the player's featured best prop
+                     "featured": bool(signal.get("bp")) and grade in ("A", "B", "C"),
                      "hold": hold, "model_version": sc.get("model") if sc else None, "forecast_at": sc.get("at") if sc else None,
                      "validation": {"kind": "research", "label": "Scout grade" if grade else (one or HOLD_LABEL),
                                     "detail": "Scout grade. Stakes remain 0." if grade else reason}},

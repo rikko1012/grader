@@ -28,7 +28,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .. import board_view
+from .. import board_view, capabilities
 from . import cal, evaluate, grade_policy
 
 VERSION = "gc-1"
@@ -170,7 +170,7 @@ def _attach_store(scon, rows, meta):
             except Exception:                           # noqa: BLE001 - an archived / unreadable revision
                 o = None
             if o is not None and getattr(o, "KIND", None) == "offer":
-                r["variant"] = o.variant
+                r["variant"] = capabilities.variant_of(o)
                 r["promo"] = bool(o.promotional)
                 n_off += 1
         ev = r.get("event")

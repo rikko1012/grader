@@ -79,7 +79,10 @@ def export(data_dir, league, model_version='sm-1'):
                              'p':getattr(fc,'p_'+side)/dec,'market_p':None,'published_p':published,
                              'status':r['outcome'] if r['outcome'] in ('push','void') else 'win' if r['outcome']==side else 'loss',
                              'forecast_at':fc.forecast_at,'start_at':event.start_utc,'settled_at':r['settled_at'],
-                             'settlement_id':r['settlement_id']}
+                             'settlement_id':r['settlement_id'],
+                             # audit_1121 round 2: the sides the line listed when forecast (an offer-forced side is
+                             # one where only the side the model disfavours was listed)
+                             'sides_offered':sorted(fc.sides_available or ())}
     finally:
         learning.close(); canonical.close()
         if shown: shown.close()

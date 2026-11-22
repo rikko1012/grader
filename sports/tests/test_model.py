@@ -182,9 +182,11 @@ def test_grade_policy_bands_states_and_unavailable_sides():
     g = grade_policy.apply(0.62, 0.38, ("over", "under"))
     assert g["band"] == "A" and g["grade"] is None and g["stake_units"] == 0.0
     assert g["label"] == grade_policy.TEXT_UNVALIDATED and "not forward-validated" in g["stake_reason"]
-    g = grade_policy.apply(0.30, 0.70, ("over",))           # Under not offered -> Over is the only side
-    assert g["chosen_side"] == "over" and g["band"] == "Lean" and g["sides"]["under"]["available"] is False
-    assert g["sides"]["under"]["p"] is None
+    g = grade_policy.apply(0.30, 0.70, ("over",))           # Under not offered and the model favours it:
+    assert g["chosen_side"] is None and g["grade"] is None    # no side, letter or Lean (SPORTS_GP_SIDE_FIX, audit_1121)
+    assert g["sides"]["under"]["available"] is False and g["sides"]["under"]["p"] is None
+    g = grade_policy.apply(0.70, 0.30, ("over",))           # Under not offered, Over favoured -> Over is the only side
+    assert g["chosen_side"] == "over" and g["band"] == "A"
     g = grade_policy.apply(0.58, 0.42, ("over", "under"), "forward-validated", ("thin_history",), True)
     assert g["grade"] == "B" and g["stake_units"] == 0.0 and "thin_history" in g["stake_reason"]   # 0U keeps letter
     assert grade_policy.band(0.5345) == "C" and grade_policy.band(0.5344) == "Lean"

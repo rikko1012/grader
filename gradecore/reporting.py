@@ -35,7 +35,10 @@ def comparisons(path, sport, before=None, limit=100):
                     'old_letter': item.get('old_letter'), 'old_p': item.get('old_p'),
                     'sides': sides, 'policy': item['candidate']['policy'],
                     'market': item['candidate'].get('market'),      # the saved quote used, or None (model alone)
-                    'artifact_hash': item['artifact_hash']})
+                    'artifact_hash': item['artifact_hash'],
+                    # the line's stored type and listed sides (captured since audit_1121 round 2; None before)
+                    'variant': (item.get('listing') or {}).get('variant'),
+                    'sides_offered': (item.get('listing') or {}).get('sides_offered')})
     return {'sport': sport, 'rows': out, 'state': 'capturing' if out else 'awaiting_capture',
             'started_at': first[0] if first else None,
             'next_before': rows[-1][0] if len(rows) == limit else None,

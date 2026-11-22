@@ -446,7 +446,7 @@ export function mount(C) {
     if(s.hold) return holdChip(s);
     if(s.letter_held&&s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span><small class="h-grade-tag">0U</small>`;   /* lc-1: held letter */
     if(s.line_chance&&s.side) return '<span class="h-grade-text h-line-chance" title="Scout\u2019s chance at this line">Chance at this line</span>';   /* short on the row (follow-up 2026-11-06: was cut off); the card keeps the full sentence */   /* audit 2026-11-05: another book's line, same saved distribution */
-    if(s.grade) return `<span class="h-grade h-grade-${/^A/.test(s.grade)?'a':/^B/.test(s.grade)?'b':'c'}">${esc(s.grade)}</span>`;
+    if(s.grade) return `<span class="h-grade h-grade-${/^A/.test(s.grade)?'a':/^B/.test(s.grade)?'b':'c'}">${esc(s.grade)}</span>${s.featured?'<small class="h-grade-tag h-best-prop" title="Scout’s best prop for this player in this game (highest chance among the lettered lines)">Best prop</small>':''}`;   /* bp-1 (NBA_BEST_PROP): display only */
     if(s.side) return `<span class="h-grade-text">Lean ${sideWord(s.side)}</span>`;
     return '';
   }

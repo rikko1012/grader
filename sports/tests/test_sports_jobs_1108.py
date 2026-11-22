@@ -10,6 +10,7 @@ forward  a streaming offer cursor stayed open across store.put -> a concurrent b
          IMMEDIATE fail with SQLITE_BUSY_SNAPSHOT ("database is locked"). The run must survive and write the same."""
 import argparse
 import json
+import os
 import random
 import sqlite3
 import tracemalloc
@@ -170,6 +171,8 @@ def season(tmp_path):
 
 
 def test_results_public_file_is_identical_to_the_old_build(season, monkeypatch):
+    monkeypatch.setenv("SPORTS_LATEST_LINE", "0")        # audit_1121 rules off = the ecfa81a build exactly
+    monkeypatch.setenv("NBA_MVLEAN1", "0")
     with store.opened(read_only=True) as con:
         new = _built(con, monkeypatch, old=False)
         old = _built(con, monkeypatch, old=True)
@@ -218,6 +221,8 @@ def _hand_rows(seed=3):
 @pytest.mark.parametrize("seed", range(3))
 def test_results_public_ties_and_duplicates_keep_the_original_choice(monkeypatch, seed):
     """The spill build (SQL choices + streamed summaries) on hand-made rows equals the ecfa81a list build on them."""
+    monkeypatch.setenv("SPORTS_LATEST_LINE", "0")        # audit_1121 rules off = the ecfa81a build exactly
+    monkeypatch.setenv("NBA_MVLEAN1", "0")
     rows = _hand_rows(seed)
     monkeypatch.setattr(rp, "settlement_chunks", lambda con, lg: iter([[1], [2]] if lg == "nba" else []))
     halves = iter([rows[:70], rows[70:]])
@@ -228,6 +233,29 @@ def test_results_public_ties_and_duplicates_keep_the_original_choice(monkeypatch
     assert new == old
     nba = new["leagues"]["nba"]
     assert nba["head_to_head"]["rows"] and nba["recent"] and len(nba["models"]) == 4
+
+
+@pytest.mark.parametrize("seed", range(3))
+def test_spill_build_equals_the_list_rules_with_the_audit_1121_rules_on(monkeypatch, seed):
+    """SPORTS_LATEST_LINE + NBA_MVLEAN1 on: the spill build (SQL lat / opn tables) equals the list build when the list
+    build uses the current representative() and grades() (latest line + mvlean-1 open line)."""
+    monkeypatch.delenv("SPORTS_LATEST_LINE", raising=False)
+    monkeypatch.delenv("NBA_MVLEAN1", raising=False)
+    rows = _hand_rows(seed)
+    for i, r in enumerate(rows):                          # spread the runs so lines are superseded / moved
+        r["forecast_at"] = f"2026-11-01T{i % 24:02d}:00:00Z"
+    monkeypatch.setattr(rp, "settlement_chunks", lambda con, lg: iter([[1], [2]] if lg == "nba" else []))
+    halves = iter([rows[:70], rows[70:]])
+    monkeypatch.setattr(rp, "_rows_from", lambda con, lg, setts: next(halves))
+    monkeypatch.setattr(rp_ref, "rows_for", lambda con, lg: list(rows) if lg == "nba" else [])
+    monkeypatch.setattr(rp_ref, "representative", rp.representative)
+    monkeypatch.setattr(rp_ref, "grades", rp.grades)
+    new = _built(None, monkeypatch, old=False)
+    old = _built(None, monkeypatch, old=True)
+    assert new == old
+    off = dict(os.environ, SPORTS_LATEST_LINE="0")
+    monkeypatch.setattr(os, "environ", off)
+    assert len(rp.representative(rows)) >= len([1 for _ in rp.one_per_prop(rp.representative(rows))])
 
 
 @pytest.mark.parametrize("seed", range(4))
@@ -798,9 +826,14 @@ def test_links_through_archived_offers_read_no_archive_file_and_match(monkeypatc
             assert snapshots.settled_forecast_links(con, setts)[0] == links
         assert decodes
         after = _built(con, monkeypatch, old=False)
-        old_after = _built(con, monkeypatch, old=True)
+        with monkeypatch.context() as m:                # the ecfa81a reference = the audit_1121 rules off
+            m.setenv("SPORTS_LATEST_LINE", "0")
+            m.setenv("NBA_MVLEAN1", "0")
+            after_off = _built(con, monkeypatch, old=False)
+            old_after = _built(con, monkeypatch, old=True)
         led1 = {lg: snapshots.write_results(con, lg, now=NOW, base=tmp_path / "b") for lg in ("nba", "nfl")}
-    assert after == before == old_after
+    assert after == before, "archive changed the record"
+    assert after_off == old_after
     assert led1 == led0
     for lg in ("nba", "nfl"):
         a = json.loads((tmp_path / "a" / lg / "results.json").read_text())

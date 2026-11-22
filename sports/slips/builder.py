@@ -384,7 +384,7 @@ def _slip_id(platform, entry_type, legs):
 LEG_FIELDS = ("leg_id", "platform", "league", "offer_id", "record_id", "forecast_id", "model_version", "event_id",
               "event_ref", "player_id", "player", "team", "stat", "stat_label", "scope", "line", "side", "side_word",
               "variant", "multiplier", "start_utc", "last_seen_at", "source_time_unknown", "p_win", "p_loss", "p_push",
-              "grade", "stake_units", "research_only", "prop_keys", "research_grade")
+              "grade", "stake_units", "research_only", "prop_keys", "research_grade", "featured")
 
 
 def slip_view(platform, entry_type, legs):

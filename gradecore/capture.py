@@ -22,6 +22,12 @@ def _artifact(path, mtime):
     return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
+def _listing(offer):
+    sides=[getattr(x,'side',None) for x in (getattr(offer,'sides',None) or ()) if getattr(x,'offered',False)]
+    return {'platform':getattr(offer,'platform',None),'variant':getattr(offer,'variant',None),
+            'sides_offered':sorted(s for s in sides if s in ('over','under'))}
+
+
 def capture(con, kind, *args):
     if os.getenv('SCOUT_GRADECORE_SHADOW','0') != '1': return 'disabled'
     active=False
@@ -37,6 +43,10 @@ def capture(con, kind, *args):
         body={'forecast_id':adapter.forecast_id,'forecast_at':adapter.forecast_at,
               'offer':vars(adapter.offer),'old_letter':adapter.old_letter,'old_p':adapter.old_p,
               'artifact_hash':artifact_hash,'candidate':result}
+        if kind=='sports' and len(args)>1:
+            # audit_1121 round 2: the line's own type and the sides it lists, so a one-sided (Over only / Under only)
+            # PrizePicks / Underdog line is identifiable in the comparison feed (payload only; key and ids unchanged)
+            body['listing']=_listing(args[1])
         key=hashlib.sha256(json.dumps([adapter.sport,adapter.forecast_id,result['policy'],artifact_hash]).encode()).hexdigest()
         con.execute('SAVEPOINT gradecore_capture'); active=True
         con.execute('CREATE TABLE IF NOT EXISTS gradecore_shadow (id TEXT PRIMARY KEY, sport TEXT NOT NULL, '

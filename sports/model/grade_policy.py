@@ -25,8 +25,33 @@ def band(p):
     return "Lean"
 
 
-def apply(p_over, p_under, sides_available, validation_state="unvalidated", data_quality=(), stake_gate_passed=False):
-    """-> dict. Unavailable sides are 'unavailable' (never a probability presented as tradable)."""
+def _choose(offered, mean=None, line=None, p_all=None):
+    """The graded side among the offered (side, p) pairs -> (side, p) or None.
+    SPORTS_GP_SIDE_FIX (default on; =0 = the old max(), which returned Over on an exact tie and the only offered side
+    whatever its chance): (d) an exact tie between two offered sides goes to the side of the projection mean (mean above
+    the line Over, below Under), else no side; (b) a single offered side the model rates under 50% (an offer-forced side,
+    audit_1121 hit 34.9%) is not chosen - no letter, no Lean. "Disfavours" compares the two sides' UNCONDITIONAL chances
+    (p_all = {"over": p, "under": p}): on an integer line the push mass can leave the favoured side below 0.5."""
+    from ..grade_rules import side_fix_on
+    if not side_fix_on():
+        return max(offered, key=lambda x: x[1])
+    if len(offered) == 2 and offered[0][1] == offered[1][1]:
+        if mean is None or line is None or mean == line:
+            return None
+        want = "over" if mean > line else "under"
+        return next(x for x in offered if x[0] == want)
+    side, p = max(offered, key=lambda x: x[1])
+    if len(offered) == 1 and p is not None:
+        other = (p_all or {}).get("under" if side == "over" else "over")
+        if (p < other) if isinstance(other, (int, float)) else (p < 0.5):
+            return None
+    return side, p
+
+
+def apply(p_over, p_under, sides_available, validation_state="unvalidated", data_quality=(), stake_gate_passed=False,
+          mean=None, line=None):
+    """-> dict. Unavailable sides are 'unavailable' (never a probability presented as tradable). mean / line (optional)
+    break an exact tie (_choose)."""
     sides = {}
     for s, p in (("over", p_over), ("under", p_under)):
         sides[s] = {"available": s in sides_available, "p": p if s in sides_available else None}
@@ -35,7 +60,14 @@ def apply(p_over, p_under, sides_available, validation_state="unvalidated", data
         return {"policy": VERSION, "validation_state": validation_state, "chosen_side": None, "band": None,
                 "grade": None, "label": "No side offered", "stake_units": 0.0, "stake_reason": "no side offered",
                 "data_quality": list(data_quality), "sides": sides}
-    side, p = max(offered, key=lambda x: x[1])
+    pick = _choose(offered, mean, line, {"over": p_over, "under": p_under})
+    if pick is None:
+        tie = len(offered) == 2
+        return {"policy": VERSION, "validation_state": validation_state, "chosen_side": None, "band": None,
+                "grade": None, "label": "No side: even chance" if tie else "No grade: Scout favours the side not offered",
+                "stake_units": 0.0, "stake_reason": "even chance" if tie else "model side not offered",
+                "data_quality": list(data_quality), "sides": sides}
+    side, p = pick
     b = band(p)
     label = (f"Lean {side.capitalize()}" if b == "Lean" else f"{b} {side.capitalize()}")
     validated = validation_state == "forward-validated"
