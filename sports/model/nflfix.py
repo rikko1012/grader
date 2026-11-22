@@ -13,9 +13,10 @@ calls these per offer, replay() re-applies them from the reason codes, so a repl
    in 9 of 9 folds, paired log-loss -0.048 per row, game-clustered 95% CI [-0.101, -0.013], 6,710 rows / 43 games.
    When on, the repaired PMF is what the inputs DB stores (card quantiles / other-line re-reads) and what the
    sm-nfl-2 shadow gets as its sm-1 baseline. Any error falls back to the raw PMF.
-   PROVER NOTE (2026-11-22): the sg-2 'certain' hold (board_view.CERTAIN_P 0.999) reads the forecast's chances, so
-   with the cap on a prop held today as 'certain' is released and shows Lean/A at 90% (live NFL board 2026-11-22
-   02:11Z: 1 prop / 6 quotes, Simi Fehoko rec 1.5 Under). 34 other quotes only print 90% instead of 95-99%.
+   PROVER NOTES (2026-11-22, evidence audit_1121/round2/nfl/prover/): (a) the sg-2 'certain' hold (board_view.CERTAIN_P
+   0.999) reads the forecast's chances, so with the cap on a prop held today as 'certain' is released and shows an A
+   at 90%. (b) Side / letter are unchanged only at the offer's own line: line reads at other lines come from the
+   repaired PMF, and on 73 capped real rush PMFs 20 of 425 other-line reads changed their lean (16 lost, 4 gained).
    Evidence: C:/Users/tikic/cs2_scout_ops/logs/audit_1121/round2/nfl/cap/. Rollback: SPORTS_NFL_PMF_CAP=0.
 
 2. rush-1 (SPORTS_NFL_RUSH1, default OFF - SHADOW: failed its walk-forward, see RUSH1 below). Logged as rush1_p_over
