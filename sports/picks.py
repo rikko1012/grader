@@ -140,7 +140,7 @@ def research_grade(fc, side, league, probs=None, rid=None):
         return None
     if rid is not None and held_quote(league, rid, fc.forecast_id):
         return None
-    return board_view.research_grade(po if side == "over" else pu)
+    return board_view.research_grade(po if side == "over" else pu, league, fc.stat)
 
 
 _HELD = {}

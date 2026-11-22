@@ -425,3 +425,27 @@ Caveats recorded with the promotion: about 43 tests, one pass (roughly the chanc
 too small to confirm. Table row "Roster continuity / stand-ins ... GATES ONLY" above is unchanged; the "AWP share (G1)"
 row is unchanged (the AWP rule still marks the player; it no longer zeroes the HS stake). Untested lead for a later
 frozen round: a stake rule on the favourite / underdog split (favourites 56.9% [54.5, 59.2] vs underdogs 51.7%).
+
+## Round 9 - audit_1121 round 2, CS2 diagnosed losers (frozen 2026-11-21 before holdout; nothing promoted)
+
+Pre-registration, frozen rules, sha256 and scorer: `cs2_scout_ops/logs/audit_1121/round2/cs2/` (`PREREG.md`,
+`frozen/R2_*.py`, `FREEZE.sha256`, `score_r2.py`, `results_train.json`, `results_holdout.json`, `*_stdout.txt`).
+Population: unit_main (first published grade per board line, real PP / UD lines). Same pass criteria and bootstrap code
+as round 1 (`holdout/cs2/score.py`: paired day-clustered bootstrap 10,000 draws, Holm, >= 60% volume, Over share not
+> 3 pts lower). Holdout Nov 11-21 (Nov 21 partial). No settled forward days after Nov 21 existed at run time.
+
+| Candidate | Rule | Train (Oct 11 - Nov 10, discovery data, not confirmation) | Holdout | Verdict |
+|---|---|---|---|---|
+| R2_m1_0u | Map 1 staked -> 0U (letter / side kept) | staked 2861-2541 52.96% -> 2765-2391 53.63%, +0.66 [+0.20, +1.26]; gated 96-150 39.0% (day CI 36.0-43.0) | 31 changed rows / 4 matches / 3 days = **not testable** (pre-registered >= 100 rows, >= 5 matches); gated went 19-12 (61.3%) | **Not promoted, no code.** Forward review at >= 100 staked Map 1 lines over >= 5 matches (~5 weeks at the holdout rate) |
+| R2_bo1_proj | BO1 projection x walk-forward k (shrink 50, k 0.92-1.00), side follows the chance | ALL +0.13 [-0.03, +0.45], Holm p 0.53; BO1 Over share 63.7% -> 40.0% | 0 BO1 lines = **not testable** | **Fails** (train: no significant gain and Under skew within BO1) |
+| R2_moved_staked | 3rd+ staked line of the same player / prop / scope / match -> 0U | staked +0.23 [-0.13, +0.57], p 0.21; gated 146-152 49.0% | staked 1158-1023 53.09% -> 1103-976 53.05%, -0.04 [-0.58, +0.61], Holm p 1.0; gated 55-47 53.9% | **Fails** |
+| R2_late_first | first grade < 6 h before start, staked -> 0U | staked +0.72 [-0.30, +1.75], p 0.17; gated 512-514 49.9% | staked 53.09% -> 53.00%, -0.09 [-2.22, +2.03], Holm p 1.0; gated 258-225 53.4%; bad days 4 -> 5 | **Fails** |
+
+Dropped before the freeze: 0 maps in the 3-month form window (no train support: staked 36-31, 53.7%); moved-line rank
+across all lines (no train effect); Map 1 spread widening (same population as R2_m1_0u, not a separate test); a mean
+shift on all Map 1 lines (Under skew: Over share fell to 5-24%, a side flip in disguise). Far-from-line Map 1 Overs were
+not frozen separately: the projection bias sits in BO1 (kills actual/projection 0.919 vs 0.993 on BO3 Map 1) and the
+holdout has 87 Map 1 lines, under the testability floor. Map 1 gate after Oct 21 on train: gated 39-58 (40.2%); by
+format (train staked Map 1): BO1 kills 41-58, BO1 HS 22-40, BO3 Map 1 kills 19-37, BO3 Map 1 HS 13-14. The 100-row
+floor is a testability minimum, not a power target. Not used: line_books / side_conflict_across_books (look-ahead). Disclosure: round-1
+holdout aggregate results (F02, F15) were read before this freeze. No grader, flag or member-path change.

@@ -585,7 +585,8 @@ class Grades:
         from . import board_view
         if not (r["status"] == "settled" and r["lean"] and not _contained(self.league, r.get("stat"))):
             return
-        b = self.g.get(board_view.research_grade(r["p_over"] if r["lean"] == "over" else r["p_under"]))
+        b = self.g.get(board_view.research_grade(r["p_over"] if r["lean"] == "over" else r["p_under"],
+                                                 self.league, r.get("stat")))
         if b is None:
             return
         res = r["lean_result"]
@@ -663,7 +664,8 @@ def recent(rows, names=None, n=RECENT_N, league=None):
                     "player_id": r["player_id"], "player": (names or {}).get(r["player_id"]), "stat": r["stat"],
                     "line": r["line"], "side": r["lean"], "result": r["lean_result"], "outcome": r["outcome"],
                     "actual": r.get("actual"), "p_side": _r(p_side),
-                    "grade": None if _contained(league, r.get("stat")) else board_view.research_grade(p_side),
+                    "grade": None if _contained(league, r.get("stat")) else board_view.research_grade(p_side, league,
+                                                                                                       r["stat"]),
                     "settled_at": r.get("settled_at"), "forecast_at": r.get("forecast_at")})
     return out
 

@@ -263,16 +263,17 @@ def attach_l10(rows, hcon, league):
 
 
 # ================================================================================================ scoring (A9 2-3)
-def score_rows(rows, cal_q=None, label="cal-mi"):
+def score_rows(rows, cal_q=None, label="cal-mi", labels=None):
     """Lean, letter, hit and the as-shown holds for every row. cal_q: {fid: walk-forward q} for cal-mi ON markets, or
-    the pc-1 walk-forward chance (label "pc-1", REGISTER A10) when pc-1 prints the chance."""
+    the pc-1 walk-forward chance (label "pc-1", REGISTER A10) when pc-1 prints the chance. labels: {fid: label} for
+    rows whose chance comes from another rule (ac-2 for NBA assists)."""
     for r in rows:
         po, pu, pp = r["po"], r["pu"], r["pp"]
         r["chance"] = "raw"
         if cal_q and r["fid"] in cal_q and cal_q[r["fid"]] is not None:
             q = cal_q[r["fid"]]
             po, pu = (1 - pp) * q, (1 - pp) * (1 - q)
-            r["chance"] = label
+            r["chance"] = (labels or {}).get(r["fid"], label)
         r["po_s"], r["pu_s"] = po, pu
         mean = r.get("mean")
         lean = board_view.lean_of(po, pu, mean, r["line"])
@@ -286,7 +287,7 @@ def score_rows(rows, cal_q=None, label="cal-mi"):
         r["p_lean"] = p_un
         dec = 1 - pp
         r["p"] = min(max(p_un / dec if dec > 0 else p_un, 1e-6), 1 - 1e-6)
-        r["letter"] = board_view.research_grade(p_un)
+        r["letter"] = board_view.research_grade(p_un, r.get("league"), r.get("stat"))
         r["hit"] = None if r["outcome"] in (None, "push", "void") else (1.0 if r["outcome"] == lean else 0.0)
         mkc = None
         if r.get("pm") is not None:
@@ -323,6 +324,17 @@ def cal_walk_q(rows, league):
     for r, q, mode, _ in cal.walk(crow):
         if f"{r['league']}:{r['stat']}" in on and q is not None:
             out[r["fid"]] = q
+    info["rows_with_walk_forward_chance"] = len(out)
+    return out, info
+
+
+def ac2_walk_q(rows):
+    """{fid: walk-forward ac-2 q} for NBA assists (sports/model/ac2.py, NBA_ASSISTS_CAL2) - empty when the flag is off."""
+    from . import ac2
+    info = {"version": ac2.VERSION, "enabled": ac2.enabled()}
+    if not ac2.enabled():
+        return {}, info
+    out = ac2.walk_q(rows, cal.game_day)
     info["rows_with_walk_forward_chance"] = len(out)
     return out, info
 
@@ -496,21 +508,27 @@ def league_report(rows, league, cal_info):
               "as_shown": len(shown), "as_shown_scored": len(scored),
               "chance_cal_mi": sum(1 for r in rows if r.get("chance") == "cal-mi"),
               "chance_pc1": sum(1 for r in rows if r.get("chance") == "pc-1"),
+              "chance_ac2": sum(1 for r in rows if r.get("chance") == "ac-2"),
               "with_market_chance": sum(1 for r in rows if r.get("pm") is not None),
               "with_inputs": sum(1 for r in rows if r.get("sha")), "with_variant": sum(1 for r in rows if r.get("variant")),
               "with_favourite": sum(1 for r in rows if r.get("fav") is not None)}
     days = sorted({game_day(r.get("start_utc"), r["forecast_at"]) for r in scored})
     rep = {"counts": counts, "games": len({r["event"] for r in scored}), "game_days": len(days),
            "first_day": days[0] if days else None, "last_day": days[-1] if days else None}
-    # max-p side (the scorecard's chosen side) for comparison only
-    maxp = []
+    # max-p side for comparison only. The scorecard's chosen side is the max over the OFFERED sides, so an Over-only
+    # offer records Over even when P(Under) is larger (audit_1121 nfl r2: 143 NFL rows, hit 45.7%). The max-p
+    # scorecard uses the model's own larger side; offer_forced counts the rows where the two differ.
+    maxp, forced = [], 0
     for r in rows:
         if r["status"] in ("win", "loss") and r.get("chosen") in ("over", "under"):
             o = _outcome(r["value"], r["line"])
             if o in ("over", "under"):
-                pch = r["po"] if r["chosen"] == "over" else r["pu"]
-                maxp.append({"event": r["event"], "hit": 1.0 if o == r["chosen"] else 0.0, "lean": r["chosen"],
+                side = "over" if r["po"] >= r["pu"] else "under"
+                forced += side != r["chosen"]
+                pch = r["po"] if side == "over" else r["pu"]
+                maxp.append({"event": r["event"], "hit": 1.0 if o == side else 0.0, "lean": side,
                              "outcome": o, "p": pch / max(1 - r["pp"], 1e-9)})
+    counts["scorecard_side_offer_forced"] = forced
     rep["overall"] = {"all_leans": stat_of(leans, full=True), "as_shown": stat_of(shown, full=True),
                       "scorecard_max_p_side": stat_of(maxp, full=True)}
     s_all = rep["overall"]["as_shown"]
@@ -627,7 +645,13 @@ def run(learning, inputs=None, store_path=None, history=None, games=None, league
                 score_rows(rows, cal_q, label="pc-1")
             else:
                 cal_q, cal_info = cal_walk_q(rows, lg)
-                score_rows(rows, cal_q)
+                labels = None
+                if lg == "nba" and "nba:assists" not in (cal_info.get("on") or []):
+                    a_q, cal_info["ac2"] = ac2_walk_q(rows)   # ac-2: the chance the board shows for assists
+                    if a_q:
+                        cal_q = dict(cal_q, **a_q)
+                        labels = {f: "ac-2" for f in a_q}
+                score_rows(rows, cal_q, labels=labels)
             cal_info["walk_forward_a8a"] = cal_mi_compact(lcon, icon, lg)
             rep = league_report(rows, lg, cal_info)
             rep["meta"] = meta
