@@ -1,22 +1,25 @@
-"""v3 group D (web/UI_V3.md): the signed-out landing page in v3, and the member-side sign-in gate / account / alerts surfaces.
-Real server.Handler, SCOUT_UI_V3=1, fixture data and real-shaped reviews / public record only. 390x844 and 1280x900, dark and light.
+"""v3 group D (web/UI_V3.md): the signed-out landing page in v3 (landing_v3.py + web/v3/landing.html, direction C "line terminal"),
+and the member-side sign-in gate / account / alerts surfaces. Real server.Handler, SCOUT_UI_V3=1, fixture data, a real-shaped board
+snapshot and real-shaped reviews only. 390x844 and 1280x900, dark and light. V3_SHOTS=<folder> keeps screenshots.
 
-The whole existing landing suite (tests/test_landing_browser.py: widths, 44 px targets, both buttons in the first screen, the reviews
-carousel's timing, swipe, pause, no layout shift, text-only member content) runs again here with the flag on, through the `base`
-fixture below, so v3 keeps every behaviour the page has today. V3_SHOTS=<folder> keeps screenshots."""
+The flag-off landing (web/landing.html, its carousel and demos) keeps its own suite in tests/test_landing_browser.py; under v3 the
+signed-out page is the new one, so its carousel checks are replaced here by the static review wall's."""
 import json
 import os
 import threading
+import time
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
 
+import landing_v3
 import server
 import whop_auth
+import workspace_api
 from tests import test_landing_browser as L
-from tests.test_landing_browser import *  # noqa: F401,F403  (re-runs the landing suite with the flag on)
-from tests.test_landing_browser import seed, settle, JOIN  # noqa: F401
+from tests.test_landing_browser import seed, JOIN  # noqa: F401
+from tests.test_landing_v3 import board
 from tests.test_upgrade_browser import env, context, no_h_scroll  # noqa: F401
 
 PHONE, DESK = {"width": 390, "height": 844}, {"width": 1280, "height": 900}
@@ -79,146 +82,111 @@ def snap(page, name, full=False):
 RECORD = {"cs2": (1342, 1226), "lol": (561, 507), "nba": (3301, 2967), "nfl": (842, 776)}
 
 
-def record_route(route):
-    sp = route.request.url.split("sport=")[-1].split("&")[0]
-    w, l = RECORD.get(sp, (0, 0))
-    route.fulfill(status=200, content_type="application/json", body=json.dumps({"sport": sp, "totals": {"wins": w, "losses": l, "pushes": 0}}))
+# ---------------------------------------------------------------------------------------------------------- the v3 landing page
+@pytest.fixture
+def lbase(base, monkeypatch):
+    """base + a real-shaped CS2 board snapshot (no feed reads) and a fresh landing build."""
+    monkeypatch.setattr(workspace_api, "_SNAP", dict(workspace_api._SNAP, body=json.dumps(board()).encode()))
+    monkeypatch.setattr(workspace_api, "snapshot", lambda s: workspace_api._SNAP)
+    landing_v3.reset()
+    yield base
+    landing_v3.reset()
 
 
-def open_landing(browser, base, size, theme, nrev=12, record=True, fonts=False, **kw):
+def warm(base, nrev):
+    """Seed reviews, ask once, let the one background build finish (it reads the shared answers), so the page has every block."""
+    import urllib.request
     seed(nrev)
-    ctx = browser.new_context(viewport=size, **kw)
-    if not fonts:
-        ctx.route("https://fonts.*/**", lambda r: r.abort())
-    if record:
-        ctx.route("**/api/record?*", record_route)
+    urllib.request.urlopen(base + "/").read()
+    for _ in range(200):
+        if not landing_v3._BUILDER["busy"]:
+            break
+        time.sleep(0.05)
+    landing_v3._STATE["built"] = 0.0
+    urllib.request.urlopen(base + "/").read()
+    for _ in range(200):
+        if not landing_v3._BUILDER["busy"]:
+            break
+        time.sleep(0.05)
+
+
+def open_page(browser, base, size, theme, motion="reduce"):
+    ctx = browser.new_context(viewport=size, reduced_motion=motion)
+    ctx.route("https://fonts.*/**", lambda r: r.abort())
     ctx.add_init_script(f"try{{localStorage.setItem('scout-theme','{theme}')}}catch(e){{}}")
     page = ctx.new_page()
     page.errors = []
     page.on("pageerror", lambda e: page.errors.append(str(e)))
     page.goto(base + "/", wait_until="load")
-    page.wait_for_function("!!window.ScoutV3")
-    if nrev:
-        page.wait_for_selector("#rvq:not([hidden])")
     return ctx, page
 
 
-VISIBLE = ("#hero-title", ".v3-crop", ".v3-strip", "#rvq", "#rvq-prev", "#rvq-next", "#rvq-pp", "#rvq-all", ".lede", "#hero-rec-n", "#hero-rec-t", "#hero-books",
-           "#hc", "#hc-sport", ".hc-src", "#hc-pause", "#hc-av", "#hc-name", "#hc-meta", "#hc-chips .tag", "#hc-pct", "#hc-side", "#hc-why", "#hc-grade",
-           "#hc-pl", "#hc-ll", "#hc-nav",
-           "#proof-record-n", "#proof-record-t", "#proof-sports", "#proof-reviews-n", "#mq", "#mq-pause", ".books h2",
-           "#why-title", "#vs-seg", "#vs-list", "#demo-title", "#bd-tabs", "#bd-rows .prow", "#pcard", "#bd-src",
-           "#grade-title", "#gd-svg", "#gd-line", "#gd-proj", "#gd-grade", "#gd-break", "#gd-ladder", "#gd-note",
-           "#lines-title", "#lt-chips", "#lt-track", "#lt-list", "#lt-live", "#slips-title", "#ss-zoom", "#sb", "#sb-legs", "#sb-out",
-           "#features-title", "#how-title", "#steps", "#reviews-line", "#final-title", "footer.foot")
-
-
-def check_landing_fields(page, size):
-    """Every field the landing shows today is still on screen in v3 (scrolled into view one by one), with the v3 shape on the card."""
-    for sel in VISIBLE:
-        loc = page.locator(sel).first
-        loc.scroll_into_view_if_needed()
-        assert loc.is_visible(), sel
-    # the previous design's screenshots are not drawn under v3 (they showed a UI that no longer matches); the live card leads
-    assert not page.locator(".board-shot img").is_visible() and not page.locator(".card-shot img").is_visible()
-    # the review ticker sits after the hero's buttons (and, on the phone, after the live card), never between headline and sentence
-    order = page.evaluate("""(() => { const y = s => document.querySelector(s).getBoundingClientRect().top;
-      return [y('#hero-title'), y('.lede'), y('.hero .ctas'), y('#hc'), y('#rvq')]; })()""")
-    assert order[0] < order[1] < order[2] < order[4], order
-    if size is not DESK:
-        assert order[3] < order[4], order
-    if size is DESK:
-        assert page.locator(".topnav").is_visible()
-        assert page.locator(".hero .btn.ghost").is_visible()                       # Try the example board (desktop, as today)
-    # polish2: the approved hero (D mock): the eyebrow's sport list now opens the sentence; the capture is captioned with its date
-    assert not page.locator(".hero-k").is_visible()
-    sp = (page.evaluate("document.documentElement.dataset.v3Sports") or "cs2 lol nba nfl").split()
-    assert page.locator(".hero .lede").text_content().startswith("CS2, League of Legends, NBA")
-    assert ("soccer and tennis." in page.locator(".hero .lede").text_content()) == ("soccer" in sp and "tennis" in sp)
-    assert page.locator(".v3-crop figcaption").text_content().endswith("Nov 19, 16:20 UTC")
-    assert "Nov 19, 16:20 UTC" in page.locator(".v3-strip__src").text_content()
-    assert page.locator(".v3-crop .sc-pick__chance b").text_content() == "57.5%" and page.locator(".v3-crop .sc-pick__chance small").text_content() == "Model estimate"
-    assert page.locator(".proofs .books h2").text_content() == {4: "Four", 5: "Five", 6: "Six"}[len(sp)] + " sports, one board"
-    assert page.locator("#hc-nav button").count() == 4 and page.locator(".fcard").count() == 8 and page.locator("#steps li").count() == 3
-    pct = page.locator("#hc-pct").text_content().strip()
-    assert pct.endswith("%") and len(pct.split(".")[-1]) == 2                     # one decimal + %
-    assert page.locator("#hc-side").text_content().split()[0] in ("Over", "Under")
-    assert page.locator(".hc .ring small").text_content() == "Model estimate"
-    p = page.evaluate("getComputedStyle(document.querySelector('.v3-meter>i')).getPropertyValue('--p')").strip()
-    assert abs(float(p) - float(pct[:-1]) / 100) < 1e-6
-    assert page.locator("header.top .brand b").text_content() == "Scout" and page.locator("header.top .brand").get_attribute("aria-label") == "1time Scout"
-    assert page.locator("#proof-record-n").text_content().replace(",", "").strip().isdigit()     # the real record count, never a word or a zero
-    # the headline's second line is plain ink (no transparent gradient text)
-    assert page.evaluate("getComputedStyle(document.querySelector('.hero h1 .nb')).webkitTextFillColor") != "rgba(0, 0, 0, 0)"
-    for a in ("Join on Whop", "Sign in with Whop"):
-        assert page.locator("a", has_text=a).first.is_visible()
-    assert page.locator("header.top a.btn.primary").get_attribute("href") == JOIN or size is PHONE
-
-
+@pytest.mark.parametrize("theme", ["dark", "light"])
 @pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
-def test_landing_v3_controls_still_work(browser, base, size):
-    """Click through every demo with the flag on: why switch, board tabs and rows, grade sliders, slip builder, slip zoom, hero sports."""
-    ctx, page = open_landing(browser, base, size, "dark")
+def test_landing_v3_first_screen_targets_and_width(browser, lbase, size, theme):
+    warm(lbase, 12)
+    ctx, page = open_page(browser, lbase, size, theme)
     try:
-        settle(page)
-        page.locator("#hc-nav button[data-v=cs2]").click()
-        page.wait_for_function("document.getElementById('hc-sport').textContent.startsWith('CS2')")
-        assert page.locator("#hc").evaluate("e => e.classList.contains('stopped')")
-        page.locator("#vs-seg [data-v=without]").click()
-        assert page.locator(".vs").get_attribute("data-mode") == "without"
-        page.locator("#bd-tabs [data-v=nba]").click()
-        page.wait_for_function("document.querySelector('#bd-src').textContent.startsWith('NBA')")
-        page.locator("#bd-rows .prow").nth(1).click()
-        assert page.locator("#bd-rows .prow").nth(1).get_attribute("aria-pressed") == "true"
-        before = page.locator("#gd-big").text_content()
-        page.locator("#gd-line").fill("33.5")
-        page.locator("#gd-line").dispatch_event("input")
-        assert page.locator("#gd-line-v").text_content() == "33.5" and page.locator("#gd-big").text_content() != before
-        n0 = page.locator("#sb-legs li").count()
-        page.locator("#sb-plus").click()
-        page.wait_for_function(f"document.querySelectorAll('#sb-legs li:not(.leave)').length !== {n0}")
-        page.locator("#ss-zoom").click()
-        page.wait_for_selector("#ss-dlg[open]")
-        page.locator("#ss-close").click()
-        page.wait_for_function("!document.getElementById('ss-dlg').open")
+        assert page.evaluate("document.documentElement.dataset.theme") == theme
+        for a in ("Join on Whop", "Sign in with Whop"):                      # both in the first phone screen (standing rule)
+            loc = page.locator(".hero a", has_text=a).first
+            assert loc.is_visible() and loc.bounding_box()["y"] + loc.bounding_box()["height"] <= size["height"], a
+        assert page.locator(".hero a.btn.primary").get_attribute("href") == JOIN
+        assert page.locator(".term .tr").first.bounding_box()["y"] < size["height"]   # the first real row starts in the first screen
+        # the hero band stays dark in light mode; the body follows the theme
+        hero_bg = page.evaluate("getComputedStyle(document.querySelector('.hero')).backgroundColor")
+        assert hero_bg == "rgb(8, 11, 19)"
+        small = page.evaluate("""() => [...document.querySelectorAll('a,button,summary')].filter(e => e.offsetParent && !e.closest('.dock')
+            && e.getBoundingClientRect().height < 44).map(e => e.textContent.trim().slice(0, 30))""")
+        assert not small, small
+        no_h_scroll(page)
+        assert page.locator("#reviews .rv").count() >= 1 and page.locator("#rvq").count() == 0
+        snap(page, f"landing-c-{size['width']}-{theme}", full=True)
         assert not page.errors, page.errors
     finally:
         ctx.close()
 
 
-@pytest.mark.parametrize("theme", ["dark", "light"])
-def test_landing_v3_sign_in_error_and_price(browser, base, monkeypatch, theme):
-    """A failed sign-in still reads as text, and LANDING_PRICE still rides on the Join buttons, in v3."""
-    monkeypatch.setenv("LANDING_PRICE", "$24.99/month")
-    seed(0)
-    ctx = browser.new_context(viewport=PHONE)
-    ctx.add_init_script(f"try{{localStorage.setItem('scout-theme','{theme}')}}catch(e){{}}")
-    page = ctx.new_page()
-    page.goto(base + "/?signin_error=Whop%20said%20no")
-    page.wait_for_function("!!window.ScoutV3")
-    assert page.locator("#signin-error").is_visible() and page.locator("#signin-error").text_content() == "Whop said no"
-    assert "$24.99/month" in page.locator(".ctas a.btn.primary").first.text_content()
-    snap(page, f"landing-signin-error-390-{theme}")
-    ctx.close()
-
-
-@pytest.mark.parametrize("theme", ["dark", "light"])
-@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
-def test_landing_v3_shots(browser, base, size, theme):
-    ctx, page = open_landing(browser, base, size, theme, fonts=bool(SHOTS.parts))
+def test_landing_v3_book_tap_shows_that_lines_chance(browser, lbase):
+    warm(lbase, 0)
+    ctx, page = open_page(browser, lbase, DESK, "dark")
     try:
-        if SHOTS.parts:
-            page.evaluate("document.fonts.ready.then(() => 1)")
-        settle(page, scroll=True)
-        assert page.evaluate("document.documentElement.dataset.v3Page") == "landing"
-        no_h_scroll(page)
-        snap(page, f"landing-{size['width']}-{theme}-top")
-        snap(page, f"landing-{size['width']}-{theme}-full", full=True)
-        if SHOTS.parts:
-            for sec in ("proofs", "why", "demo", "grade", "lines", "slips", "features", "how", "final"):
-                page.locator("#" + sec).screenshot(path=str(SHOTS / f"landing-{size['width']}-{theme}-s-{sec}.png"))
-        check_landing_fields(page, size)
+        row = page.locator(".tr", has=page.locator(".who b", has_text="Gap"))
+        assert row.locator(".pv").text_content().startswith("58.3")
+        row.locator("button.bk", has_text="13.5").click()
+        assert row.locator(".pv").text_content().startswith("52.2")
+        assert row.locator("button.bk", has_text="13.5").get_attribute("aria-pressed") == "true"
+        assert row.locator(".gr b").text_content() == "–"
+        row.locator("button.bk", has_text="12.5").click()
+        assert row.locator(".pv").text_content().startswith("58.3") and row.locator(".gr b").text_content() == "B-"
         assert not page.errors, page.errors
+    finally:
+        ctx.close()
+
+
+def test_landing_v3_motion_plays_once_and_reduced_motion_shows_everything(browser, lbase):
+    warm(lbase, 12)
+    for motion, expect in (("reduce", False), ("no-preference", True)):
+        ctx, page = open_page(browser, lbase, PHONE, "dark", motion=motion)
+        try:
+            assert page.evaluate("document.documentElement.classList.contains('motion')") is expect
+            if not expect:                                                   # nothing hidden waiting for an animation
+                assert page.evaluate("getComputedStyle(document.querySelector('.tools .tile')).opacity") == "1"
+            page.locator("#faq").scroll_into_view_if_needed()
+            page.wait_for_timeout(900)
+            assert page.evaluate("getComputedStyle(document.querySelector('.qs')).opacity") == "1"
+        finally:
+            ctx.close()
+
+
+def test_landing_v3_sign_in_error_is_text(browser, lbase):
+    warm(lbase, 0)
+    ctx = browser.new_context(viewport=PHONE)
+    page = ctx.new_page()
+    try:
+        page.goto(lbase + "/?signin_error=%3Cb%3ENope%3C%2Fb%3E")
+        err = page.locator("#signin-error")
+        assert err.is_visible() and err.text_content() == "<b>Nope</b>" and err.locator("b").count() == 0
     finally:
         ctx.close()
 
@@ -311,109 +279,3 @@ def test_member_nav_stays_while_sign_in_is_checked(browser, env, monkeypatch, si
     for r in held:
         r.continue_()
     c.close()
-
-
-# ---------------------------------------------------------------------------------------------------- the review ticker under v3
-# v3 (approved mocks 01 / 02, polish1): the reviews follow the product - headline, sentence, buttons, then the numbers and the ticker
-# (on a phone the live card comes first). The landing suite's ticker checks run again here with that placement; everything else in
-# them (rotation, pause on hover / focus, arrows, swipe, no layout shift) is unchanged. Positions are page positions (the ticker can
-# sit below the fold, so stepping it may scroll the page).
-from tests.test_landing_browser import _open, _idx, SIZES, seed_long  # noqa: E402,F401
-import re  # noqa: E402
-
-
-@pytest.mark.parametrize("size", (SIZES[1], SIZES[-1]), ids=lambda s: str(s["width"]))
-def test_carousel_under_the_headline_advances_and_pauses(browser, base, size):
-    seed(3)
-    ctx, page, errors = _open(browser, base, size)
-    page.wait_for_selector("#rvq:not([hidden])")
-    top = lambda sel: page.evaluate(f"document.querySelector('{sel}').getBoundingClientRect().top + scrollY")
-    assert top("#hero-title") < top(".lede") < top(".hero .ctas") < top("#rvq")
-    assert page.locator("#rvq").bounding_box()["height"] <= (64 if size["width"] > 640 else 100)
-    fs = lambda sel: page.evaluate(f"parseFloat(getComputedStyle(document.querySelector('{sel}')).fontSize)")
-    assert fs("#rvq .rvq-s.on blockquote") < fs(".lede")
-    assert page.locator("#rvq .rvq-s").count() == 3 and page.locator("#rvq .rvq-s.on").count() == 1
-    assert page.locator("#rvq .rvq-s.on figcaption").text_content().startswith("Member C. · ")
-    assert page.locator("#rvq-who").text_content() == page.locator("#rvq .rvq-s.on figcaption").text_content()
-    assert page.locator("#rvq-all").text_content() == "All reviews" and page.locator("#rvq-all").get_attribute("href") == "/reviews"
-    away = (5, 5)
-    page.evaluate("document.getElementById('rvq').scrollIntoView({block: 'center'})")   # the ticker turns only while it is on screen
-    page.wait_for_function("(() => { const r = document.getElementById('rvq').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()")
-    page.wait_for_timeout(600)                                             # its visibility observer runs on a real frame
-    page.clock.run_for(100)
-    assert _idx(page) == 0
-    page.mouse.move(*away)
-    page.clock.run_for(6000)
-    assert _idx(page) == 1
-    page.locator("#rvq-stage").scroll_into_view_if_needed()
-    page.hover("#rvq-stage")
-    page.clock.run_for(20000)
-    assert _idx(page) == 1
-    page.mouse.move(*away)
-    page.clock.run_for(6000)
-    assert _idx(page) == 2
-    page.focus("#rvq-next")
-    page.clock.run_for(20000)
-    assert _idx(page) == 2
-    page.keyboard.press("Enter")
-    assert _idx(page) == 0
-    page.focus(".v3-more .trust a")              # polish2: focus elsewhere, on screen with the ticker (it sits below the hero now; the
-    page.wait_for_timeout(600)                     # hero's buttons would scroll it off screen, where it rightly holds)
-    page.clock.run_for(6000)
-    assert _idx(page) == 1
-    page.locator("#rvq-prev").click()
-    page.locator("#rvq-prev").click()
-    assert _idx(page) == 2
-    assert not errors
-    ctx.close()
-
-
-def test_carousel_swipes_on_a_phone(browser, base):
-    seed(3)
-    ctx, page, errors = _open(browser, base, SIZES[1], has_touch=True)
-    page.wait_for_selector("#rvq:not([hidden])")
-    page.locator("#rvq-stage").scroll_into_view_if_needed()
-    b = page.locator("#rvq-stage").bounding_box()
-    y = b["y"] + b["height"] / 2
-    page.mouse.move(b["x"] + b["width"] - 10, y)
-    page.mouse.down()
-    page.mouse.move(b["x"] + 20, y, steps=5)
-    page.mouse.up()
-    assert _idx(page) == 1
-    page.mouse.move(b["x"] + 20, y)
-    page.mouse.down()
-    page.mouse.move(b["x"] + b["width"] - 10, y, steps=5)
-    page.mouse.up()
-    assert _idx(page) == 0
-    assert not errors
-    ctx.close()
-
-
-@pytest.mark.parametrize("kind", ("short", "long"))
-@pytest.mark.parametrize("size", (SIZES[0], SIZES[1], SIZES[-1]), ids=lambda s: str(s["width"]))
-def test_carousel_fills_without_moving_the_join_button(browser, base, size, kind):
-    seed(3) if kind == "short" else seed_long()
-    ctx = browser.new_context(viewport=size)
-    page = ctx.new_page()
-    errors, held = [], []
-    page.on("pageerror", lambda e: errors.append(str(e)))
-    page.route(lambda url: "/api/reviews" in url, lambda route: held.append(route))
-    page.goto(base + "/", wait_until="load")
-    page.evaluate("document.fonts.ready.then(() => 1)")
-    page.wait_for_timeout(200)
-    assert page.evaluate("document.documentElement.classList.contains('has-reviews')")
-    assert page.locator("#rvq").is_hidden()
-    y = lambda: page.evaluate("document.querySelector('.ctas a').getBoundingClientRect().top + scrollY")
-    y0 = y()
-    assert held, "the reviews request was not made"
-    for r in held:
-        r.continue_()
-    page.wait_for_selector("#rvq:not([hidden])")
-    page.wait_for_timeout(100)
-    tops = [y()]
-    for _ in range(3):
-        page.locator("#rvq-next").click()
-        tops.append(y())
-    assert all(abs(v - y0) <= 2 for v in tops), (y0, tops)
-    assert not errors
-    ctx.close()

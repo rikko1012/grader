@@ -84,6 +84,6 @@ def test_v3_700_signed_out_visitors_at_once_get_one_shared_v3_landing(monkeypatc
             out = list(pool.map(one, range(700)))
         assert len(out) == 700 and all(st == 200 for st, _h, _b in out)
         assert len({b for _s, _h, b in out}) == 1 and len({h["etag"] for _s, h, _b in out}) == 1
-        assert b"data-ui-v3" in out[0][2] and b"/v3/landing.js" in out[0][2]
+        assert b"data-ui-v3" in out[0][2] and b'id="terminal"' in out[0][2]
     finally:
         next(gen, None)

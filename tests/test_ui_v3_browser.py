@@ -36,7 +36,8 @@ def v3_page(browser, env, monkeypatch, group, size, theme):
     p.on("pageerror", lambda e: p.errors.append(str(e)))
     p.goto(env.url + path)
     p.wait_for_selector(ready, timeout=30000, state="attached")
-    p.wait_for_function("!!window.ScoutV3")
+    if group != "landing":                     # the v3 landing (landing_v3.py) is one self-contained page: no shell bundle
+        p.wait_for_function("!!window.ScoutV3")
     return c, p
 
 
