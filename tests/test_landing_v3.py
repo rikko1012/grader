@@ -5,8 +5,10 @@ real-shaped board / record / review documents built here.
 - the terminal picks rows by its stated rule and labels a board older than FRESH_MIN as "as of <time>", never "checked";
 - member review text is escaped; the wall features by its stated rule (no photos, no money talk, no shouting);
 - a missing input drops its block; the page never fails over one (the terminal falls back to the saved, dated board);
-- a terminal row opens in place (the first one open): chance at exactly the line, projection vs line, last 10, break-even, the letter's
-  own record from /api/record bands; the board gate counts the other letter-graded markets on a live board, never on the saved one;
+- a terminal row opens in place (all closed at first): chance at exactly the line, projection vs line, last 10, break-even and a link
+  to the grade's tier on /record - never a tier hit rate beside a break-even; the gate counts the other letter-graded markets (live only);
+- the record totals wins + losses (ties to the cards); soccer / tennis say "not on the public record yet"; reviews say where they were
+  written, show no star histogram and quote product-use sentences only; the Slip Studio tile is a real slip in v3 markup;
 - "Move the line" is drawn only when its formula reproduces the seed row's own chance; its cut points match grader.grade_from_p;
 - the template's own text carries none of the owner's banned words and no static percentage;
 - the request path never computes (cached bodies only) and 700 visitors at once get one body and one ETag."""
@@ -61,7 +63,7 @@ def board(at=None):
 
 def record_doc(sp, w, l, p):
     return {"sport": sp, "as_of": "2026-11-22T15:17:18+00:00", "rule": f"The {sp} rule. Second sentence.",
-            "totals": {"wins": w, "losses": l, "pushes": p, "matches": 40, "match_word": "matches"},
+            "totals": {"wins": w, "losses": l, "pushes": p, "picks": w + l + p, "matches": 40, "match_word": "matches"},
             "calendar": {"days": [{"date": "2026-10-24", "wins": 5, "losses": 4}, {"date": "2026-10-25", "wins": 3, "losses": 6}]}}
 
 
@@ -77,7 +79,8 @@ REVIEWS = {"summary": {"count": 12, "average": 4.8, "breakdown": {"5": 10, "4": 
     review(4, "shout", "YALL KNOW WHAT IT IS STOP PLAYING"),
     review(5, "earner", "Extremely profitable and reliable tool"),
     review(6, "short", "Best ever"),
-    review(7, "plain", "Reasons behind each prop are great"),
+    review(7, "plain", "Reasons behind each prop are great for me"),
+    review(8, "mixed", "Love the stats and reasons behind each prop. Nothing guaranteed but my go to when you need a slip!"),
 ]}
 
 
@@ -147,24 +150,35 @@ def test_an_old_board_is_dated_never_checked(srv, monkeypatch):
 def test_ledger_and_proof_line_come_from_the_record_answers(srv, monkeypatch):
     seed(srv, monkeypatch, board())
     t = text(build(srv))
-    total = 100 + 90 + 50 + 40 + 300 + 280 + 80 + 70                   # decided picks (wins + losses), as /record counts them
+    total = 100 + 90 + 50 + 40 + 300 + 280 + 80 + 70                   # decided picks (wins + losses), never the API's picks (+ pushes)
     assert f"{total:,} decided picks on the public record" in t and "since" not in t
     for w, l in ((100, 90), (50, 40), (300, 280), (80, 70)):
         assert f"{w:,} - {l:,}" in t
     assert "The cs2 rule." in t and "Second sentence" not in t          # the record's own rule, first sentence
-    assert "As of Nov 22, 15:17 UTC" in t
+    assert "As of Nov 22, 15:17 UTC" in t and "Why the rules differ" in t
+    led = re.search(r'(?s)<section class="ledger.*?</section>', build(srv).decode()).group(0)
+    assert "%" not in text(led.encode()) and "hit rate" not in led.lower() and "break-even" not in led.lower()   # a log, not a pitch
+    monkeypatch.setenv("SCOUT_SOCCER_ENABLED", "1")
+    monkeypatch.setenv("SCOUT_TENNIS_ENABLED", "1")
+    t = text(build(srv))
+    assert "Soccer Graded on the board Not on the public record yet" in t and "Tennis Graded on the board" in t
+    assert "across CS2, LoL, NBA and NFL" in t and "League" not in t.split("FAQ")[1].split("League of Legends")[0]
 
 
 def test_review_wall_escapes_and_features_by_rule(srv, monkeypatch):
     seed(srv, monkeypatch, board())
     s = build(srv).decode("utf-8")
     assert "<script>x</script>" not in s and "&lt;script&gt;x&lt;/script&gt;" in s
-    for name in ("longform", "plain"):
+    for name in ("longform", "plain", "mixed"):                       # product-use reviews
         assert f"<b>{name}</b>" in s
-    for name in ("slipper", "photo", "shout", "earner", "short"):     # money talk, photos, shouting, too short
+    for name in ("slipper", "photo", "shout", "earner", "short"):     # money talk, photos, shouting, no product words
         assert f"<b>{name}</b>" not in s
     t = text(s.encode())
-    assert "★ 4.8 from 12 member reviews" in t and "Read all 12" in t and "Paying member" in t
+    assert "★ 4.8 · 12 member reviews" in t and "Read all 12" in t and "Paying member" in t
+    assert "Written on Scout's reviews page by paying members" in html.unescape(t) and "1 to 3 stars" not in t
+    assert 'class="brk"' not in s                                       # no star histogram
+    assert "Love the stats and reasons behind each prop. …" in t and "guaranteed" not in t      # the hype sentence is cut, marked
+    assert s.count('<a href="/reviews">') >= 3                          # every card links to the reviews page
     assert "rvq" not in s and "carousel" not in s.lower()               # a static wall: no carousel, arrows or dots
 
 
@@ -180,7 +194,7 @@ def test_missing_inputs_drop_their_blocks_and_the_page_still_serves(srv, monkeyp
     monkeypatch.setattr(reviews, "page_on", lambda: False)
     s = build(srv).decode("utf-8")
     assert "/landing/board.webp" not in s and 'data-state="saved"' in s   # the saved board, dated, instead of live rows
-    assert "as of Nov 19, 16:20 UTC · saved board" in s and 'data-at=""' in s and 'class="gate"' not in s
+    assert "as of Nov 22, 17:53 UTC" in s and 'data-at="2026-11-22T17:53:44+00:00"' in s and 'class="gate"' not in s
     assert 'id="record"' not in s and 'id="reviews"' not in s and "decided picks" not in s and "member reviews" not in s
     assert "{{" not in s and "<!--if:" not in s
     assert s.count(f'href="{JOIN.replace("&", "&amp;")}"') >= 4 and s.count('href="/auth/login"') >= 3
@@ -309,17 +323,15 @@ def test_rows_open_in_place_with_the_card_read_and_the_letters_own_record(srv, m
     seed_bands(srv)
     s = build(srv).decode("utf-8")
     rows = re.findall(r'<li class="tr[^"]*".*?</li>', s, re.S)
-    assert 'aria-expanded="true" aria-controls="td0"' in rows[0] and 'id="td0">' in rows[0]   # the first row opens as the glossary
-    assert all('aria-expanded="false"' in r and ' hidden>' in r for r in rows[1:])
+    assert all('aria-expanded="false"' in r and ' hidden>' in r for r in rows)        # closed: the hero shows its rows
     assert 'Scout&#x27;s chance at exactly <span data-k="line">12.5</span>' in rows[0] or "Scout's chance at exactly <span data-k=\"line\">12.5</span>" in rows[0]
     assert 'data-k="p">58.3<' in rows[0]
     assert 'data-k="l10">6 of 10<' in rows[0] and 'Break-even, <span data-k="entry">Underdog standard 2-pick</span>' in rows[0]
     assert "Projection" not in rows[0]                                  # no projection on the record: no "why" line, never a guess
     zeta = rows[2]
     assert "Projection <b>32.4</b> vs line" in zeta
-    assert "On the record, CS2 calls graded" in zeta and "1,137-1,026-19" in zeta     # B's band from /api/record
-    assert 'data-band=""' in rows[0] and 'class="dt-rec" hidden' in rows[0]           # B- has no band: the line is hidden
-    assert 'data-band="214-192-5"' in rows[1]                                          # each app's line carries its own letter's band
+    assert 'See the <b data-k="g">B</b> tier on the public record, losses included' in zeta and '<a href="/record#cs2">' in zeta
+    assert "1,137" not in s and "data-band" not in s and "On the record, CS2 calls graded" not in s   # no tier W-L beside a break-even
     assert "Graded <span data-k=\"graded\">Nov 22, 10:01 UTC</span>" in s
     for r in rows:                                                     # the member card's stake never shows on the public page
         assert "Stake" not in r and "0.5U" not in r and "units" not in r.lower()
@@ -331,10 +343,10 @@ def test_the_board_gate_counts_the_other_graded_markets_live_only(srv, monkeypat
     b["records"] += [rec(f"Extra{i}", "kills", 20.5, "underdog", .6, "B", s0) for i in range(7)]
     seed(srv, monkeypatch, b)
     s = build(srv).decode("utf-8")
-    assert len(re.findall(r'<li class="tr[^"]*"', s)) == 6
-    # 3 + 7 graded markets - 6 shown (desktop); phones show 3 rows, so their count is 3 higher
-    assert '<span class="n-d">4</span><span class="n-m">7</span> more letter-graded CS2 props on this board' in s
-    assert "Join to open the board" in s
+    assert len(re.findall(r'<li class="tr[^"]*"', s)) == 4
+    # 3 + 7 graded markets - 4 shown (desktop); phones show 3 rows, so their count is 1 higher
+    assert '<span class="n-d">6</span><span class="n-m">7</span> more letter-graded CS2 props on this board' in s
+    assert "Open the board" in s
     assert re.search(r'<a class="gate" href="([^"]+)"', s).group(1) == JOIN.replace("&", "&amp;")
 
 
@@ -352,7 +364,7 @@ def test_move_the_line_only_when_the_formula_reproduces_the_row(srv, monkeypatch
     s = build(srv).decode("utf-8")
     assert 'id="gw"' in s and "projection is <b>32.4</b>" in s
     cfg = json.loads(html.unescape(re.search(r'data-gw="([^"]+)"', s).group(1)))
-    assert cfg["proj"] == 32.4 and cfg["line"] == 30.5 and cfg["bands"]["B"] == "1,137-1,026-19" and cfg["cuts"][0] == [0.74, "A"]
+    assert cfg["proj"] == 32.4 and cfg["line"] == 30.5 and "bands" not in cfg and cfg["cuts"][0] == [0.74, "A"]
     import grader as g
     assert g.CONFIG["p_cap_kills"] == landing_v3.KILLS_CAP
     assert 'data-g="A+"' not in s and 'data-g="A"' in s                # kills are capped at 78%: the ladder stops at A
@@ -392,19 +404,40 @@ def test_page_is_pinned_dark_and_every_join_goes_to_the_checkout(srv, monkeypatc
     s = build(srv).decode("utf-8")
     assert '<html lang="en" data-ui-v3="1" data-v3-page="landing" data-sc-sport="cs2" data-theme="dark">' in s
     assert "scout-theme" not in s and "prefers-color-scheme: light" not in landing_v3.ASSETS["PAGE_CSS"].read_text(encoding="utf-8")
-    joins = re.findall(r'<a [^>]*href="([^"]+)"[^>]*>Join on Whop</a>', s)
+    joins = re.findall(r'<a [^>]*href="([^"]+)"[^>]*>(?:Get today\'s graded board|Get the board|Open the board|See plans on Whop)</a>', s)
     assert len(joins) >= 6 and set(joins) == {JOIN.replace("&", "&amp;")}
-    assert "1-800-GAMBLER" in s and "Cancel anytime from your Whop account." in s and "<details>" in s
+    assert "Join on Whop" not in s and "Membership on Whop · cancel anytime from your Whop account" in s
+    assert "See every pick, then join" in s and "Membership includes" in s
+    assert s.count("1-800-GAMBLER") == 2 and "21 and over" in s and "<details>" in s
 
 
 def test_saved_board_is_real_rows_with_their_own_time():
     doc = json.loads(landing_v3.FALLBACK.read_text(encoding="utf-8"))
-    assert doc["board_at"] == "2026-11-19T16:20:55+00:00" and len(doc["records"]) >= 6
+    assert doc["board_at"] == "2026-11-22T17:53:44+00:00" and len(doc["records"]) >= 6
     for r in doc["records"]:
         assert r["market"]["line_type"] == "standard" and r["offer"]["line"] is not None and r["scout"]["p_side"] is not None
         assert "units" not in r["scout"] and "stake_reason" not in r["scout"]
     rows, meta, n, _t = landing_v3.terminal(doc)
-    assert n == 6 and meta == "as of Nov 19, 16:20 UTC"
+    assert n == 4 and meta == "as of Nov 22, 17:53 UTC" and landing_v3.feeds_label(doc) == "Underdog"
+
+
+def test_slip_tile_is_a_real_slip_in_v3_markup():
+    doc = json.loads(landing_v3.SLIP.read_text(encoding="utf-8"))
+    assert "member" not in doc and "id" not in doc and "result" not in doc and all(set(l) <= {"player", "team", "prop", "scope", "line", "side", "p", "grade"} for l in doc["legs"])
+    body, cap = landing_v3.slip_card()
+    p = 1.0
+    for l in doc["legs"]:
+        p *= l["p"]
+        assert f'{l["p"] * 100:.1f}<i>%</i>' in body and f'>{l["grade"]}</b>' in body
+    assert f"<b>{p * 100:.1f}<i>%</i></b><span>chance all {len(doc['legs'])} hit</span>" in body
+    assert "Built" not in cap and "shown as built on Nov 20, 19:56 UTC" in cap and "<img" not in body
+
+
+def test_disclosure_text_is_at_least_13px():
+    css = landing_v3.ASSETS["PAGE_CSS"].read_text(encoding="utf-8")
+    for sel in (".fine", ".rule", ".micro", ".rg", ".rg-close", ".term-foot", ".slip figcaption", ".rv figcaption small", ".pool .cap"):
+        sizes = re.findall(r"(?:^|[},])\s*" + re.escape(sel) + r"\{[^}]*?font-size:([\d.]+)px", css, re.M)
+        assert sizes and all(float(x) >= 13 for x in sizes), (sel, sizes)
 
 
 def test_one_changed_input_makes_exactly_one_new_page(srv, monkeypatch):

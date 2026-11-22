@@ -1,9 +1,10 @@
 /* v3 landing (the line terminal). Inlined by landing_v3.py. Everything on the page is server-rendered at its final value; this only adds:
-   - the terminal: tap a player to open or close the full read; tap an app's line to see Scout's chance, grade, last 10, break-even and
-     that letter's record at that line (all values already in the row's markup);
+   - the terminal: tap a player to open or close the full read; tap an app's line to see Scout's chance, grade, last 10 and break-even
+     at that line (all values already in the row's markup);
    - "Pick two maps": the pooled kills per map from the two chosen maps (numbers in the markup, weighted by maps played);
    - "Move the line": Scout's CS2 kills chance and letter as the line moves (formula, spread, cap, cut points and the per-letter record
      come from the server in data-gw; at the real line it prints the board's own number);
+   - the hero board's chances count in once (html.motion only);
    - a failed sign-in (/?signin_error=...) shown as text; freshness said by the browser (the cached HTML only says "as of");
    - reveal-once on view (html.motion only) and the phone dock after the hero buttons scroll away. */
 (function () {
@@ -18,17 +19,21 @@
     if (e) { var el = D.getElementById('signin-error'); el.textContent = e; el.hidden = false; }
   });
 
-  /* freshness: the cached HTML says "as of <time>"; while the board is younger than data-fresh minutes the browser says
-     "checked N min ago" and lights the dots. Re-checked every minute, so an open tab never keeps a stale claim. */
+  /* freshness: the cached HTML says "as of <time>". The browser says it relative to now from data-at: "checked N min ago" (and lights
+     the dots) while the board is younger than data-fresh minutes, else "Board from today, 14:05 UTC" / "yesterday" (a saved board says
+     "Saved board from ..."). Re-checked every minute, so an open tab never keeps a stale claim. */
   var term = D.getElementById('terminal');
   safe(function () {
     var at = term && Date.parse(term.getAttribute('data-at') || ''), atEl = D.getElementById('term-at');
     if (!term || !atEl || !isFinite(at)) return;
-    var asOf = atEl.textContent;
+    var asOf = atEl.textContent, saved = term.getAttribute('data-state') === 'saved';
+    function hm(d) { return ('0' + d.getUTCHours()).slice(-2) + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' UTC'; }
     function fresh() {
-      var min = (Date.now() - at) / 60000, lim = +term.getAttribute('data-fresh') || 30, live = min >= -2 && min <= lim;
-      atEl.textContent = live ? (min < 1 ? 'checked just now' : 'checked ' + Math.floor(min) + ' min ago') : asOf;
-      term.setAttribute('data-state', live ? 'live' : 'dated');
+      var now = Date.now(), min = (now - at) / 60000, lim = +term.getAttribute('data-fresh') || 30, live = !saved && min >= -2 && min <= lim;
+      var d = new Date(at), day = Math.floor(now / 864e5) - Math.floor(at / 864e5), lead = saved ? 'Saved board from ' : 'Board from ';
+      atEl.textContent = live ? (min < 1 ? 'checked just now' : 'checked ' + Math.floor(min) + ' min ago')
+        : day === 0 ? lead + 'today, ' + hm(d) : day === 1 ? lead + 'yesterday, ' + hm(d) : asOf;
+      if (!saved) term.setAttribute('data-state', live ? 'live' : 'dated');
       D.documentElement.classList.toggle('live', live);
     }
     fresh();
@@ -63,7 +68,7 @@
     if (bes) { bes.hidden = !d.be; $('b', bes).textContent = d.be || ''; }
     if (tick) { tick.hidden = !d.be; if (d.be) tick.style.setProperty('--b', d.be); }
     /* the open read: every value and label comes from the tapped line; a cell whose value that line lacks is hidden, never kept */
-    var map = { p: d.p, side: d.side, g: gv, line: d.line, app: d.app, l10: d.l10, be: d.be, entry: d.entry, seen: d.seen, graded: d.graded, band: d.band };
+    var map = { p: d.p, side: d.side, g: gv, line: d.line, app: d.app, l10: d.l10, be: d.be, entry: d.entry, seen: d.seen, graded: d.graded };
     $$('.dt [data-k]', row).forEach(function (n) {
       var k = n.getAttribute('data-k'), v = map[k];
       n.textContent = v == null ? '' : v;
@@ -71,7 +76,7 @@
     });
     $$('.dt [data-c]', row).forEach(function (n) { n.hidden = !map[n.getAttribute('data-c')]; });
     var rec = $('.dt-rec', row);
-    if (rec) rec.hidden = !d.band;
+    if (rec) rec.hidden = !d.g;
   });
 
   /* pick two maps: the pooled kills per map = sum(kills/map x maps) / sum(maps) over the two chosen; pace = line / 2 */
@@ -87,7 +92,7 @@
       vE.textContent = v.toFixed(2);
       dE.textContent = (dlt >= 0 ? '+' : '−') + Math.abs(dlt).toFixed(2);
       dE.className = dlt >= 0 ? 'up' : 'dn';
-      nE.textContent = order.map(function (b) { return $('b', b).textContent; }).join(' + ');
+      nE.textContent = order.map(function (b) { return $('.mn', b).textContent; }).join(' + ');
     }
     btns.forEach(function (b) {
       b.addEventListener('click', function () {
@@ -140,7 +145,7 @@
     for (var t = Math.ceil(X0 / step) * step; t <= X1; t += step) svg.appendChild(el('text', { 'class': 'c-tk', x: x(t), y: base + 20, 'text-anchor': 'middle' }, String(t)));
     [gU, gO, pj, pjt, mk, mkt].forEach(function (n) { svg.appendChild(n); });
     var pE = D.getElementById('gw-p'), gE = D.getElementById('gw-g'), sE = D.getElementById('gw-side'), lv = D.getElementById('gw-lv'),
-        rec = D.getElementById('gw-rec'), rg = D.getElementById('gw-rg'), rb = D.getElementById('gw-rb'), lad = $$('#gw-ladder li');
+        lad = $$('#gw-ladder li');
     function fill() { L.style.setProperty('--p', ((L.value - L.min) / (L.max - L.min) * 100) + '%'); }
     function draw() {
       var line = parseFloat(L.value), r = chance(line), lx = x(line), txt = 'Line ' + line.toFixed(1), w = txt.length * 7;
@@ -155,8 +160,6 @@
       pE.textContent = (r.ch * 100).toFixed(1);
       gE.textContent = r.g; gE.className = 'gw-g ' + gcls(r.g);
       lad.forEach(function (li) { li.classList.toggle('on', li.getAttribute('data-g') === r.g); });
-      var band = (cfg.bands || {})[r.g];
-      rec.hidden = !band; if (band) { rg.textContent = r.g; rb.textContent = band; }
       L.setAttribute('aria-valuetext', 'Line ' + line.toFixed(1) + ', ' + r.side + ' ' + (r.ch * 100).toFixed(1) + ' percent, ' + (r.g === 'Lean' ? 'Lean ' + r.side : 'grade ' + r.g));
       fill();
     }
@@ -166,7 +169,7 @@
 
   safe(function () {
     var motion = D.documentElement.classList.contains('motion');
-    var targets = $$('.sec-head, .lg, .vs, .tile, .rv, .rv-rec, .ct, .qs, .pool, .gw-box');
+    var targets = $$('.sec-head, .lg, .vs, .tile, .rv, .qs, .pool, .gw-box, .plan-card');
     if (motion && 'IntersectionObserver' in window) {
       targets.forEach(function (t) { t.classList.add('rv-on'); });
       var io = new IntersectionObserver(function (es) {
@@ -175,6 +178,26 @@
       targets.forEach(function (t) { io.observe(t); });
       if (term) io.observe(term);
     } else if (term) term.classList.add('in');
+  });
+
+  /* the one motion moment: the hero board's chances count in from zero once, beside their meters (html.motion only; the server
+     already printed the final values, so without motion or JS nothing changes) */
+  safe(function () {
+    if (!term || !D.documentElement.classList.contains('motion') || !('IntersectionObserver' in window) || !window.requestAnimationFrame) return;
+    var nums = $$('.tr .pv', term).map(function (b) { return { n: b.firstChild, v: parseFloat(b.firstChild.nodeValue) }; })
+      .filter(function (x) { return x.n && isFinite(x.v); });
+    nums.forEach(function (x) { x.n.nodeValue = '0.0'; });
+    var go = new IntersectionObserver(function (es) {
+      if (!es[0].isIntersecting) return;
+      go.disconnect();
+      var t0 = performance.now();
+      (function tick(t) {
+        var k = Math.min(1, (t - t0) / 800), e = 1 - Math.pow(1 - k, 3);
+        nums.forEach(function (x) { x.n.nodeValue = (x.v * e).toFixed(1); });
+        if (k < 1) requestAnimationFrame(tick);
+      })(t0);
+    });
+    go.observe(term);
   });
 
   safe(function () {

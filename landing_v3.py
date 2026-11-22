@@ -6,7 +6,7 @@ untouched: flag-off visitors keep its exact bytes (tests/test_ui_v3_gate.py).
 Every number on the page comes from a body the server already keeps for its own public routes - never typed into the template:
 - the live line terminal: the CS2 board snapshot members read (workspace_api.snapshot, the shared 5 s board), rows chosen by a
   stated rule (soonest graded props where two apps list different lines or a line moved, then the soonest graded props); each row
-  opens in place (chance at exactly the line, projection vs line, last 10, break-even, that letter's W-L-P from /api/record bands)
+  opens in place (chance at exactly the line, projection vs line, last 10, break-even, a link to that grade's tier on /record)
   and the gate counts the board's other letter-graded markets. No live row: the saved board (FALLBACK), always with its as-of time;
 - "Move the line": seeded from a real CS2 kills Maps 1-2 row, drawn only when its formula prints that row's own chance;
 - the record ledger: the same shared answer /api/record serves (key and compute identical), per sport;
@@ -29,9 +29,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 TEMPLATE = ROOT / "web" / "v3" / "landing.html"
-# A saved CS2 board (real rows from the Nov 19, 16:20 UTC member board, trimmed to the fields the terminal reads). Shown only when the
-# live snapshot has no row to show, always labelled with its own "as of" time (the browser never calls it fresh: data-at is old).
+# A saved CS2 board (real rows from the Nov 22, 17:53 UTC member board, trimmed to the fields the terminal reads). Shown only when the
+# live snapshot has no row to show, always labelled with its own time (the browser says it relative to now: "Saved board from ...").
 FALLBACK = ROOT / "web" / "v3" / "landing-fallback.json"
+# A real Slip Studio slip (the latest 3-pick slip in slip_studio.db when saved, picked by that rule, never by result), as built: legs,
+# lines, sides, chances, grades. Rendered server-side in the page's own v3 markup (no screenshot). No member id, no result.
+SLIP = ROOT / "web" / "v3" / "landing-slip.json"
 ASSETS = {"TOKENS_CSS": ROOT / "web" / "v3" / "tokens.css", "PAGE_CSS": ROOT / "web" / "v3" / "landing-page.css",
           "PAGE_JS": ROOT / "web" / "v3" / "landing-page.js"}
 STALE_S = 900                      # a page not rebuilt for this long (no visitors) is rebuilt from cached bodies before serving
@@ -39,10 +42,12 @@ REBUILD_S = 120                    # the page changes at most this often (hero r
 BOARD_READ = True                  # tests switch this off (no feed read from the background builder)
 FRESH_MIN = 30                     # a board older than this is labelled "as of <time>", never "checked N min ago"
 SPORTS = ("cs2", "lol", "nba", "nfl")
-LABEL = {"cs2": "CS2", "lol": "League", "nba": "NBA", "nfl": "NFL", "soccer": "Soccer", "tennis": "Tennis"}
+LABEL = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL", "soccer": "Soccer", "tennis": "Tennis"}
 LONG = {"cs2": "CS2", "lol": "League of Legends", "nba": "NBA", "nfl": "NFL", "soccer": "Soccer", "tennis": "Tennis"}
-# The apps and books Scout reads (the same ten the live page names). Text only, no logos.
-BOOKS = ("PrizePicks", "Underdog", "Sleeper", "Dabble", "DraftKings", "FanDuel", "BetRivers", "Unibet", "Kalshi", "Polymarket")
+# The apps and books whose lines were on the live member boards when checked (2026-11-22 17:5x UTC: CS2 board = Underdog, with the
+# PrizePicks feed up but empty; NBA / NFL boards = PrizePicks, Underdog, FanDuel, BetRivers, Unibet, Polymarket). Only sources seen on
+# a live board are named; no paid odds feed (owner 2026-11-09). Text only, no logos. Re-check against the boards before adding one.
+BOOKS = ("PrizePicks", "Underdog", "FanDuel", "BetRivers", "Unibet", "Polymarket")
 SHORT = {"underdog": "UD", "prizepicks": "PP"}
 # The "Move the line" widget: Scout's CS2 kills chance (grader.p_more with the live kills spread, chances capped either side) and the
 # letter cut points (grader.grade_from_p; tests/test_landing_v3.py keeps the two in step). The widget is only drawn when this formula,
@@ -51,11 +56,14 @@ KILLS_SPREAD = 1.4756515691194962
 KILLS_CAP = 0.78
 CUTS = ((0.80, "A+"), (0.74, "A"), (0.68, "A-"), (0.63, "B+"), (0.57, "B"), (0.55, "B-"))
 
-# Review wall featuring rule (shown on the page in small print): reviews about how the product works. A review with photos (they are
-# slips / calendars), money or result talk, shouting or profanity stays on /reviews only. Every review stays published there.
+# Review wall featuring rule (said on the page): the reviews that talk about using the product (stats, reasons, breakdowns, design,
+# navigation...). A review with photos (they are slips / calendars) or shouting stays on /reviews only; a sentence with money, result,
+# betting or guarantee talk is never quoted (the quote shows an ellipsis where a sentence was left out and links to the reviews page).
 _MONEY = re.compile(r"profit|money|\$|cash|paid|payout|\bwon\b|\bwin|hit big|\bbank|rarely miss|every (single )?day|\bmf\b|"
-                    r"\bf+u+c+k|\bshit|\bbitch|\bdamn", re.I)
-FEATURE_N = 6
+                    r"\bf+u+c+k|\bshit|\bbitch|\bdamn|guarantee|\blocks?\b|\bbets?\b|\bbetter\b|\bslips?\b|\bparlay|10 ?/ ?10|outta|no cap|\btwin\b", re.I)
+_PRODUCT = re.compile(r"stat|breakdown|reason|navigat|design|analy[sz]|matchup|information|\bcards?\b|\bmaps?\b|projection|grader|"
+                      r"\bboard\b|explain|\bdata\b", re.I)
+FEATURE_N = 3
 
 _STATE = {"page": None, "built": 0.0, "key": None, "board": (None, None), "last": {}}
 _LOCK = threading.RLock()
@@ -67,7 +75,12 @@ def esc(v):
 
 
 def _mt():
-    return (TEMPLATE.stat().st_mtime,) + tuple(f.stat().st_mtime for f in ASSETS.values())
+    def m(f):
+        try:
+            return f.stat().st_mtime
+        except OSError:
+            return None
+    return (TEMPLATE.stat().st_mtime,) + tuple(f.stat().st_mtime for f in ASSETS.values()) + (m(FALLBACK), m(SLIP))
 
 
 def _template():
@@ -263,13 +276,7 @@ def _gcls(g):
     return "ga" if g[:1] == "A" else "gb" if g[:1] == "B" else ""
 
 
-def _band_text(bands, grade):
-    """'1,137-1,026-19': CS2 calls graded exactly this letter on the public record (won-lost-push), or ''."""
-    b = (bands or {}).get(grade or "")
-    return f'{int(b["wins"]):,}-{int(b["losses"]):,}-{int(b.get("pushes") or 0):,}' if b else ""
-
-
-def _offer_cell(r, lead, bands=None):
+def _offer_cell(r, lead):
     of = r.get("offer") or {}
     sc = r.get("scout") or {}
     p = _pct(sc.get("p_side"))
@@ -286,8 +293,7 @@ def _offer_cell(r, lead, bands=None):
     data = (f' data-p="{esc(p)}" data-side="{side}" data-g="{esc(sc.get("grade") or "")}" data-line="{esc(_num(of.get("line")))}"'
             f' data-app="{esc(of.get("platform_label") or "")}" data-l10="{esc(l10s)}" data-h="{l10[0] if l10 else ""}" data-n="{l10[1] if l10 else ""}"'
             f' data-be="{esc(be or "")}" data-entry="{esc((r.get("parity") or {}).get("entry") or "")}"'
-            f' data-seen="{seen.strftime("%H:%M") if seen else ""}" data-graded="{esc(_when(graded))}"'
-            f' data-band="{esc(_band_text(bands, sc.get("grade")))}"')
+            f' data-seen="{seen.strftime("%H:%M") if seen else ""}" data-graded="{esc(_when(graded))}"')
     return (f'<button type="button" class="bk{" on" if lead else ""}"{data}'
             f' aria-pressed="{"true" if lead else "false"}"><b>{tag}</b><span>{esc(_num(of.get("line")))}</span>{mv}</button>')
 
@@ -320,20 +326,33 @@ def minis(board):
     return out
 
 
+def hand_minis(board):
+    """The by-hand table's real UI chips: the first terminal row's lines by app, and its chance against break-even as the row's meter."""
+    pick = _rows(board, n=HERO_ROWS)[0]
+    if not pick:
+        return "", ""
+    rs = pick[0][0]
+    p, be = _pct((rs[0].get("scout") or {}).get("p_side")), _pct((rs[0].get("parity") or {}).get("be"))
+    bar = (f'<span class="mt big" style="--p:{esc(p)}" aria-hidden="true"><i></i><u style="--b:{esc(be)}"></u></span>'
+           f'<span class="lbl"><b>Scout {esc(p)}%</b><b>Break-even {esc(be)}%</b></span>') if p and be else ""
+    return _span_cells(rs), bar
+
+
 def _who(r):
     pl, mk = r.get("player") or {}, r.get("market") or {}
     return f'<span class="num">{esc(pl.get("name"))} · {esc(mk.get("stat_label"))} · {esc(mk.get("period_label"))}</span>'
 
 
-def _detail(i, lead, bands, opened):
+def _detail(i, lead, opened):
     """The open card under a row (the member card's first lines): the side and line, the chance at exactly that line, why (projection
-    against the line), the last 10 at this line, the break-even for the entry, the letter's own record, when it was graded."""
+    against the line), the last 10 at this line, the break-even for the entry, when it was graded, and a link to that grade's tier on
+    the public record. No hit rate is printed here: a tier's record sits on /record with its own stated chance, never beside a
+    break-even it could be read against."""
     of, mk, sc, par = lead.get("offer") or {}, lead.get("market") or {}, lead.get("scout") or {}, lead.get("parity") or {}
     side = "Over" if sc.get("side") == "over" else "Under"
     line = esc(_num(of.get("line")))
     p, be, l10 = _pct(sc.get("p_side")), _pct(par.get("be")), _l10(lead)
     proj = sc.get("projection")
-    band = _band_text(bands, sc.get("grade"))
     graded, seen = _ts(sc.get("forecast_at")), _ts(of.get("seen_at"))
     app = esc(of.get("platform_label") or "")
     hid = lambda v: "" if v else " hidden"
@@ -353,15 +372,30 @@ def _detail(i, lead, bands, opened):
             f'<p class="dt-h"><b data-k="side">{side}</b> <b data-k="line">{line}</b> {esc(mk.get("stat_label"))} · {esc(mk.get("period_label"))}'
             f' <span class="dt-app">on <span data-k="app">{app}</span></span></p>'
             f'<dl class="dt-g">{"".join(cells)}</dl>'
-            f'<p class="dt-rec"{"" if band else " hidden"}>On the record, CS2 calls graded <b data-k="g">{esc(sc.get("grade") or "")}</b>: '
-            f'<b class="wl" data-k="band">{esc(band)}</b> <a href="/record">See them all <span aria-hidden="true">→</span></a></p>'
+            f'<p class="dt-rec"><a href="/record#cs2">See the <b data-k="g">{esc(sc.get("grade") or "")}</b> tier on the public record, losses included'
+            f' <span aria-hidden="true">→</span></a></p>'
             f'<p class="dt-f">{foot}</p>'
             f'</div>')
 
 
-def terminal(board, bands=None):
-    """(html rows, meta line, row count, letter-graded markets on the board). Empty board -> ("", "", 0, 0)."""
-    pick, at, total = _rows(board)
+HERO_ROWS = 4                      # the hero card shows 4 rows (3 on a phone); the gate counts the rest
+
+
+def feeds_label(board):
+    """'Underdog + PrizePicks': the apps whose rows are on this board, in the board's feed order (never a feed that listed nothing)."""
+    have = {(r.get("offer") or {}).get("platform"): (r.get("offer") or {}).get("platform_label") for r in (board or {}).get("records") or []}
+    order = list(((board or {}).get("feeds") or {}).keys()) + sorted(k for k in have if k)
+    out = []
+    for k in order:
+        if k in have and have[k] and have[k] not in out:
+            out.append(have[k])
+    return " + ".join(out)
+
+
+def terminal(board):
+    """(html rows, meta line, row count, letter-graded markets on the board). Empty board -> ("", "", 0, 0). Rows start closed (tap a
+    player for the read), so the hero card shows its rows next to the headline."""
+    pick, at, total = _rows(board, n=HERO_ROWS)
     if not pick:
         return "", "", 0, 0
     meta = "as of " + _when(at) if at else ""   # the page is cached: the HTML never claims freshness; the browser reads data-at
@@ -377,7 +411,7 @@ def terminal(board, bands=None):
         chips = ('<em class="chip gap">Line gap</em>' if gap else "") + ('<em class="chip mvd">Moved</em>' if moved else "")
         dots = f'<span class="l10" title="Last 10 at this line"{"" if l10 else " hidden"}><b>{l10[0] if l10 else ""}</b>/<i>{l10[1] if l10 else ""}</i></span>'
         start = _ts(ev.get("start_utc"))
-        opened = i == 0
+        opened = False
         when = (" · " + esc(start.strftime("%a %H:%M")) + " UTC") if start else ""
         bee = f'<u style="--b:{esc(be or 0)}"{"" if be else " hidden"}></u>'
         bes = f'<small{"" if be else " hidden"}>break-even <b>{esc(be or "")}</b>%</small>'
@@ -386,12 +420,12 @@ def terminal(board, bands=None):
             f'<button type="button" class="who" aria-expanded="{"true" if opened else "false"}" aria-controls="td{i}">'
             f'<b>{esc(pl.get("name"))}<i class="cv" aria-hidden="true"></i></b><small>{esc(ev.get("label"))}{when}</small></button>'
             f'<div class="mkt"><span>{esc(mk.get("stat_label"))}</span><small>{esc(mk.get("period_label"))}</small>{chips}</div>'
-            f'<div class="bks" role="group" aria-label="Lines by app">{"".join(_offer_cell(r, j == 0, bands) for j, r in enumerate(rs))}</div>'
+            f'<div class="bks" role="group" aria-label="Lines by app">{"".join(_offer_cell(r, j == 0) for j, r in enumerate(rs))}</div>'
             f'<div class="ch"><span class="sd">{side}</span><b class="pv">{esc(p)}<i>%</i></b>'
             f'<span class="mt" style="--p:{esc(p)}" aria-hidden="true"><i></i>{bee}</span></div>'
             f'<div class="gr"><b class="{_gcls(grade)}">{esc(grade) or "–"}</b></div>'
             f'<div class="rc">{dots}{bes}</div>'
-            f'{_detail(i, lead, bands, opened)}'
+            f'{_detail(i, lead, opened)}'
             f'</li>')
     return "".join(rows), meta, len(rows), total
 
@@ -454,23 +488,24 @@ def _first_sentence(s):
     return m.group(1) if m else s
 
 
-def ledger(record):
+def ledger(record, sports=None):
+    """(cards html, decided total, oldest as-of, recorded sport labels). Decided = wins + losses, the count the cards print (pushes
+    apart, as /record counts them), so the headline number always ties to the cards. Framed as a log, never a performance claim: no hit
+    rate and no break-even here. A graded sport with no public record yet (soccer, tennis) gets a card that says exactly that."""
     if not record:
-        return "", 0, "", ""
-    cells, total, asof, since = [], 0, None, None
+        return "", 0, "", []
+    cells, total, asof, names = [], 0, None, []
     for sp in SPORTS:
         d = record.get(sp)
         if not d:
             continue
         t = d["totals"]
         w, l, p = int(t.get("wins") or 0), int(t.get("losses") or 0), int(t.get("pushes") or 0)
-        decided = t.get("picks") if isinstance(t.get("picks"), int) else w + l
-        total += decided                                 # the record's own count (wins + losses; pushes apart), as /record shows it
+        total += w + l
+        names.append(LABEL[sp])
         days = ((d.get("calendar") or {}).get("days")) or []
         a = _ts(d.get("as_of"))
         asof = a if asof is None or (a and a < asof) else asof
-        if days:
-            since = days[0]["date"] if since is None or days[0]["date"] < since else since
         hi = max([x.get("wins", 0) + x.get("losses", 0) for x in days] or [1]) or 1
         bars = "".join(
             f'<i style="--w:{round(100 * x.get("wins", 0) / hi, 1)}%;--l:{round(100 * x.get("losses", 0) / hi, 1)}%" title="{esc(_day(x.get("date")))}: {x.get("wins", 0)}-{x.get("losses", 0)}"></i>'
@@ -479,45 +514,111 @@ def ledger(record):
             f'<article class="lg" data-sport="{sp}"><header><b>{LONG[sp]}</b><small>{esc(t.get("matches"))} {esc(t.get("match_word") or "matches")}</small></header>'
             f'<p class="wlp"><b>{w:,}</b><span>-</span><b>{l:,}</b><span>-</span><b>{p:,}</b></p><p class="wlk">Won · Lost · Push</p>'
             f'<div class="days" aria-label="The last 30 days, wins above the line and losses below">{bars}</div>'
-            f'<p class="rule">{esc(_first_sentence(d.get("rule") or d.get("population")))}</p></article>')
-    return "".join(cells), total, (_when(asof) if asof else ""), (_day(since) if since else "")
+            f'<p class="rule"><span>Rule:</span> {esc(_first_sentence(d.get("rule") or d.get("population")))}</p></article>')
+    if not cells:
+        return "", 0, "", []
+    for sp in sports or []:
+        if sp not in SPORTS and sp in LONG:
+            cells.append(f'<article class="lg lg-new" data-sport="{sp}"><header><b>{LONG[sp]}</b></header>'
+                         f'<p class="lg-n">Graded on the board</p><p class="rule">Not on the public record yet. Its card shows here once it is.</p></article>')
+    return "".join(cells), total, (_when(asof) if asof else ""), names
 
 
 # ----------------------------------------------------------------------------------------------------------------- the reviews
 
+def _sentences(s):
+    return [x.strip() for x in re.split(r"(?<=[.!?])\s+", str(s or "").strip()) if x.strip()]
+
+
 def featured(doc):
-    rv = (doc or {}).get("reviews") or []
-    keep = []
-    for r in rv:
+    """[(review, quote, cut)] by the stated rule: reviews that talk about using the product, most specific first. A review with photos
+    (slips) or shouting is not featured; a sentence with money / result / betting / guarantee talk is never quoted (cut = a sentence was
+    left out, shown as an ellipsis with a link to the reviews page)."""
+    out = []
+    for r in (doc or {}).get("reviews") or []:
         text = f'{r.get("title") or ""} {r.get("body") or ""}'
         letters = [c for c in text if c.isalpha()]
         shouting = len(letters) > 12 and sum(c.isupper() for c in letters) / len(letters) > .6
-        if r.get("photos") or _MONEY.search(text) or shouting or len(str(r.get("body") or "").split()) < 3:
+        if r.get("photos") or shouting:
             continue
-        keep.append(r)
-    keep.sort(key=lambda r: -len(str(r.get("body") or "")))
-    return keep[:FEATURE_N]
+        sents = _sentences(r.get("body"))
+        kept = [x for x in sents if not _MONEY.search(x)]
+        quote = " ".join(kept)
+        hits = len(_PRODUCT.findall(quote))
+        if not hits or len(quote.split()) < 5:
+            continue
+        out.append((hits, len(quote), r, quote, len(kept) < len(sents)))
+    out.sort(key=lambda x: (-x[0], -x[1]))
+    return [(r, q, cut) for _h, _n, r, q, cut in out[:FEATURE_N]]
 
 
 def wall(doc):
+    """(summary html, cards html, review count, note). No star histogram (one number and the count); the note says where the reviews
+    were written, by whom and when, from the reviews themselves."""
     s = (doc or {}).get("summary") or {}
     n = int(s.get("count") or 0)
     if not n:
-        return "", "", 0
+        return "", "", 0, ""
     cards = []
-    for r in featured(doc):
+    for r, quote, cut in featured(doc):
         d = _ts(r.get("created"))
+        title = r.get("title") if r.get("title") and not _MONEY.search(str(r.get("title"))) else ""
+        stars = int(r.get("stars") or 0)
+        more = "Read the full review" if cut else "On the reviews page"
         cards.append(
-            f'<figure class="rv"><div class="st" aria-label="{int(r.get("stars") or 0)} of 5 stars">{"★" * int(r.get("stars") or 0)}<span>{"★" * (5 - int(r.get("stars") or 0))}</span></div>'
-            f'{"<h3>" + esc(r.get("title")) + "</h3>" if r.get("title") else ""}'
-            f'<blockquote>{esc(r.get("body"))}</blockquote>'
-            f'<figcaption><b>{esc(r.get("name"))}</b><small>Paying member · {esc(_day(r.get("created")) + (", " + str(d.year) if d else ""))}{" · edited" if r.get("edited") else ""}</small></figcaption></figure>')
-    br = s.get("breakdown") or {}
-    bars = "".join(f'<li><span>{k}★</span><i style="--v:{round(100 * int(br.get(k) or 0) / n, 1)}%"></i><b>{int(br.get(k) or 0)}</b></li>' for k in ("5", "4", "3", "2", "1"))
-    rating = (f'<p class="rating"><b>★ {float(s.get("average")):.1f}</b><span>from {n} member reviews</span></p>'
-              if n >= 10 and s.get("average") is not None else f'<p class="rating"><span>{n} member reviews</span></p>')
-    head = f'{rating}<ul class="brk">{bars}</ul>'
-    return head, "".join(cards), n
+            f'<figure class="rv"><div class="st" aria-label="{stars} of 5 stars">{"★" * stars}<span>{"★" * (5 - stars)}</span></div>'
+            f'{"<h3>" + esc(title) + "</h3>" if title else ""}'
+            f'<blockquote>{esc(quote)}{" …" if cut else ""}</blockquote>'
+            f'<figcaption><b>{esc(r.get("name"))}</b><small>Paying member · {esc(_day(r.get("created")) + (", " + str(d.year) if d else ""))}{" · edited" if r.get("edited") else ""}</small>'
+            f'<a href="/reviews">{more} <span aria-hidden="true">→</span></a></figcaption></figure>')
+    avg = s.get("average")
+    head = (f'<p class="rating"><b>★ {float(avg):.1f}</b><span>· {n} member reviews</span></p>' if n >= 10 and avg is not None
+            else f'<p class="rating"><span>{n} member reviews</span></p>')
+    rv = (doc or {}).get("reviews") or []
+    days = sorted({f"{_day(x.get('created'))}, {_ts(x.get('created')).year}" for x in rv if _ts(x.get("created"))})
+    when = f" All {n} were posted on {days[0]}." if len(rv) == n and len(days) == 1 else ""
+    note = ("Written on Scout's reviews page by paying members (sign-in with Whop checks the membership), one review each. "
+            "Every review is published, whatever its rating." + when)
+    return head, "".join(cards), n, note
+
+
+# --------------------------------------------------------------------------------------------------------------------- the slip
+
+_PROP = {"hs": "Headshots", "kills": "Kills", "assists": "Assists", "deaths": "Deaths"}
+_SCOPE = {"1": "Map 1", "12": "Maps 1-2", "123": "Maps 1-3"}
+_BOOK = {"prizepicks": "PrizePicks", "underdog": "Underdog"}
+
+
+def slip_card():
+    """(slip html, caption) for the Slip Studio tile, in the page's v3 markup, from SLIP (a real slip as built); ("", "") when the file
+    is missing or odd. All-hit chance = the product of the legs' chances (Slip Studio's own figure: the model's chances, assumed
+    independent)."""
+    try:
+        doc = json.loads(SLIP.read_text(encoding="utf-8"))
+        legs = doc["legs"]
+        p_all = 1.0
+        rows = []
+        for l in legs:
+            p = float(l["p"])
+            p_all *= p
+            side = "Over" if l.get("side") == "over" else "Under"
+            g = str(l.get("grade") or "")
+            prop = _PROP.get(l.get("prop"), str(l.get("prop")).title())
+            rows.append(f'<li><div class="sl-w"><b>{esc(l["player"])}</b><small>{esc(l.get("team") or "")}</small></div>'
+                        f'<div class="sl-m"><span>{side} {esc(_num(l["line"]))}</span><small>{esc(prop)} · {esc(_SCOPE.get(str(l.get("scope")), ""))}</small></div>'
+                        f'<div class="sl-p"><b>{p * 100:.1f}<i>%</i></b></div><b class="gt {_gcls(g)}">{esc(g)}</b></li>')
+        built = _ts(doc.get("built_at"))
+    except Exception:
+        return "", ""
+    if len(legs) < 2 or not built:
+        return "", ""
+    book = _BOOK.get(doc.get("book"), str(doc.get("book") or "").title())
+    n = len(legs)
+    head = (f'<div class="sl-h"><span class="sl-k">{n}-pick slip · {esc(book)}</span>'
+            f'<p class="sl-all"><b>{p_all * 100:.1f}<i>%</i></b><span>chance all {n} hit</span></p>'
+            f'<span class="mt big" style="--p:{p_all * 100:.1f}" aria-hidden="true"><i></i></span></div>')
+    cap = f"The latest {n}-pick slip built in Slip Studio when this sample was saved, shown as built on {_when(built)}."
+    return head + f'<ol class="sl-legs">{"".join(rows)}</ol>', cap
 
 
 # --------------------------------------------------------------------------------------------------------------------- build
@@ -534,44 +635,21 @@ def _list(names):
     return names[0] if len(names) < 2 else ", ".join(names[:-1]) + " and " + names[-1]
 
 
-def record_row(record):
-    """One line per sport under the review wall: 'CS2 1,422-1,263-28'. '' without a record."""
-    out = []
-    for sp in SPORTS:
-        d = (record or {}).get(sp)
-        if not d:
-            continue
-        t = d["totals"]
-        out.append(f'<li><b>{LABEL[sp]}</b><span class="w">{int(t.get("wins") or 0):,}</span>-<span class="l">{int(t.get("losses") or 0):,}</span>'
-                   f'-<span>{int(t.get("pushes") or 0):,}</span></li>')
-    return "".join(out)
-
-
-def cs2_bands(record):
-    """{letter: band} for CS2 from the record answer's own bands list (the grade's W-L-P as /record shows it)."""
-    out = {}
-    for b in ((record or {}).get("cs2") or {}).get("bands") or []:
-        if isinstance(b, dict) and b.get("name") and isinstance(b.get("wins"), int) and isinstance(b.get("losses"), int):
-            out[str(b["name"])] = b
-    return out
-
-
-def _widget(seed, bands, saved_at):
-    """The fills for "Move the line" from its seed row ({} = no widget)."""
+def _widget(seed, saved_at):
+    """The fills for "Move the line" from its seed row ({} = no widget). No per-tier hit rate beside the chance (see _detail)."""
     if seed is None:
         return {}
     sc, of, pl = seed.get("scout") or {}, seed.get("offer") or {}, seed.get("player") or {}
     line, lam = float(of.get("line")), float(sc.get("projection"))
     lo, hi = max(0.5, math.floor(lam * 0.5) + 0.5), math.floor(lam * 1.5) + 0.5
     cuts = [[c, g] for c, g in CUTS if c <= KILLS_CAP]      # kills are capped at 78% either side: no A+ on kills (grader p_cap_kills)
-    bt = {g: _band_text(bands, g) for _c, g in cuts if _band_text(bands, g)}
     g = sc.get("grade") or ""
-    data = {"proj": round(lam, 2), "line": line, "spread": KILLS_SPREAD, "cap": KILLS_CAP, "cuts": cuts, "bands": bt}
+    data = {"proj": round(lam, 2), "line": line, "spread": KILLS_SPREAD, "cap": KILLS_CAP, "cuts": cuts}
     return {
         "GW_DATA": esc(json.dumps(data, separators=(",", ":"))),
         "GW_WHO": esc(pl.get("name")), "GW_PROJ": f"{lam:.1f}", "GW_LINE": esc(_num(line)), "GW_MIN": _num(lo), "GW_MAX": _num(hi),
         "GW_SIDE": "Over" if sc.get("side") == "over" else "Under", "GW_P": esc(_pct(sc.get("p_side"))), "GW_G": esc(g),
-        "GW_GCLS": _gcls(g), "GW_BAND": esc(bt.get(g, "")), "GW_RECHIDE": "" if bt.get(g) else " hidden", "GW_ASOF": esc(saved_at),
+        "GW_GCLS": _gcls(g), "GW_ASOF": esc(saved_at),
         "GW_LADDER": "".join(f'<li data-g="{x}"{" class=on" if x == g else ""}>{x}</li>' for x in ["Lean"] + [c[1] for c in reversed(cuts)]),
     }
 
@@ -587,21 +665,24 @@ def build(srv, join_url, fetch=True):
     """The page bytes from the inputs above. Pure assembly: escaping, no computation beyond counting."""
     inp = _inputs(srv, fetch)
     sp = sports_on()
-    bands = cs2_bands(inp["record"])
     board, saved = inp["board"], False
-    rows, meta, nrows, ntotal = terminal(board, bands) if board else ("", "", 0, 0)
+    rows, meta, nrows, ntotal = terminal(board) if board else ("", "", 0, 0)
     if not nrows:                                     # nothing to show live: the saved board, dated, through the same code
         board = fallback_board()
-        rows, meta, nrows, ntotal = terminal(board, bands) if board else ("", "", 0, 0)
+        rows, meta, nrows, ntotal = terminal(board) if board else ("", "", 0, 0)
         saved = bool(nrows)
-    cells, total, asof, since = ledger(inp["record"])
-    head, cards, nrv = wall(inp["reviews"])
+    cells, total, asof, rec_names = ledger(inp["record"], sp)
+    head, cards, nrv, rv_note = wall(inp["reviews"])
+    nfeat = len(featured(inp["reviews"])) if nrv else 0
     seed = grade_seed(board) if nrows else None
-    gw = _widget(seed, bands, _when(_ts((board or {}).get("board_at"))))
+    gw = _widget(seed, _when(_ts((board or {}).get("board_at"))))
     more = ntotal - nrows if (nrows and not saved) else 0
     mi = minis(board) if nrows else {}
+    slip, slip_cap = slip_card()
+    hp, hb = hand_minis(board) if nrows else ("", "")
     tools = (os.environ.get("SCOUT_MARKET_TOOLS") == "1", os.environ.get("SCOUT_PICKEM_EV", "").strip() == "1")
     base = public_base()
+    unrec = [LONG[s].lower() for s in sp if s not in SPORTS and s in LONG]
     fill = {
         "JOIN_URL": esc(join_url),
         "SPORT_CHIPS": "".join(f'<li data-sport="{s}">{LABEL[s]}</li>' for s in sp),
@@ -609,12 +690,16 @@ def build(srv, join_url, fetch=True):
         "SPORT_SHORT": esc(_list([LABEL[s] for s in sp])),
         "SPORT_REST": esc(_list([LONG[s] if s in ("nba", "nfl") else LONG[s].lower() for s in sp if s not in ("cs2", "lol")])),
         "SPORT_N": str(len(sp)),
+        "REC_SPORTS": esc(_list(rec_names)) if rec_names else "",
+        "UNREC": esc(_list(unrec)) if unrec else "",
         "BOOK_N": str(len(BOOKS)),
         "BOOK_CHIPS": "".join(f"<li>{b}</li>" for b in BOOKS),
+        "BOOK_LIST": esc(_list(list(BOOKS))),
         "TERM_ROWS": rows,
-        "TERM_META": esc(meta + (" · saved board" if saved else "")),
+        "TERM_FEEDS": esc(feeds_label(board)) if nrows else "",
+        "TERM_META": esc(meta),
         "TERM_STATE": ("saved" if saved else "dated") if nrows else "empty",
-        "TERM_AT": esc((board or {}).get("board_at") or "") if nrows and not saved else "",
+        "TERM_AT": esc((board or {}).get("board_at") or "") if nrows else "",
         "FRESH_MIN": str(FRESH_MIN),
         "TERM_N": str(nrows),
         "TERM_MORE": f"{more:,}",
@@ -622,10 +707,12 @@ def build(srv, join_url, fetch=True):
         "LEDGER": cells,
         "LEDGER_ASOF": esc(asof),
         "LEDGER_TOTAL": f"{total:,}" if total else "",
-        "RECORD_ROW": record_row(inp["record"]),
         "RV_HEAD": head,
         "RV_CARDS": cards,
+        "RV_NOTE": esc(rv_note),
         "RV_N": str(nrv),
+        "RV_REST": str(max(0, nrv - nfeat)),
+        "SLIP": slip, "SLIP_CAP": esc(slip_cap), "HAND_PILLS": hp, "HAND_BE": hb,
         "GAP_MINI": mi.get("GAP", ""), "MOVE_MINI": mi.get("MOVE", ""), "BE_MINI": mi.get("BE", ""),
         "TOOLS_FLAG": (" has-ev" if tools[1] else "") + (" has-arb" if tools[0] else ""),
         "BASE": esc(base),
@@ -635,7 +722,8 @@ def build(srv, join_url, fetch=True):
     # optional blocks: <!--if:NAME--> ... <!--/if:NAME--> kept only when NAME has content
     for name, on in (("TERM", nrows > 0), ("NOTERM", nrows == 0), ("SAVED", saved), ("MORE", more > 0), ("LEDGER", bool(cells)),
                      ("REVIEWS", bool(nrv)), ("TOTAL", bool(total)), ("RVN", bool(nrv)), ("GW", bool(gw)), ("EV", tools[1]),
-                     ("ARB", tools[0]), ("GAP", "GAP" in mi), ("MOVE", "MOVE" in mi), ("BE", "BE" in mi), ("BASE", bool(base))):
+                     ("ARB", tools[0]), ("GAP", "GAP" in mi), ("NOGAP", "GAP" not in mi), ("MOVE", "MOVE" in mi), ("BE", "BE" in mi), ("BASE", bool(base)),
+                     ("SLIP", bool(slip)), ("UNREC", bool(unrec and rec_names)), ("RVREST", nrv - nfeat > 0)):
         out = re.sub(rf"<!--if:{name}-->(.*?)<!--/if:{name}-->", (lambda m: m.group(1)) if on else "", out, flags=re.S)
     out = re.sub(r"\{\{([A-Z_0-9]+)\}\}", lambda m: fill.get(m.group(1), ""), out)
     return out.encode("utf-8")

@@ -128,11 +128,13 @@ def test_landing_v3_first_screen_targets_and_width(browser, lbase, size, theme):
     ctx, page = open_page(browser, lbase, size, theme)
     try:
         assert page.evaluate("document.documentElement.dataset.theme") == "dark"    # pinned dark: a stored light theme does not apply
-        for a in ("Join on Whop", "Sign in with Whop"):                      # both in the first phone screen (standing rule)
+        for a in ("Get today's graded board", "Sign in with Whop"):          # both in the first phone screen (standing rule)
             loc = page.locator(".hero a", has_text=a).first
             assert loc.is_visible() and loc.bounding_box()["y"] + loc.bounding_box()["height"] <= size["height"], a
         assert page.locator(".hero a.btn.primary").get_attribute("href") == JOIN
-        assert page.locator(".term .tr").first.bounding_box()["y"] < size["height"]   # the first real row starts in the first screen
+        first = page.locator(".term .tr").first                              # the first real row's chance and grade show in the first screen
+        assert first.locator(".pv").bounding_box()["y"] + first.locator(".pv").bounding_box()["height"] <= size["height"]
+        assert first.locator(".gr b").bounding_box()["y"] + first.locator(".gr b").bounding_box()["height"] <= size["height"]
         for sel in (".hero", "body"):
             assert page.evaluate(f"getComputedStyle(document.querySelector('{sel}')).backgroundColor") in ("rgb(8, 11, 19)", "rgb(12, 18, 34)"), sel
         small = page.evaluate("""() => [...document.querySelectorAll('a,button,summary,input')].filter(e => e.offsetParent && !e.closest('.dock')
@@ -295,6 +297,8 @@ def test_landing_v3_row_opens_in_place_and_a_line_tap_updates_the_read(browser, 
     ctx, page = open_page(browser, lbase, PHONE, "dark")
     try:
         first = page.locator(".tr").first
+        assert not first.locator(".dt").is_visible() and first.locator("button.who").get_attribute("aria-expanded") == "false"
+        first.locator("button.who").click()                                  # rows start closed; a tap opens the read in place
         assert first.locator(".dt").is_visible() and first.locator("button.who").get_attribute("aria-expanded") == "true"
         first.locator("button.bk", has_text="13.5").click()                 # the other app's line: the open read follows it
         assert first.locator('.dt [data-k="p"]').text_content() == "52.2"
@@ -317,10 +321,10 @@ def test_landing_v3_two_maps_pool_and_move_the_line(browser, lbase, monkeypatch)
     for size in (PHONE, DESK):
         ctx, page = open_page(browser, lbase, size, "dark")
         try:
-            assert page.locator("#pool-v").text_content() == "14.88"                    # Anubis + Dust 2, weighted by maps played
-            page.locator("button.map", has_text="Cache").click()                          # the oldest choice drops out
-            assert page.locator("#pool-names").text_content() == "Dust 2 + Cache"
-            assert page.locator("#pool-v").text_content() == f"{(14.35 * 54 + 13.00 * 17) / 71:.2f}"
+            assert page.locator("#pool-v").text_content() == "16.26"                    # Mirage + Dust 2, weighted by maps played
+            page.locator("button.map", has_text="Inferno").click()                        # the oldest choice drops out
+            assert page.locator("#pool-names").text_content() == "Dust 2 + Inferno"
+            assert page.locator("#pool-v").text_content() == f"{(16.67 * 18 + 17.50 * 16) / 34:.2f}"
             p0 = page.locator("#gw-p").text_content()
             assert p0 == f"{landing_v3.kills_chance(30.5, 32.4) * 100:.1f}"           # at the real line: the board's number
             slider = page.locator("#gw-line")
@@ -374,6 +378,7 @@ def test_landing_v3_a_line_without_last_10_hides_it_never_keeps_the_other_lines(
     ctx, page = open_page(browser, base, DESK, "dark")
     try:
         row = page.locator(".tr").first
+        row.locator("button.who").click()
         assert row.locator('.dt [data-c="l10"]').is_visible() and row.locator(".rc .l10").is_visible()
         row.locator("button.bk", has_text="13.5").click()
         assert not row.locator('.dt [data-c="l10"]').is_visible() and not row.locator(".rc .l10").is_visible()

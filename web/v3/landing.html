@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>1time Scout · Know the chance before you pick</title>
-<meta name="description" content="Scout grades player props at the exact line your app shows, tells you why, and saves every call before the game so you can check the score. CS2 and League built in, plus {{SPORT_REST}}.">
+<meta name="description" content="Scout grades player props at the exact line your app shows, tells you why, and saves every call before the game so you can check the score. CS2 and LoL built in, plus {{SPORT_REST}}.">
 <meta name="theme-color" content="#080B13">
 <meta name="color-scheme" content="dark">
 <meta property="og:type" content="website">
@@ -38,9 +38,9 @@
   <div class="wrap top-in">
     <a class="brand" href="/" aria-label="1time Scout home"><span class="mark" aria-hidden="true">1T</span><b>Scout</b></a>
     <nav class="nav" aria-label="Page">
-      <a href="#terminal">Board</a><a href="/record">Record</a><a href="#reviews">Reviews</a><a href="#faq">FAQ</a>
+      <a href="#terminal">Board</a><a href="#record">Record</a><a href="#reviews">Reviews</a><a href="#faq">FAQ</a>
     </nav>
-    <div class="top-cta"><a class="lnk" href="/auth/login">Sign in</a><a class="btn primary sm" href="{{JOIN_URL}}">Join on Whop</a></div>
+    <div class="top-cta"><a class="lnk" href="/auth/login">Sign in</a><a class="btn primary sm" href="{{JOIN_URL}}">Get the board</a></div>
   </div>
 </header>
 
@@ -49,104 +49,71 @@
   <div class="glow" aria-hidden="true"></div>
   <div class="wrap hero-in">
     <div class="hero-copy">
-      <p class="eyebrow"><span class="pulse" id="pulse" aria-hidden="true"></span>Shop every line <i>·</i> <span class="sp-inline">{{SPORT_SHORT}}</span></p>
+      <p class="eyebrow"><span class="pulse" id="pulse" aria-hidden="true"></span>Shop every line</p>
       <h1 id="hero-title">Know the chance <span class="ac">before you pick.</span></h1>
-      <p class="sub">Scout puts every app's line on one row, grades each player prop at the exact line you'd play and tells you why. Every call is saved before the game and scored in public.</p>
+      <ul class="sp-row" aria-label="Sports graded">{{SPORT_CHIPS}}</ul>
+      <p class="sub">Every supported app's line on one row, graded at the exact line, saved before the game.</p>
       <div class="ctas">
-        <a class="btn primary" href="{{JOIN_URL}}">Join on Whop</a>
-        <a class="btn ghost" href="/record">See the public record</a>
+        <a class="btn primary" href="{{JOIN_URL}}">Get today's graded board</a>
+        <a class="tlnk" href="/record">See the public record <span aria-hidden="true">→</span></a>
       </div>
+      <p class="micro">Membership on Whop · cancel anytime from your Whop account</p>
       <p class="signin">Already a member? <a href="/auth/login">Sign in with Whop</a></p>
       <p class="err" id="signin-error" role="alert" hidden></p>
     </div>
-    <ul class="facts" aria-label="On the record">
-      <!--if:TOTAL--><li><b>{{LEDGER_TOTAL}}</b><span>decided picks on the public record</span></li><!--/if:TOTAL-->
-      <!--if:RVN--><li><b>{{RV_N}}</b><span>member reviews, every one published</span></li><!--/if:RVN-->
-      <li><b>{{BOOK_N}}</b><span>apps and books read, {{SPORT_N}} sports graded</span></li>
-    </ul>
 
     <!--if:TERM-->
     <div class="term" id="terminal" data-state="{{TERM_STATE}}" data-at="{{TERM_AT}}" data-fresh="{{FRESH_MIN}}">
       <div class="term-bar">
         <span class="st"><i class="dot" aria-hidden="true"></i><b>CS2 board</b></span>
-        <span class="src">Underdog + PrizePicks <i>·</i> <span id="term-at">{{TERM_META}}</span></span>
-        <ul class="flt" aria-label="What the rows show"><li class="on">Standard lines</li><li>Line gaps first</li><li>Graded only</li></ul>
+        <span class="src">{{TERM_FEEDS}} <i>·</i> <span id="term-at">{{TERM_META}}</span></span>
       </div>
-      <div class="th" aria-hidden="true"><span>Player</span><span>Market</span><span>Line by app</span><span>Scout's chance</span><span>Grade</span><span>Last 10</span></div>
       <ol class="rows">{{TERM_ROWS}}</ol>
       <div class="term-foot">
-        <!--if:MORE--><a class="gate" href="{{JOIN_URL}}"><b><span class="n-d">{{TERM_MORE}}</span><span class="n-m">{{TERM_MORE_PHONE}}</span> more letter-graded CS2 props on this board</b><span>Join to open the board <i aria-hidden="true">→</i></span></a><!--/if:MORE-->
+        <!--if:MORE--><a class="gate" href="{{JOIN_URL}}"><b><span class="n-d">{{TERM_MORE}}</span><span class="n-m">{{TERM_MORE_PHONE}}</span> more letter-graded CS2 props on this board</b><span>Open the board <i aria-hidden="true">→</i></span></a><!--/if:MORE-->
         <!--if:SAVED--><p class="saved">A saved board: real rows exactly as members saw them at the time above.</p><!--/if:SAVED-->
-        <p>Picked by one rule: props with a letter grade, two-app line gaps first, then moved lines, then the soonest. Tap a player for the full read, or an app's line for Scout's chance at that line. A grade is a chance, not a promise.</p>
+        <p>Rows picked by one rule: lettered props, two-app line gaps first, then moved lines, then the soonest. Tap a player for the full read. A grade is a chance, not a promise.</p>
       </div>
     </div>
     <!--/if:TERM-->
+
+    <ul class="facts" aria-label="On the record">
+      <!--if:TOTAL--><li><b>{{LEDGER_TOTAL}}</b><span>decided picks on the public record</span></li><!--/if:TOTAL-->
+      <!--if:RVN--><li><b>{{RV_N}}</b><span>member reviews, all published</span></li><!--/if:RVN-->
+      <li><b>{{BOOK_N}}</b><span>apps and books on the board</span></li>
+    </ul>
   </div>
 </section>
 
 <section class="cover" aria-label="Coverage">
   <div class="wrap cover-in">
-    <div><p class="k">Reads</p><ul class="chips books">{{BOOK_CHIPS}}</ul></div>
-    <div><p class="k">Grades</p><ul class="chips sports">{{SPORT_CHIPS}}</ul></div>
+    <p class="k">Lines read from</p><ul class="chips books">{{BOOK_CHIPS}}</ul>
   </div>
 </section>
 
 <!--if:LEDGER-->
-<section class="ledger sec" id="record" aria-labelledby="ledger-title">
+<section class="ledger sec band" id="record" aria-labelledby="ledger-title">
+  <div class="band-bg" aria-hidden="true"></div>
   <div class="wrap">
-    <div class="sec-head split">
-      <div>
-        <p class="kicker">01 <i>·</i> The record</p>
-        <h2 id="ledger-title">Every call, <span class="ac">on the record.</span></h2>
-        <p class="lede">Saved before the game. Scored after it. Losses included. <b>{{LEDGER_TOTAL}}</b> decided picks so far, each sport under its own written rule.</p>
-      </div>
-      <a class="btn ghost" href="/record">See every pick <span aria-hidden="true">→</span></a>
+    <div class="sec-head">
+      <p class="kicker">The public record</p>
+      <h2 id="ledger-title">Saved before the game. Scored after.</h2>
+      <p class="lede">Screenshots show the good nights. The record shows every night: <b>{{LEDGER_TOTAL}}</b> decided picks across {{REC_SPORTS}}, losses included, each sport counted by its own written rule.</p>
     </div>
     <div class="lg-grid">{{LEDGER}}</div>
-    <p class="fine">As of {{LEDGER_ASOF}}. Bars: the last 30 days, one per day, wins up, losses down. No day left out.</p>
-    <div class="cta-row"><a class="btn primary" href="{{JOIN_URL}}">Join on Whop</a><span>Cancel anytime from your Whop account.</span></div>
+    <p class="fine">As of {{LEDGER_ASOF}}. Bars: the last 30 days, one per day, wins up, losses down, no day left out. <a href="/record#cs2">Why the rules differ <span aria-hidden="true">→</span></a></p>
+    <div class="cta-row"><a class="btn primary" href="/record">See every pick, then join</a><a class="tlnk" href="{{JOIN_URL}}">Or get today's graded board <span aria-hidden="true">→</span></a></div>
   </div>
 </section>
 <!--/if:LEDGER-->
 
-<section class="cs2 sec" id="cs2" aria-labelledby="cs2-title">
-  <div class="wrap cs2-in">
-    <div class="cs2-copy">
-      <p class="kicker">02 <i>·</i> Esports first</p>
-      <h2 id="cs2-title">Built for CS2. <span class="ac">Not bolted on.</span></h2>
-      <p class="lede">CS2 came first, and its card reads the game the way a CS2 player does.</p>
-      <ul class="feat">
-        <li><b>Map chances</b><span>HLTV veto history says which maps get played</span></li>
-        <li><b>Map pool</b><span>The player's own numbers on every map</span></li>
-        <li><b>Roles and stand-ins</b><span>Entry, AWPer, support; a stand-in is flagged on the card</span></li>
-        <li><b>Headshots</b><span>Graded on their own, AWPers apart</span></li>
-        <li><b>League</b><span>Its own model for kills and assists</span></li>
-      </ul>
-    </div>
-    <div class="pool" id="pool" data-line="28.5">
-      <div class="pool-h"><b>Pick two maps. See the pace.</b><small>Lucky · Kills · Maps 1-2 · line 28.5</small></div>
-      <ul class="maps">
-        <li><button type="button" class="map" aria-pressed="true" data-k="16.93" data-n="14"><img src="/v3/art/anubis.svg" alt="" width="160" height="90" loading="lazy" decoding="async"><b>Anubis</b><span class="mc" style="--c:68.6"><i></i></span><span class="kv"><span>Kills/map</span><b>16.93</b></span><span class="kv"><span>Maps</span><b>14</b></span></button></li>
-        <li><button type="button" class="map" aria-pressed="true" data-k="14.35" data-n="54"><img src="/v3/art/dust2.svg" alt="" width="160" height="90" loading="lazy" decoding="async"><b>Dust 2</b><span class="mc" style="--c:62"><i></i></span><span class="kv"><span>Kills/map</span><b>14.35</b></span><span class="kv"><span>Maps</span><b>54</b></span></button></li>
-        <li><button type="button" class="map" aria-pressed="false" data-k="13.59" data-n="44"><img src="/v3/art/ancient.svg" alt="" width="160" height="90" loading="lazy" decoding="async"><b>Ancient</b><span class="mc" style="--c:35.9"><i></i></span><span class="kv"><span>Kills/map</span><b>13.59</b></span><span class="kv"><span>Maps</span><b>44</b></span></button></li>
-        <li><button type="button" class="map" aria-pressed="false" data-k="13.00" data-n="17"><img src="/v3/art/cache.svg" alt="" width="160" height="90" loading="lazy" decoding="async"><b>Cache</b><span class="mc" style="--c:20.8"><i></i></span><span class="kv"><span>Kills/map</span><b>13.00</b></span><span class="kv"><span>Maps</span><b>17</b></span></button></li>
-      </ul>
-      <div class="pool-out" aria-live="polite">
-        <p><span id="pool-names">Anubis + Dust 2</span>, pooled</p>
-        <p class="pool-v"><b id="pool-v">14.88</b><span>kills per map against a line pace of <b>14.25</b></span><i id="pool-d" class="up">+0.63</i></p>
-      </div>
-      <p class="cap">Lucky's map pool as his player page showed it (HLTV to Oct 28), captured Nov 19. Bars: each map's chance of being played in Maps 1-2.</p>
-    </div>
-  </div>
-</section>
-
 <!--if:GW-->
-<section class="gw sec" id="grade" aria-labelledby="gw-title">
+<section class="gw sec lt" id="grade" aria-labelledby="gw-title">
   <div class="wrap">
     <div class="sec-head">
-      <p class="kicker">03 <i>·</i> The grade</p>
-      <h2 id="gw-title">Move the line. <span class="ac">Watch the grade.</span></h2>
-      <p class="lede">{{GW_WHO}}'s projection is <b>{{GW_PROJ}}</b> kills for Maps 1-2. Drag the line and the chance and the letter move with it, because a grade belongs to a line, not a player.</p>
+      <p class="kicker">The grade</p>
+      <h2 id="gw-title">Move the line, and the grade moves with it.</h2>
+      <p class="lede">{{GW_WHO}}'s projection is <b>{{GW_PROJ}}</b> kills for Maps 1-2. Drag the line: a grade belongs to a line, not a player.</p>
     </div>
     <div class="gw-box" id="gw" data-gw="{{GW_DATA}}">
       <div class="gw-plot">
@@ -157,19 +124,50 @@
         <p class="gw-side" id="gw-side">{{GW_SIDE}} {{GW_LINE}} kills</p>
         <div class="gw-read"><p class="gw-big"><b id="gw-p">{{GW_P}}</b><i>%</i></p><b class="gw-g {{GW_GCLS}}" id="gw-g">{{GW_G}}</b></div>
         <ol class="ladder" id="gw-ladder" aria-hidden="true">{{GW_LADDER}}</ol>
-        <p class="gw-rec" id="gw-rec"{{GW_RECHIDE}}>On the record, CS2 calls graded <b id="gw-rg">{{GW_G}}</b>: <b class="wl" id="gw-rb">{{GW_BAND}}</b> <a href="/record">See them all <span aria-hidden="true">→</span></a></p>
-        <p class="fine">Scout's CS2 kills formula with the spread members' cards use. At the real line, {{GW_LINE}}, it prints the board's own number (board as of {{GW_ASOF}}). Below the B- cut it reads Lean.</p>
+        <p class="gw-rec"><a href="/record#cs2">See every grade tier on the public record, losses included <span aria-hidden="true">→</span></a></p>
+        <p class="fine">Scout's CS2 kills formula with the spread members' cards use. At the real line, {{GW_LINE}}, it prints the board's own number (board of {{GW_ASOF}}). Below the B- cut it reads Lean.</p>
       </div>
     </div>
   </div>
 </section>
 <!--/if:GW-->
 
+<section class="cs2 sec" id="cs2" aria-labelledby="cs2-title">
+  <div class="wrap cs2-in">
+    <div class="cs2-copy">
+      <p class="kicker">Esports first</p>
+      <h2 id="cs2-title">Built for CS2, not bolted on.</h2>
+      <p class="lede">CS2 came first, and its card reads the game the way a CS2 player does.</p>
+      <ul class="feat">
+        <li><b>Map chances</b><span>HLTV veto history says which maps get played</span></li>
+        <li><b>Map pool</b><span>The player's own numbers on every map</span></li>
+        <li><b>Roles and stand-ins</b><span>Entry, AWPer, support; a stand-in is flagged on the card</span></li>
+        <li><b>Headshots</b><span>Graded on their own, AWPers apart</span></li>
+        <li><b>LoL</b><span>Its own model for kills and assists</span></li>
+      </ul>
+    </div>
+    <div class="pool" id="pool" data-line="33.5">
+      <div class="pool-h"><b>Pick two maps. See the pace.</b><small>sml · Kills · Maps 1-2 · line 33.5 on Underdog</small></div>
+      <ul class="maps">
+        <li><button type="button" class="map" aria-pressed="true" data-k="15.90" data-n="21" style="--mc:#E5A653"><span class="mn">Mirage</span><span class="kv"><span>Kills/map</span><b>15.90</b></span><span class="kv"><span>Maps</span><b>21</b></span></button></li>
+        <li><button type="button" class="map" aria-pressed="true" data-k="16.67" data-n="18" style="--mc:#D8BD72"><span class="mn">Dust 2</span><span class="kv"><span>Kills/map</span><b>16.67</b></span><span class="kv"><span>Maps</span><b>18</b></span></button></li>
+        <li><button type="button" class="map" aria-pressed="false" data-k="17.50" data-n="16" style="--mc:#E86A4E"><span class="mn">Inferno</span><span class="kv"><span>Kills/map</span><b>17.50</b></span><span class="kv"><span>Maps</span><b>16</b></span></button></li>
+        <li><button type="button" class="map" aria-pressed="false" data-k="15.64" data-n="11" style="--mc:#5DB884"><span class="mn">Ancient</span><span class="kv"><span>Kills/map</span><b>15.64</b></span><span class="kv"><span>Maps</span><b>11</b></span></button></li>
+      </ul>
+      <div class="pool-out" aria-live="polite">
+        <p><span id="pool-names">Mirage + Dust 2</span>, pooled</p>
+        <p class="pool-v"><b id="pool-v">16.26</b><span>kills per map against a line pace of <b>16.75</b></span><i id="pool-d" class="dn">−0.49</i></p>
+      </div>
+      <p class="cap">sml's HLTV numbers for the last 12 months (newest map Nov 20, read Nov 22) on the four maps of the current pool he has played most. The pool today: Ancient, Anubis, Cache, Dust 2, Inferno, Mirage and Nuke.</p>
+    </div>
+  </div>
+</section>
+
 <section class="tools sec" aria-labelledby="tools-title">
   <div class="wrap">
     <div class="sec-head">
-      <p class="kicker">04 <i>·</i> The tools</p>
-      <h2 id="tools-title">The sharp side <span class="ac">of the board.</span></h2>
+      <p class="kicker">The tools</p>
+      <h2 id="tools-title">The sharp side of the board.</h2>
       <p class="lede">Everything below exists so you play the right line.</p>
     </div>
     <div class="bento{{TOOLS_FLAG}}">
@@ -177,7 +175,7 @@
         <p class="tk">Line gaps</p>
         <h3>When apps disagree, see it.</h3>
         <p>A chip marks every prop where two apps list different lines. Each line is graded on its own, so half a point shows up as a different chance.</p>
-        <!--if:GAP--><div class="mini gap">{{GAP_MINI}}</div><!--/if:GAP-->
+        <!--if:GAP--><div class="mini gap">{{GAP_MINI}}</div><!--/if:GAP--><!--if:NOGAP--><div class="mini demo"><em class="chip gap">Line gap</em><span>shows on a row when two apps list different lines</span></div><!--/if:NOGAP-->
       </article>
       <article class="tile t-move">
         <p class="tk">Line moves</p>
@@ -194,35 +192,32 @@
       <!--if:EV--><article class="tile t-ev"><p class="tk">Best prices</p><h3>Market fair, at the app's line.</h3><p>Where two independent books price the exact same line, Scout shows their fair chance beside its own and the break-even for your entry. One feed never counts twice.</p></article><!--/if:EV-->
       <!--if:ARB--><article class="tile t-arb"><p class="tk">Price check</p><h3>Both sides, two books.</h3><p>The price check lists a pair only when two different books price the identical line, with each quote's age. Quotes go stale fast and the sheet says so.</p></article><!--/if:ARB-->
       <article class="tile t-slip">
-        <div class="slip-img"><img src="/landing/realslip-scout.webp" width="600" height="1067" alt="A real Scout slip: the all-hit chance on top, then each leg with Scout's chance" loading="lazy" decoding="async"></div>
         <div>
           <p class="tk">Slip Studio</p>
           <h3>Slips, built and rechecked.</h3>
-          <p>Pick the app and the number of legs; Slip Studio builds from graded lines, rechecks every leg before you copy it and prints the chance all of them hit. Parlays are long shots, and the slip says so.</p>
-          <p class="cap">A real Scout slip (earlier design)</p>
+          <p>Pick the app and the number of legs. Slip Studio builds from graded lines, rechecks every leg before you copy it and prints the chance all of them hit. Parlays are long shots, and the slip says so.</p>
         </div>
+        <!--if:SLIP--><figure class="slip"><div class="sl">{{SLIP}}</div><figcaption>{{SLIP_CAP}}</figcaption></figure><!--/if:SLIP-->
       </article>
     </div>
+    <div class="cta-row"><a class="btn primary" href="{{JOIN_URL}}">Open the board</a><span class="micro">Membership on Whop · cancel anytime from your Whop account</span></div>
   </div>
 </section>
 
 <section class="hand sec" aria-labelledby="hand-title">
   <div class="wrap">
     <div class="sec-head">
-      <p class="kicker">05 <i>·</i> By hand vs Scout</p>
-      <h2 id="hand-title">Line shopping by hand <span class="ac">takes ten tabs.</span></h2>
-      <p class="lede">The work a sharp player does before every slip, done once, for every prop on the board.</p>
+      <p class="kicker">By hand vs Scout</p>
+      <h2 id="hand-title">Line shopping by hand takes {{BOOK_N}} apps.</h2>
     </div>
     <div class="vs" role="table" aria-label="By hand compared with Scout">
       <div class="vs-h" role="row"><span role="columnheader">The job</span><span role="columnheader">By hand</span><span role="columnheader" class="sc">With Scout</span></div>
-      <div class="vs-r" role="row"><b role="cell">Find the line</b><span role="cell">Open {{BOOK_N}} apps and write the numbers down</span><span role="cell" class="sc">Every app's line for a player on one row</span></div>
-      <div class="vs-r" role="row"><b role="cell">Spot a gap</b><span role="cell">Only if you happen to compare the right two apps</span><span role="cell" class="sc">Line gap chip, and each line graded on its own</span></div>
-      <div class="vs-r" role="row"><b role="cell">Price the entry</b><span role="cell">Payout table, then a calculator</span><span role="cell" class="sc">Break-even for your entry next to Scout's chance</span></div>
-      <div class="vs-r" role="row"><b role="cell">Keep score</b><span role="cell">Screenshots of the good nights</span><span role="cell" class="sc">Every call saved before the game, scored after</span></div>
-      <div class="vs-r" role="row"><b role="cell">Catch a move</b><span role="cell">Refresh and try to remember the opener</span><span role="cell" class="sc">The opening line beside the new one</span></div>
-      <div class="vs-r" role="row"><b role="cell">Check the form</b><span role="cell">Stats site, spreadsheet, twenty minutes</span><span role="cell" class="sc">Last 10 at this exact line, L5, L20, head-to-head</span></div>
-      <div class="vs-r" role="row"><b role="cell">Read the maps</b><span role="cell">Guess which maps get played</span><span role="cell" class="sc">HLTV map chances and the player's map pool</span></div>
+      <div class="vs-r" role="row"><b role="cell">Find the line</b><span role="cell" class="bh">Open {{BOOK_N}} apps and write the numbers down</span><span role="cell" class="sc"><span class="ui">{{HAND_PILLS}}</span>Every supported app's line on one row</span></div>
+      <div class="vs-r" role="row"><b role="cell">Spot a gap</b><span role="cell" class="bh">Only if you happen to compare the right two apps</span><span role="cell" class="sc"><span class="ui"><em class="chip gap">Line gap</em></span>Each line graded on its own</span></div>
+      <div class="vs-r" role="row"><b role="cell">Price the entry</b><span role="cell" class="bh">Payout table, then a calculator</span><span role="cell" class="sc"><span class="ui">{{HAND_BE}}</span>Break-even for your entry beside Scout's chance</span></div>
+      <div class="vs-r" role="row"><b role="cell">Keep score</b><span role="cell" class="bh">Screenshots of the good nights</span><span role="cell" class="sc"><span class="ui"><em class="chip saved-chip">Saved before the game</em></span>Every call scored after, losses included</span></div>
     </div>
+    <div class="cta-row"><p class="close-line">One row instead of {{BOOK_N}} apps, every prop on the board.</p><a class="btn primary" href="{{JOIN_URL}}">Open the board</a></div>
   </div>
 </section>
 
@@ -231,25 +226,34 @@
   <div class="wrap">
     <div class="sec-head split">
       <div>
-        <p class="kicker">06 <i>·</i> Members</p>
-        <h2 id="rv-title">Members, <span class="ac">in their words.</span></h2>
+        <p class="kicker">Members</p>
+        <h2 id="rv-title">Members, in their words.</h2>
       </div>
       <div class="rv-sum">{{RV_HEAD}}</div>
     </div>
     <div class="rv-grid">{{RV_CARDS}}</div>
-    <!--if:LEDGER--><div class="rv-rec"><p><b>Next to the words, the score:</b> {{LEDGER_TOTAL}} decided picks on the public record, losses included.</p><ul>{{RECORD_ROW}}</ul><a href="/record">Read the record <span aria-hidden="true">→</span></a></div><!--/if:LEDGER-->
-    <p class="fine">Every review is published, 1 to 3 stars included, one review per paying member. Shown here: reviews about how the product works. Reviews that talk about money or attach slips are on the reviews page. <a href="/reviews">Read all {{RV_N}} <span aria-hidden="true">→</span></a></p>
-    <div class="cta-row"><a class="btn primary" href="{{JOIN_URL}}">Join on Whop</a><span>Cancel anytime from your Whop account.</span></div>
+    <p class="fine">{{RV_NOTE}} Shown here: the reviews about using the product; a sentence about money or slips is left out of a quote (marked …).<!--if:RVREST--> {{RV_REST}} more, one-liners and reviews with slips included, are on the reviews page.<!--/if:RVREST--> <a href="/reviews">Read all {{RV_N}} reviews <span aria-hidden="true">→</span></a></p>
   </div>
 </section>
 <!--/if:REVIEWS-->
 
-<section class="contrast sec" aria-labelledby="ct-title">
+<section class="plan sec" aria-labelledby="plan-title">
   <div class="wrap">
-    <h2 id="ct-title">Screenshots show the good nights. <span class="ac">A record shows everything.</span></h2>
-    <div class="ct-grid">
-      <div class="ct bad"><p class="tk">A screenshot</p><ul><li>Chosen after the result</li><li>Winners only</li><li>No line, no reason</li><li>Gone tomorrow</li></ul></div>
-      <div class="ct good"><p class="tk">Scout's record</p><ul><li>Saved before the game</li><li>Every call, losses included</li><li>The exact line and the chance</li><li>Still there next month</li></ul></div>
+    <div class="plan-card">
+      <div class="plan-copy">
+        <p class="kicker">Membership includes</p>
+        <h2 id="plan-title">Everything on one membership.</h2>
+        <a class="btn primary" href="{{JOIN_URL}}">See plans on Whop</a>
+        <p class="micro">Checkout and billing run on Whop · cancel anytime from your Whop account</p>
+      </div>
+      <ul class="plan-list">
+        <li><b>The board</b><span>{{SPORT_LIST}}, every supported app's line on one row</span></li>
+        <li><b>Grades at every line</b><span>Scout's chance at the exact line, the letter and the reason</span></li>
+        <li><b>Line gaps and moves</b><span>Which apps disagree, and the opening line beside the new one</span></li>
+        <li><b>Slip Studio</b><span>Slips built from graded lines, each leg rechecked, the all-hit chance printed</span></li>
+        <li><b>Player pages</b><span>Last 10 at the line, form, head-to-head; map pool and roles for CS2</span></li>
+        <li><b>The public record</b><span>Every graded call saved before the game and scored after</span></li>
+      </ul>
     </div>
   </div>
 </section>
@@ -257,16 +261,16 @@
 <section class="faq sec" id="faq" aria-labelledby="faq-title">
   <div class="wrap faq-in">
     <div class="sec-head">
-      <p class="kicker">07 <i>·</i> Questions</p>
+      <p class="kicker">Questions</p>
       <h2 id="faq-title">Before you join.</h2>
     </div>
     <div class="qs">
       <details><summary>Is this a picks group?</summary><p>No. Scout is a board you read yourself. Every graded prop shows Scout's chance at the exact line, a letter grade and the reasons in plain English. You decide what to play.</p></details>
-      <details><summary>How do I know the grades are honest?</summary><p>Every graded call is saved before the game starts and scored after it on the public record, losses included. The record states its rule and its start date, and anyone can read it without an account.</p></details>
+      <details><summary>How do I know the grades are honest?</summary><p>Every graded call is saved before the game starts and scored after it on the public record, losses included. Each sport states its rule, and anyone can read it without an account.<!--if:UNREC--> {{UNREC}} are graded on the board but are not on the public record yet.<!--/if:UNREC--></p></details>
       <details><summary>Will I win every day?</summary><p>No. A grade is a chance, not a certainty, and the record shows the losing days next to the good ones. Parlays multiply the risk, which is why Slip Studio prints the chance that every leg hits.</p></details>
-      <details><summary>Does it cover my app?</summary><p>Scout reads PrizePicks, Underdog, Sleeper, Dabble, DraftKings, FanDuel, BetRivers, Unibet, Kalshi and Polymarket, and grades the line each app actually lists.</p></details>
-      <details><summary>Is esports an afterthought?</summary><p>No. CS2 came first: HLTV map chances and veto history, roles, stand-ins and headshots all feed the CS2 card, and League has its own model. {{SPORT_LIST}} share one board.</p></details>
-      <details><summary>What happens after I pay?</summary><p>Checkout runs on Whop. Then sign in with Whop on this page and the board, player cards, Slip Studio and your saved picks open in the browser, on phone or desktop.</p></details>
+      <details><summary>Does it cover my app?</summary><p>Today's boards carry lines from {{BOOK_LIST}}, and Scout grades the line each app actually lists.</p></details>
+      <details><summary>Is esports an afterthought?</summary><p>No. CS2 came first: HLTV map chances and veto history, roles, stand-ins and headshots all feed the CS2 card, and LoL has its own model. {{SPORT_LIST}} share one board.</p></details>
+      <details><summary>What happens after I pay?</summary><p>Checkout runs on Whop. Then sign in with Whop on this page and the board, player pages, Slip Studio and your saved picks open in the browser, on phone or desktop.</p></details>
       <details><summary>Can I cancel?</summary><p>Yes, anytime from your Whop account.</p></details>
     </div>
   </div>
@@ -276,8 +280,10 @@
   <div class="glow" aria-hidden="true"></div>
   <div class="wrap close-in">
     <h2 id="close-title">Know the chance before you pick. <span class="ac">Check the record after.</span></h2>
-    <div class="ctas center"><a class="btn primary" href="{{JOIN_URL}}">Join on Whop</a><a class="btn ghost" href="/record">See the public record</a></div>
-    <p class="signin">Cancel anytime from your Whop account. Already a member? <a href="/auth/login">Sign in with Whop</a></p>
+    <div class="ctas center"><a class="btn primary" href="{{JOIN_URL}}">Get today's graded board</a></div>
+    <p class="micro">Membership on Whop · cancel anytime from your Whop account</p>
+    <p class="signin">Already a member? <a href="/auth/login">Sign in with Whop</a></p>
+    <p class="rg-close">For adults 21 and over. Scout gives chances, not certainties. If gambling stops being fun, call 1-800-GAMBLER.</p>
   </div>
 </section>
 </main>
@@ -285,11 +291,11 @@
 <footer class="foot">
   <div class="wrap foot-in">
     <a class="brand" href="/" aria-label="1time Scout home"><span class="mark" aria-hidden="true">1T</span><b>Scout</b></a>
-    <nav aria-label="Footer"><a href="/record">Record</a><a href="/reviews">Reviews</a><a href="/auth/login">Sign in</a><a href="{{JOIN_URL}}">Join on Whop</a></nav>
+    <nav aria-label="Footer"><a href="/record">Record</a><a href="/reviews">Reviews</a><a href="/auth/login">Sign in</a><a href="{{JOIN_URL}}">See plans on Whop</a></nav>
     <p class="rg">Scout gives chances, not certainties. Play only what you can afford to lose. If gambling stops being fun, call 1-800-GAMBLER.</p>
   </div>
 </footer>
-<div class="dock" id="dock"><a class="btn primary" href="{{JOIN_URL}}">Join on Whop</a><a class="btn ghost" href="/auth/login">Sign in</a></div>
+<div class="dock" id="dock"><a class="btn primary" href="{{JOIN_URL}}">Get today's graded board</a><a class="btn ghost" href="/auth/login">Sign in</a></div>
 <script>
 {{PAGE_JS}}
 </script>
