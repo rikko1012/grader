@@ -429,7 +429,7 @@ def cs2(x, rec, saved=None, card=None):
 # ---------------------------------------------------------------------------------------------------------------- LoL
 
 LOL_GI_KEYS = ("player_rate", "team_factor", "opp_factor", "strength_factor", "p_win", "history_games", "history_since", "history_last_game", "form",
-               "lpf1", "calibration", "lambda_lol1")
+               "lpf1", "calibration", "lambda_lol1", "scope_offset")
 # the worker's own labels for three indicator terms carry a status word; the card states the same fact plainly
 LOL_LABEL = {"lane_missing": "No lane opponent on file", "patch_missing": "No patch on file", "no_history": "No earlier games"}
 LOL_NOTE = "Effect = that term's own change to the per-game projection, as saved with the forecast."
@@ -477,6 +477,10 @@ def lol(ix, rec):
                 factors.append(_factor("p_decider", "Chance of a deciding game", _pct(l1["p_decider"]), True))
             if l1.get("patch_assumed"):
                 factors.append(_factor("patch", "Patch", l1["patch_assumed"], True))
+        so = gi.get("scope_offset") if isinstance(gi.get("scope_offset"), dict) else {}
+        if _num(so.get("multiplier")):           # so-1: the lol-1f projection's stat x scope offset from settled lines
+            factors.append(_factor("scope_offset", "Map-count offset from settled lines", f"x{so['multiplier']:.2f}", True,
+                                   (so["multiplier"] - 1) * 100, "pct"))
         if _num(gi.get("player_rate")):
             factors.append(_factor("player_rate", "Player share of team output" if gi.get("form") == "share" else "Player per-game rate", f"{gi['player_rate']:.2f}", True))
         factors += [_mult("team_factor", "Team pace factor", gi.get("team_factor")), _mult("opp_factor", "Opponent factor", gi.get("opp_factor")),

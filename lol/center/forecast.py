@@ -519,6 +519,31 @@ def forecast_one(con, h, offer, link, now=None, market=None):
         mix = None
         lam_shown, med, (lo, hi) = r1["mean"], r1["median"], r1["range80"]
         pj = dict(pj, version=lp["version"])
+    so1 = None
+    if r1 is None and pj.get("version") == "lol-1f" and stat in SO1_STATS:
+        offs = so1_state(con, h)
+        if offs is None and so1_on() and _last_model(con, offer) == ("lol-1f+" + SO1_VERSION, offer["line"]):
+            return {"skip": "so-1 offsets unavailable this cycle (the last saved forecast stands)"}
+        ev = so1_event(s["tournament_page"])
+        c, npm = (offs or {}).get((ev, stat, scope), (0.0, 0))
+        if c:
+            k = math.exp(c)
+            so1 = {"version": SO1_VERSION, "c": round(c, 4), "multiplier": round(k, 4), "player_markets": npm, "event": ev,
+                   "lambda_before": round(lam_shown, 4)}
+            if mix:
+                mix = [(w, lam * k, sz) for w, lam, sz in mix]
+                parts = [(w, m.probs(lam, sz, offer["line"])) for w, lam, sz in mix]
+                po, pu, push = (sum(w * x[i] for w, x in parts) for i in range(3))
+                lo, med, hi = _mix_quantiles(m, mix, (0.1, 0.5, 0.9))
+                lam_shown = sum(w * lam for w, lam, _ in mix)
+            else:
+                lam2 = pj["lambda"] * k
+                po, pu, push = m.probs(lam2, pj["nb_size"], offer["line"])
+                lo, hi = m.interval(lam2, pj["nb_size"], 0.8)
+                med = _nb_median(m, lam2, pj["nb_size"])
+                lam_shown = lam2
+            pj = dict(pj, version="lol-1f+" + SO1_VERSION, lambda_so1_before=pj["lambda"], **{"lambda": pj["lambda"] * k},
+                      lambda_game=pj["lambda_game"] * k)
     # lc-1 (lol/EVALUATION.md A14): the chance members see, calibrated against the offered line - computed ONCE here, at
     # save time; the record keeps the raw chance (p_over / p_under / p_push) and adds the calibrated one + its version.
     # Side, grade, Lean label, offered-side check and slip reasons follow the shown chance (shown() below).
@@ -565,6 +590,8 @@ def forecast_one(con, h, offer, link, now=None, market=None):
         rec["inputs"]["p_3_games"] = round(mix[0][0], 4)
     if lpf1_inputs:
         rec["inputs"]["lpf1"] = lpf1_inputs
+    if so1:
+        rec["inputs"]["scope_offset"] = so1
     if fpanel:
         rec["inputs"]["factors"] = factor_panel(stat, *fpanel, rec["inputs"]["team_win"])
         if pj.get("lambda_lol1") is not None:
@@ -747,6 +774,98 @@ def _last_model(con, offer):
     except Exception:          # noqa: BLE001
         return None
     return (r[0], float(r[1]) if r[1] is not None else None) if r else None
+
+
+# so-1 (LoL round 2, 2026-11-21, research/lol_r2_1121): a stat x scope offset on the lol-1f projection, re-estimated from
+# the settled lines of the SAME event. Pre-registered T4b (walk-forward at real offered lines, playable_current): 54.9% ->
+# 57.4%, +2.47 pts, day CI [+0.74, +4.51], series CI [+0.54, +4.35], days under 53% 9 -> 6 of 18 (passed gate b; Holm p
+# 0.051 so not gate a). The event-scoped form shipped here was checked after registration (r2_t4b_scoped.py V2: lol-1f rows
+# only, pool = same event settled before the forecast): +1.75 pts [+0.10, +3.45] series, 9 -> 7 bad days, Over share
+# 54.5 -> 50.8. Letters-only universes show no gain. It FAILED on the lpf-1 replay (T4a, Under skew), so it applies ONLY
+# when the shown forecast is lol-1f (LOL_LPF1=0 rollback, or no lpf-1 answer for a new line); lpf-1 output and its lol-1f
+# inputs are never touched. A new event starts at no offset until SO1_MIN_PM of its player-markets settle per cell.
+# Rollback LOL_SCOPE_OFFSET=0 (read every cycle).
+SO1_VERSION = "so-1"
+SO1_MIN_PM = 30
+SO1_STATS = ("kills", "assists")
+_SO1_LAST = {"offsets": None}           # last good offsets: a failed read keeps them, a failure is never cached
+
+
+def so1_on():
+    return os.environ.get("LOL_SCOPE_OFFSET", "1").strip() != "0"
+
+
+def so1_event(tournament_page):
+    """The event a series belongs to: its tournament page without the stage ('2026 Season World Championship/Main Event'
+    and '.../Play-In' -> '2026 Season World Championship'); None without a page."""
+    p = (tournament_page or "").strip()
+    if not p:
+        return None
+    return p.rsplit("/", 1)[0] if "/" in p else p
+
+
+SO1_SQL = (
+    "SELECT f.platform, f.market_key, f.line, s.sid, s.pid, f.stat, f.scope, f.model_version, f.lambda, s.actual, cs.tournament_page, "
+    "json_extract(f.inputs, '$.lpf1.lambda_lol1f') AS lam_lpf, json_extract(f.inputs, '$.scope_offset.lambda_before') AS lam_so1 "
+    "FROM lol_forecasts f JOIN (SELECT platform, market_key, line, MAX(id) AS id FROM lol_forecasts "
+    "WHERE forecast_at < series_start AND stat IN ('kills', 'assists') GROUP BY platform, market_key, line) z ON z.id = f.id "
+    "JOIN (SELECT unit_key, MAX(version) AS v FROM lol_settlements GROUP BY unit_key) lv ON "
+    "lv.unit_key = f.platform || '|' || f.market_key || '|' || f.line "
+    "JOIN lol_settlements s ON s.unit_key = lv.unit_key AND s.version = lv.v "
+    "JOIN c_series cs ON cs.sid = s.sid "
+    "WHERE s.status = 'graded' AND s.actual IS NOT NULL")
+
+
+def so1_offsets(con):
+    """{(event, stat, scope): (c, player_markets)}: c = log(sum actual / sum lol-1f projection) over the event's settled
+    player-markets (the first line of each settlement series/player/stat/scope by unit key; the latest pre-match forecast of
+    that line; its latest settlement, graded), when the cell has >= SO1_MIN_PM player-markets, else 0. The projection is
+    the lol-1f one, never an offset one: the saved lambda of lol-1 / lol-1f rows (so-1 rows: the lambda before the offset),
+    lpf-1 rows' inputs.lpf1.lambda_lol1f."""
+    rows = [dict(x) for x in con.execute(SO1_SQL).fetchall()]
+    cells, seen = {}, set()
+    for r in sorted(rows, key=lambda r: f"{r['platform']}|{r['market_key']}|{r['line']}"):
+        ev = so1_event(r["tournament_page"])
+        pm = (r["sid"], r["pid"], r["stat"], str(r["scope"]))
+        if ev is None or pm in seen:
+            continue
+        mv = str(r["model_version"] or "")
+        if mv.startswith("lpf-1"):
+            lam = r["lam_lpf"]
+        elif mv.startswith("lol-1f") or mv == "lol-1":
+            lam = r["lam_so1"] if r["lam_so1"] is not None else r["lambda"]
+        else:
+            lam = None
+        if not isinstance(lam, (int, float)) or lam <= 0:
+            continue
+        seen.add(pm)
+        c = cells.setdefault((ev, r["stat"], str(r["scope"])), [0.0, 0.0, 0])
+        c[0] += float(r["actual"])
+        c[1] += float(lam)
+        c[2] += 1
+    return {k: (math.log(v[0] / v[1]) if v[2] >= SO1_MIN_PM and v[0] > 0 and v[1] > 0 else 0.0, v[2]) for k, v in cells.items()}
+
+
+def so1_state(con, h):
+    """This cycle's so-1 offsets (computed once per history object); a read failure keeps the last good offsets. None =
+    no offsets available (flag off, or a failure before any good read)."""
+    if not so1_on():
+        return None
+    got = getattr(h, "_so1", None)
+    if got is not None:
+        return got
+    try:
+        got = so1_offsets(con)
+        _SO1_LAST["offsets"] = got
+    except Exception:          # noqa: BLE001 - a transient read failure never changes a grade
+        got = _SO1_LAST["offsets"]
+        if got is None:
+            return None        # nothing good yet: the failure is not cached (the next cycle reads again)
+    try:
+        h._so1 = got
+    except AttributeError:
+        pass
+    return got
 
 
 def lpf1_on():
