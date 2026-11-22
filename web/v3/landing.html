@@ -32,7 +32,7 @@
   <div class="glow" aria-hidden="true"></div>
   <div class="wrap hero-in">
     <div class="hero-copy">
-      <p class="eyebrow"><span class="pulse" aria-hidden="true"></span>Player-prop terminal <i>·</i> <span class="sp-inline">{{SPORT_N}} sports, {{BOOK_N}} apps and books</span></p>
+      <p class="eyebrow"><span class="pulse" id="pulse" aria-hidden="true"></span>Player-prop terminal <i>·</i> <span class="sp-inline">{{SPORT_N}} sports, {{BOOK_N}} apps and books</span></p>
       <h1 id="hero-title">Shop every line.<br><span class="ac">Know the chance at yours.</span></h1>
       <p class="sub">Scout puts every app's line on one row, flags moves and gaps, and grades each player prop at the exact line you'd play. Every call is saved before the game and scored in public.</p>
       <div class="ctas">
@@ -44,19 +44,19 @@
       <!--if:PROOF--><p class="proof">{{PROOF}}</p><!--/if:PROOF-->
     </div>
 
-    <div class="term" id="terminal" data-state="{{TERM_STATE}}">
+    <div class="term" id="terminal" data-state="{{TERM_STATE}}" data-at="{{TERM_AT}}" data-fresh="{{FRESH_MIN}}">
       <div class="term-bar">
-        <span class="st"><i class="dot" aria-hidden="true"></i><b>CS2 board</b></span>
-        <span class="src">Underdog + PrizePicks <i>·</i> {{TERM_META}}</span>
+        <span class="st"><i class="dot" aria-hidden="true"></i><b>{{TERM_TITLE}}</b></span>
+        <span class="src">Underdog + PrizePicks <i>·</i> <span id="term-at">{{TERM_META}}</span></span>
         <ul class="flt" aria-label="What the rows show"><li class="on">Standard lines</li><li>Line gaps first</li><li>Graded only</li></ul>
       </div>
       <!--if:TERM-->
       <div class="th" aria-hidden="true"><span>Player</span><span>Market</span><span>Line by app</span><span>Scout's chance</span><span>Grade</span><span>Last 10</span></div>
       <ol class="rows">{{TERM_ROWS}}</ol>
-      <p class="term-foot">Real rows from the member board, picked by one rule: the soonest props with a letter grade where two apps list different lines or a line moved, then the soonest lettered props. Tap an app's line to see Scout's chance at that line. A grade is a chance, not a promise.</p>
+      <p class="term-foot">Real rows from the member board, picked by one rule: props with a letter grade, two-app line gaps first, then moved lines, then the rest, soonest first. Tap an app's line to see Scout's chance at that line. A grade is a chance, not a promise.</p>
       <!--/if:TERM-->
       <!--if:NOTERM-->
-      <figure class="term-shot"><img src="/landing/board.webp" width="1140" height="855" alt="The Scout CS2 board: every app's line on one row with Scout's chance and grade" decoding="async"><figcaption>The member board, captured from the live site.</figcaption></figure>
+      <figure class="term-shot"><img src="/landing/board.webp" width="1140" height="855" alt="The Scout CS2 board: every app's line on one row with Scout's chance and grade" decoding="async"><figcaption>The member board (a saved screenshot).</figcaption></figure>
       <!--/if:NOTERM-->
     </div>
   </div>
@@ -76,12 +76,12 @@
       <div>
         <p class="kicker">01 <i>·</i> The record</p>
         <h2 id="ledger-title">Every call, on the record.</h2>
-        <p class="lede">Saved before the game. Scored after it. Losses included. <b>{{LEDGER_TOTAL}}</b> picks since {{LEDGER_SINCE}}, each sport under its own written rule.</p>
+        <p class="lede">Saved before the game. Scored after it. Losses included. <b>{{LEDGER_TOTAL}}</b> decided picks so far, each sport under its own written rule.</p>
       </div>
       <a class="btn ghost" href="/record">See every pick <span aria-hidden="true">→</span></a>
     </div>
     <div class="lg-grid">{{LEDGER}}</div>
-    <p class="fine">As of {{LEDGER_ASOF}}. Bars: one per day since the start, wins up, losses down. No days left out.</p>
+    <p class="fine">As of {{LEDGER_ASOF}}. Bars: the last 30 days, one per day, wins up, losses down. No day left out.</p>
   </div>
 </section>
 <!--/if:LEDGER-->
@@ -173,7 +173,7 @@
       <div class="rv-sum">{{RV_HEAD}}</div>
     </div>
     <div class="rv-grid">{{RV_CARDS}}
-      <!--if:LEDGER--><aside class="rv-echo"><p class="tk">Next to the words, the score</p><p class="big"><b>{{LEDGER_TOTAL}}</b> picks on the public record since {{LEDGER_SINCE}}, losses included.</p><a href="/record">Read the record <span aria-hidden="true">→</span></a></aside><!--/if:LEDGER-->
+      <!--if:LEDGER--><aside class="rv-echo"><p class="tk">Next to the words, the score</p><p class="big"><b>{{LEDGER_TOTAL}}</b> decided picks on the public record, losses included.</p><a href="/record">Read the record <span aria-hidden="true">→</span></a></aside><!--/if:LEDGER-->
     </div>
     <p class="fine">Every review is published, 1 to 3 stars included, one review per paying member. Shown here: reviews about how the product works. Reviews that talk about money or attach slips are on the reviews page. <a href="/reviews">Read all {{RV_N}} <span aria-hidden="true">→</span></a></p>
   </div>

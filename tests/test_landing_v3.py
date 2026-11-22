@@ -124,12 +124,12 @@ def test_terminal_rows_follow_the_stated_rule_with_real_values(srv, monkeypatch)
     s = build(srv).decode("utf-8")
     rows = re.findall(r'<li class="tr".*?</li>', s, re.S)
     names = [re.search(r'<div class="who"><b>([^<]+)</b>', r).group(1) for r in rows]
-    assert names == ["Mover", "Gap", "Zeta"]                         # moved / gap first (soonest first), then the rest
+    assert names == ["Gap", "Mover", "Zeta"]                         # two-app gaps, then moved lines, then the rest
     assert "NoLetter" not in s and "Past" not in s                      # no letter never leads; a locked match never shows
-    gap = rows[1]
+    gap = rows[0]
     assert 'data-p="58.3"' in gap and 'data-p="52.2"' in gap and "Line gap" in gap and ">13.5<" in gap
-    assert "64.0" in rows[0] and "▲31.5" in rows[0] and ">Under<" in rows[0]
-    assert "checked 3 min ago" in s and 'data-state="live"' in s
+    assert "64.0" in rows[1] and "▲31.5" in rows[1] and ">Under<" in rows[1]
+    assert "checked" not in s.split('id="term-at"')[1][:60] and 'data-at="' in s     # freshness is the browser's to say
 
 
 def test_an_old_board_is_dated_never_checked(srv, monkeypatch):
@@ -143,8 +143,8 @@ def test_an_old_board_is_dated_never_checked(srv, monkeypatch):
 def test_ledger_and_proof_line_come_from_the_record_answers(srv, monkeypatch):
     seed(srv, monkeypatch, board())
     t = text(build(srv))
-    total = 100 + 90 + 2 + 50 + 40 + 1 + 300 + 280 + 3 + 80 + 70
-    assert f"{total:,} picks on the public record since Oct 24" in t
+    total = 100 + 90 + 50 + 40 + 300 + 280 + 80 + 70                   # decided picks (wins + losses), as /record counts them
+    assert f"{total:,} decided picks on the public record" in t and "since" not in t
     for w, l in ((100, 90), (50, 40), (300, 280), (80, 70)):
         assert f"{w:,} - {l:,}" in t
     assert "The cs2 rule." in t and "Second sentence" not in t          # the record's own rule, first sentence
@@ -203,6 +203,21 @@ def test_template_text_has_no_banned_words_or_static_numbers():
     assert set(re.findall(r'<img src="([^"]+)"', raw)) <= {"/landing/board.webp", "/landing/realslip-scout.webp"} | {
         f"/v3/art/{m}.svg" for m in ("anubis", "dust2", "ancient", "cache")}
     assert '<span class="mark" aria-hidden="true">1T</span><b>Scout</b>' in raw
+
+
+def test_an_idle_page_is_rebuilt_before_it_is_served(srv, monkeypatch):
+    """No visitors for STALE_S: the next request gets a page rebuilt from cached bodies, never the old one (old rows, old as-of)."""
+    seed(srv, monkeypatch, board(datetime(2026, 11, 19, 16, 20, tzinfo=timezone.utc)))
+    a = landing_v3.page(srv, JOIN)
+    assert b"as of Nov 19, 16:20 UTC" in a
+    for _ in range(100):                                                # the first visit's background build
+        if not landing_v3._BUILDER["busy"]:
+            break
+        time.sleep(0.05)
+    workspace_api._SNAP["body"] = json.dumps(board(datetime(2026, 11, 22, 9, 5, tzinfo=timezone.utc))).encode()
+    landing_v3._STATE["made"] = landing_v3._STATE["built"] = time.time() - landing_v3.STALE_S - 1
+    b = landing_v3.page(srv, JOIN)
+    assert b"as of Nov 22, 09:05 UTC" in b and b"Nov 19, 16:20" not in b
 
 
 def test_page_bytes_are_one_object_per_build_and_request_path_never_computes(srv, monkeypatch):

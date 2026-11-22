@@ -10,6 +10,20 @@
     if (e) { var el = D.getElementById('signin-error'); el.textContent = e; el.hidden = false; }
   } catch (_) {}
 
+  /* freshness: the cached HTML says "as of <time>"; while the board is younger than data-fresh minutes the browser says
+     "checked N min ago" and lights the dots. Re-checked every minute, so an open tab never keeps a stale claim. */
+  var term = D.getElementById('terminal'), at = term && Date.parse(term.getAttribute('data-at') || ''), atEl = D.getElementById('term-at');
+  var asOf = atEl ? atEl.textContent : '';
+  function fresh() {
+    if (!term || !isFinite(at) || !atEl) return;
+    var min = (Date.now() - at) / 60000, lim = +term.getAttribute('data-fresh') || 30, live = min >= -2 && min <= lim;
+    atEl.textContent = live ? (min < 1 ? 'checked just now' : 'checked ' + Math.floor(min) + ' min ago') : asOf;
+    term.setAttribute('data-state', live ? 'live' : 'dated');
+    D.documentElement.classList.toggle('live', live);
+  }
+  fresh();
+  setInterval(fresh, 60000);
+
   D.addEventListener('click', function (ev) {
     var b = ev.target.closest && ev.target.closest('.tr button.bk');
     if (!b) return;
@@ -30,11 +44,9 @@
       es.forEach(function (x) { if (x.isIntersecting) { x.target.classList.add('in'); io.unobserve(x.target); } });
     }, { rootMargin: '0px 0px -8% 0px' });
     targets.forEach(function (t) { io.observe(t); });
-    var term = D.getElementById('terminal');
     if (term) io.observe(term);
   } else {
-    var t2 = D.getElementById('terminal');
-    if (t2) t2.classList.add('in');
+    if (term) term.classList.add('in');
   }
 
   var dock = D.getElementById('dock'), ctas = D.querySelector('.hero .ctas'), close = D.querySelector('.close');

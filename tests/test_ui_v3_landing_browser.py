@@ -141,6 +141,8 @@ def test_landing_v3_first_screen_targets_and_width(browser, lbase, size, theme):
         assert not small, small
         no_h_scroll(page)
         assert page.locator("#reviews .rv").count() >= 1 and page.locator("#rvq").count() == 0
+        assert page.locator("#term-at").text_content().startswith("checked ")    # a 3-minute-old board: the browser says so
+        assert page.evaluate("document.documentElement.classList.contains('live')")
         snap(page, f"landing-c-{size['width']}-{theme}", full=True)
         assert not page.errors, page.errors
     finally:

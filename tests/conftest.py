@@ -104,3 +104,13 @@ def v3_shot_run(request, monkeypatch):
         monkeypatch.setattr(BrowserContext, "route", fonts_route)
         monkeypatch.setattr(Page, "screenshot", fonts_shot)
     yield
+
+
+@pytest.fixture(autouse=True)
+def quiet_landing_v3(monkeypatch):
+    """The v3 landing (landing_v3.py) starts each test with no built page, and its background builder never reads the feeds."""
+    import landing_v3
+    landing_v3.reset()
+    monkeypatch.setattr(landing_v3, "BOARD_READ", False)
+    yield
+    landing_v3.reset()

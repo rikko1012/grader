@@ -27,7 +27,9 @@ ROOT = Path(__file__).resolve().parent
 TEMPLATE = ROOT / "web" / "v3" / "landing.html"
 ASSETS = {"TOKENS_CSS": ROOT / "web" / "v3" / "tokens.css", "PAGE_CSS": ROOT / "web" / "v3" / "landing-page.css",
           "PAGE_JS": ROOT / "web" / "v3" / "landing-page.js"}
+STALE_S = 900                      # a page not rebuilt for this long (no visitors) is rebuilt from cached bodies before serving
 REBUILD_S = 120                    # the page changes at most this often (hero rows, ledger, reviews)
+BOARD_READ = True                  # tests switch this off (no feed read from the background builder)
 FRESH_MIN = 30                     # a board older than this is labelled "as of <time>", never "checked N min ago"
 SPORTS = ("cs2", "lol", "nba", "nfl")
 LABEL = {"cs2": "CS2", "lol": "League", "nba": "NBA", "nfl": "NFL", "soccer": "Soccer", "tennis": "Tennis"}
@@ -167,7 +169,7 @@ def _inputs(srv, fetch):
         out["reviews"] = _STATE["last"].get(("rv",))
     try:
         import workspace_api
-        snap = workspace_api.snapshot(srv) if fetch else (workspace_api._SNAP if workspace_api._SNAP.get("body") is not None else None)
+        snap = workspace_api.snapshot(srv) if fetch and BOARD_READ else (workspace_api._SNAP if workspace_api._SNAP.get("body") is not None else None)
         body = snap and snap.get("body")
         if body is not None:
             if _STATE["board"][0] is not body:              # parse once per board body
@@ -219,7 +221,7 @@ def _rows(board):
         moved = any((r.get("offer") or {}).get("moved_from") is not None for r in rs)
         gap = len(lines) > 1
         lock = _ts((rs[0].get("event") or {}).get("lock_utc") or (rs[0].get("event") or {}).get("start_utc"))
-        out.append((0 if gap or moved else 1, lock, rs, gap, moved))
+        out.append((0 if gap else 1 if moved else 2, lock, rs, gap, moved))
     out.sort(key=lambda x: (x[0], x[1]))
     seen, pick = set(), []
     for pri, lock, rs, gap, moved in out:
@@ -284,14 +286,8 @@ def terminal(board):
     pick, at = _rows(board)
     if not pick:
         return "", "", 0, False
-    now = datetime.now(timezone.utc)
-    age = (now - at).total_seconds() / 60 if at else None
-    if age is not None and age <= FRESH_MIN:
-        meta = f"checked {max(1, int(age))} min ago" if age >= 1 else "checked just now"
-        live = True
-    else:
-        meta = "as of " + _when(at)
-        live = False
+    meta = "as of " + _when(at) if at else ""
+    live = False          # the page is cached: the HTML never claims freshness; the inline script reads data-at in the browser
     rows = []
     for rs, gap, moved in pick:
         lead = rs[0]
@@ -342,7 +338,8 @@ def ledger(record):
             continue
         t = d["totals"]
         w, l, p = int(t.get("wins") or 0), int(t.get("losses") or 0), int(t.get("pushes") or 0)
-        total += w + l + p
+        decided = t.get("picks") if isinstance(t.get("picks"), int) else w + l
+        total += decided                                 # the record's own count (wins + losses; pushes apart), as /record shows it
         days = ((d.get("calendar") or {}).get("days")) or []
         a = _ts(d.get("as_of"))
         asof = a if asof is None or (a and a < asof) else asof
@@ -351,11 +348,11 @@ def ledger(record):
         hi = max([x.get("wins", 0) + x.get("losses", 0) for x in days] or [1]) or 1
         bars = "".join(
             f'<i style="--w:{round(100 * x.get("wins", 0) / hi, 1)}%;--l:{round(100 * x.get("losses", 0) / hi, 1)}%" title="{esc(_day(x.get("date")))}: {x.get("wins", 0)}-{x.get("losses", 0)}"></i>'
-            for x in days[-42:])
+            for x in days[-30:])
         cells.append(
             f'<article class="lg" data-sport="{sp}"><header><b>{LONG[sp]}</b><small>{esc(t.get("matches"))} {esc(t.get("match_word") or "matches")}</small></header>'
             f'<p class="wlp"><b>{w:,}</b><span>-</span><b>{l:,}</b><span>-</span><b>{p:,}</b></p><p class="wlk">Won · Lost · Push</p>'
-            f'<div class="days" aria-label="Every day since the start, wins above the line and losses below">{bars}</div>'
+            f'<div class="days" aria-label="The last 30 days, wins above the line and losses below">{bars}</div>'
             f'<p class="rule">{esc(_first_sentence(d.get("rule") or d.get("population")))}</p></article>')
     return "".join(cells), total, (_when(asof) if asof else ""), (_day(since) if since else "")
 
@@ -420,7 +417,7 @@ def build(srv, join_url, fetch=True):
     head, cards, nrv = wall(inp["reviews"])
     proof = []
     if total:
-        proof.append(f'<span><b>{total:,}</b> picks on the public record{(" since " + esc(since)) if since else ""}</span>')
+        proof.append(f'<span><b>{total:,}</b> decided picks on the public record</span>')
     if nrv:
         proof.append(f'<span><b>{nrv}</b> member reviews, every one published</span>')
     mi = minis(inp["board"]) if inp["board"] else {}
@@ -435,7 +432,10 @@ def build(srv, join_url, fetch=True):
         "PROOF": " <i>·</i> ".join(proof),
         "TERM_ROWS": rows,
         "TERM_META": esc(meta),
-        "TERM_STATE": "live" if live else ("dated" if nrows else "empty"),
+        "TERM_STATE": "dated" if nrows else "empty",
+        "TERM_AT": esc(inp["board"].get("board_at") or "") if nrows else "",
+        "TERM_TITLE": "CS2 board" if nrows else "The member board",
+        "FRESH_MIN": str(FRESH_MIN),
         "TERM_N": str(nrows),
         "LEDGER": cells,
         "LEDGER_ASOF": esc(asof),
@@ -464,12 +464,19 @@ def page(srv, join_url):
     if pg is None or _STATE["key"] != key:
         with _LOCK:
             if _STATE["page"] is None or _STATE["key"] != key:
-                _STATE.update(page=build(srv, join_url, fetch=False), built=time.time(), key=key, at=0.0)
+                _STATE.update(page=build(srv, join_url, fetch=False), built=time.time(), made=time.time(), key=key)
                 _kick(srv, join_url)
         return _STATE["page"]
+    age = time.time() - _STATE.get("made", 0.0)
+    if age > STALE_S and not _BUILDER["busy"]:
+        with _LOCK:
+            if time.time() - _STATE.get("made", 0.0) > STALE_S:
+                new = build(srv, join_url, fetch=False)
+                _STATE["page"] = pg = new if new != _STATE["page"] else _STATE["page"]
+                _STATE["made"] = time.time()
     if time.time() - _STATE["built"] > REBUILD_S:
         _kick(srv, join_url)
-    return pg
+    return _STATE["page"]
 
 
 _BUILDER = {"busy": False}
@@ -483,12 +490,15 @@ def _kick(srv, join_url):
         _STATE["built"] = time.time()                 # no second kick while this one runs
 
     def run():
+        t0 = time.time()
         try:
             new = build(srv, join_url, fetch=True)
             with _LOCK:
+                if _STATE.get("made", 0.0) > t0:
+                    return                            # a newer page was made meanwhile: never put an older one back
                 if new != _STATE["page"]:
                     _STATE["page"] = new              # identical bytes keep the old object (no re-gzip, same ETag)
-                _STATE["built"] = time.time()
+                _STATE["built"] = _STATE["made"] = time.time()
         except Exception:
             pass
         finally:
@@ -498,5 +508,5 @@ def _kick(srv, join_url):
 
 def reset():
     """Tests: forget the built page and inputs."""
-    _STATE.update(page=None, built=0.0, key=None, board=(None, None), last={})
+    _STATE.update(page=None, built=0.0, made=0.0, key=None, board=(None, None), last={})
     _TPL.update(mtime=None, text="")
