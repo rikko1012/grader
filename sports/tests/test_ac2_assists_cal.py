@@ -11,7 +11,7 @@ from sports.model import ac2, cal
 
 @pytest.fixture(autouse=True)
 def _fresh(monkeypatch):
-    monkeypatch.delenv(ac2.FLAG, raising=False)
+    monkeypatch.setenv(ac2.FLAG, "1")                         # default OFF; these tests exercise it switched on
     monkeypatch.delenv("SPORTS_CAL_MI", raising=False)
     monkeypatch.delenv("SPORTS_CHANCE_CAL", raising=False)
     ac2.reset_cache()
@@ -32,10 +32,13 @@ def _cal_mi_weights(on, key="nba:assists"):
     return obj
 
 
-def test_committed_artifact_is_valid_and_default_on():
+def test_committed_artifact_is_valid_and_flag_default_off(monkeypatch):
     obj, src = ac2.load(force=True)
     assert src == "default" and obj["version"] == "ac-2" and ac2.B_MIN <= obj["params"]["b"] < 1.0
-    assert ac2.enabled()
+    monkeypatch.delenv(ac2.FLAG, raising=False)
+    ac2.reset_cache()
+    assert not ac2.enabled() and ac2.adjust("nba", "assists", 0.3, 0.7, 0.0) is None
+    assert board_view.calibrated("nba", "assists", 0.3, 0.7, 0.0, "sm-1", None) is None
 
 
 def test_adjust_shrinks_keeps_side_sums_to_one_and_keeps_raw():
@@ -150,11 +153,25 @@ def test_gradecheck_scores_assists_at_the_ac2_chance(monkeypatch):
     assert {r["chance"] for r in rows if r["forecast_at"] < "2026-11-02"} == {"raw"}
     monkeypatch.setenv(ac2.FLAG, "0")
     assert gradecheck.ac2_walk_q(rows) == ({}, {"version": "ac-2", "enabled": False})
+    monkeypatch.delenv(ac2.FLAG, raising=False)                     # default (unset) = OFF: record scores the raw chance
+    assert gradecheck.ac2_walk_q(rows) == ({}, {"version": "ac-2", "enabled": False})
+    for r in rows:
+        r.pop("chance", None)
+    gradecheck.score_rows(rows, {}, labels=None)
+    assert {r["chance"] for r in rows} == {"raw"}
 
 
 def test_points_noletter_owner_option_default_off(monkeypatch):
     monkeypatch.delenv("NBA_POINTS_NOLETTER", raising=False)
     assert not board_view.points_noletter("nba", "points")
+    assert board_view.research_grade(0.7, "nba", "points") == "A"
+    x, _ = board_view.quote_x("nba", "points", 0.7, 0.3, 26.0, 24.5, None)
+    assert x["gr"] == "A"
     monkeypatch.setenv("NBA_POINTS_NOLETTER", "1")
     assert board_view.points_noletter("nba", "points")
     assert not board_view.points_noletter("nba", "assists") and not board_view.points_noletter("nfl", "points")
+    # every letter path (board quote, tracked pick, slips pool, public results, gradecheck) reads research_grade
+    x, _ = board_view.quote_x("nba", "points", 0.7, 0.3, 26.0, 24.5, None)
+    assert x["ln"] == "over" and x["gr"] == "Lean"                 # side kept, Lean wording
+    assert board_view.research_grade(0.7, "nba", "points") == "Lean"
+    assert board_view.research_grade(0.7, "nba", "rebounds") == "A" and board_view.research_grade(0.7) == "A"

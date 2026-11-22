@@ -415,6 +415,6 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
            "stake_units": 0.0 if f.research_only else f.stake_units, "weight": leg_weight(platform, p_win, q.multiplier),
            "prop_keys": prop_keys(o.league, o.player_id, o.stat),
            # rg-1: the board's research letter for this forecast / line (same unrounded chance, same lean rule)
-           "research_grade": board_view.research_grade(p_win)
+           "research_grade": board_view.research_grade(p_win, o.league, o.stat)
            if board_view.lean_of(po, pu, f.projection_mean, float(o.line)) == side else None}
     return None, leg

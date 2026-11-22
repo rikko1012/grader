@@ -287,7 +287,7 @@ def score_rows(rows, cal_q=None, label="cal-mi", labels=None):
         r["p_lean"] = p_un
         dec = 1 - pp
         r["p"] = min(max(p_un / dec if dec > 0 else p_un, 1e-6), 1 - 1e-6)
-        r["letter"] = board_view.research_grade(p_un)
+        r["letter"] = board_view.research_grade(p_un, r.get("league"), r.get("stat"))
         r["hit"] = None if r["outcome"] in (None, "push", "void") else (1.0 if r["outcome"] == lean else 0.0)
         mkc = None
         if r.get("pm") is not None:

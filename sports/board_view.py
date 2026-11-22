@@ -75,9 +75,13 @@ def points_noletter(league, stat):
         "1", "true", "yes", "on")
 
 
-def research_grade(p_side):
-    """sports-gp-1 band (A >= 0.60, B >= 0.5559, C >= 0.5345, else Lean) of the unrounded chosen-side chance."""
-    return None if p_side is None else _band(float(p_side))
+def research_grade(p_side, league=None, stat=None):
+    """sports-gp-1 band (A >= 0.60, B >= 0.5559, C >= 0.5345, else Lean) of the unrounded chosen-side chance. With
+    league / stat: the owner option NBA_POINTS_NOLETTER (default OFF) turns an NBA points letter into "Lean"."""
+    if p_side is None:
+        return None
+    g = _band(float(p_side))
+    return "Lean" if g != "Lean" and points_noletter(league, stat) else g
 
 
 def contain_reason(league, stat):
@@ -533,7 +537,7 @@ def calibrated(league, stat, po, pu, pp, model, mkc):
             return ca
     except Exception:                                   # noqa: BLE001 - a calibration error never breaks a snapshot
         pass
-    try:                                                # ac-2 (NBA_ASSISTS_CAL2, default on): NBA assists only, while
+    try:                                                # ac-2 (NBA_ASSISTS_CAL2, default OFF): NBA assists only, while
         from .model import ac2                          # cal-mi-1 is OFF for it (cal-mi wins whenever it passes)
         return ac2.adjust(league, stat, po, pu, pp)
     except Exception:                                   # noqa: BLE001 - a calibration error never breaks a snapshot
@@ -562,10 +566,8 @@ def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None, raw=None, vi
     if cap:                                            # cap-3: a long-odds book / exchange line gets no side or letter
         return cap, None
     if sig.get("ln"):                                  # rg-1: grade from the UNROUNDED lean-side chance
-        sig["gr"] = research_grade(po if sig["ln"] == "over" else pu)
+        sig["gr"] = research_grade(po if sig["ln"] == "over" else pu, league, stat)
         sig["gp"] = GRADE_POLICY
-        if sig["gr"] != "Lean" and points_noletter(league, stat):
-            sig["gr"] = "Lean"                         # owner option (default OFF): points side kept, Lean wording
     if gate:                                           # failed-gate market, letters released: lean + grade only
         for k in ("e", "s", "g"):                      # (A9 5: edges, confidence and rank stay withheld); the
             sig.pop(k, None)                           # "model not validated" wording shows only while contained
