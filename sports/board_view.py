@@ -68,8 +68,9 @@ GRADE_TAG = "Scout grade"               # ct-1b (owner 2026-11-08): no research 
 
 def points_noletter(league, stat):
     """Owner option NBA_POINTS_NOLETTER (default OFF, round2 nba-cal 2026-11-21): NBA points keep their side but show
-    "Lean" instead of a letter while no tested points correction exists (points letters hit under 53% at every
-    cut; the NBA_POINTS_BIAS1 mean-shift candidate failed the walk-forward). Off = the current letters, unchanged."""
+    "Lean" instead of a letter while no tested points correction exists (walk-forward graded points at the cal-mi
+    chance hit 50.5%, 576-565, over 10-28..11-20 - 49.2% train era, 57.6% on 177 holdout-era rows; the NBA_POINTS_BIAS1
+    mean-shift candidate failed the walk-forward). Owner-only decision. Off = the current letters, unchanged."""
     import os
     return (league, stat) == ("nba", "points") and os.environ.get("NBA_POINTS_NOLETTER", "0").strip().lower() in (
         "1", "true", "yes", "on")

@@ -3,9 +3,12 @@ NBA_ASSISTS_CAL2=1 turns it on, =0 / unset -> assists shown at the raw sm-1 chan
 It PASSED the registered calibration test below (PREREG a-d, lag check included); it is held OFF under the owner's
 graded-count and preview-first rules (grades-accuracy-not-fewer: no chance-lowering / letter-removing change board-wide
 without an owner board preview): graded assists rows fall ~34% on the test days (A letters 1,179 -> 240; that drop is
-also the intended effect - assists stops taking most A letters). Sides never change, so all-row hit is identical and
-best-prop hit shows no difference (1491-1034 vs 1483-1042). Post-hoc, supporting only (not pre-registered, 689 rows with
-a saved market chance): the props it newly holds under N4 went 78-48. Enable only after the owner sees the board preview.
+also the intended effect - assists stops taking most A letters). On the higher-chance-side population (no N4) no side
+changes, so all-row hit is identical and best-prop hit shows no difference (1491-1034 vs 1483-1042). ADVERSE N4
+interaction (post-hoc, not pre-registered; prover-confirmed, 689 rows with a saved market chance): the board's N4 rule
+compares the SHOWN chance with the market, so the shrunk chance drops leans - the props ac-2 newly holds went 78-48
+(61.9%, game CI [52.5%, 71.1%]) and the kept-lean hit falls 51.4% -> 47.9%. Live board replay 2026-11-22 02:26Z: assists
+leans 71 -> 53 (Over 28 -> 12, Under 43 -> 41), 18 graded quotes lose side and letter. Do not enable as built.
 
 Why: points, rebounds and threes are shown at the cal-mi-1 chance (sports/model/cal.py), but cal-mi-1 fails A8a for
 assists every day (its fitted intercept pushes the share favouring Over to ~0.32 vs an over rate of ~0.48), so assists
@@ -13,8 +16,8 @@ was the only NBA stat shown at the raw, overconfident sm-1 chance (A rows hit ~5
 letters and best-prop slots.
 
     z = logit P_raw(Over | no push)            (the saved sm-1 chance, never changed)
-    q = sigmoid(b * z)                          zero intercept: the side never changes, so the Over / Under mix is the
-                                                raw mix (A8a balance holds by construction)
+    q = sigmoid(b * z)                          zero intercept: the higher-chance side never changes (A8a balance on
+                                                that population holds by construction); N4 can still drop a lean
     shown: P(Over) = (1 - pp) q, P(Under) = (1 - pp)(1 - q), P(Push) = pp
 
 b is fitted by penalised logistic ML (ridge 20 toward b = 1, the identity), the V1 variant of the pre-registered family.
@@ -45,10 +48,14 @@ EPS = 1e-6
 _OFF = {"0", "false", "no", "off"}
 
 
+_ON = {"1", "true", "yes", "on"}
+
+
 def enabled():
     # default OFF (round2 nba-cal): the registered calibration test passed; held off under the graded-count /
-    # preview-first rules (graded assists rows -34%) until the owner sees the board; NBA_ASSISTS_CAL2=1 turns it on
-    return os.environ.get(FLAG, "0").strip().lower() not in _OFF
+    # preview-first rules (graded assists rows -34%) and the adverse N4 interaction; only NBA_ASSISTS_CAL2=1/true/yes/on
+    # turns it on (allowlist: an empty or unknown value stays OFF)
+    return os.environ.get(FLAG, "0").strip().lower() in _ON
 
 
 def _logit(p):

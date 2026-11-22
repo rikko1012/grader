@@ -175,3 +175,14 @@ def test_points_noletter_owner_option_default_off(monkeypatch):
     assert x["ln"] == "over" and x["gr"] == "Lean"                 # side kept, Lean wording
     assert board_view.research_grade(0.7, "nba", "points") == "Lean"
     assert board_view.research_grade(0.7, "nba", "rebounds") == "A" and board_view.research_grade(0.7) == "A"
+
+
+def test_flag_empty_or_unknown_value_stays_off(monkeypatch):
+    for v in ("", " ", "junk", "2", "0", "off"):
+        monkeypatch.setenv(ac2.FLAG, v)
+        ac2.reset_cache()
+        assert not ac2.enabled() and ac2.adjust("nba", "assists", 0.3, 0.7, 0.0) is None, repr(v)
+    for v in ("1", "true", "YES", " on "):
+        monkeypatch.setenv(ac2.FLAG, v)
+        assert ac2.enabled(), repr(v)
+    ac2.reset_cache()
