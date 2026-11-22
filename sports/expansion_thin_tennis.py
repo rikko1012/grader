@@ -65,8 +65,11 @@ def mass(values, support, pop, k):
 # ESPN ATP / WTA singles player-match before 2026-08-22 (+0.5 smoothing per score), K = 40 pseudo-matches chosen by log
 # loss on 2026-06-01..08-21 with pop fitted before 06-01 (grid 1u/2/5/10/20/40: 40 for every stat - the grid edge).
 # Recon holdout 2026-08-22..11-19 scored once (synthetic lines, NOT offered lines): book-like lines 64.19% -> 66.49%
-# (+2.30, day CI +1.66..+2.96, 12,377 rows), letters 66.3% -> 67.7%, days < 53% 0 -> 0. Real offered lines could not be
-# re-scored (87% Challenger, no stored history in the test data), so the flag defaults OFF (binding rule).
+# (+2.30, day CI +1.66..+2.96, 12,377 rows), letters 66.3% -> 67.7%, days < 53% 0 -> 0 - but at book lines it picks a
+# constant side per stat (sets played / tie-breaks 0% Over, sets won 100% Over): base-rate side picking (audit F14).
+# Real offered lines (482 of 486 count rows reproduce from the board columns; round2/expansion/r2b/real_tennis.py):
+# first_seen 148-112 -> 151-109 (+1.2 pts, match CI -4.1..+6.8, 49 matches, 4 days), p1 126-96 -> 133-89 (+3.2, CI
+# -2.5..+8.8) -> NOT passed; the flag defaults OFF (binding rule). K = 40 is the grid edge for every stat (not bracketed).
 # Challenger / WTA 125 use their tour's pmf (untested there). Best of 5: no pmf, unchanged.
 # Evidence: cs2_scout_ops/logs/audit_1121/round2/expansion/wf_tennis.py, wf_tennis_results.json.
 SHRINK_VERSION = 'tp-shrink-1'

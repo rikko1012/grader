@@ -17,7 +17,8 @@ from sports.tests.test_expansion_stats_1120 import facts_with
 
 @pytest.fixture(autouse=True)
 def _flags(monkeypatch):
-    for k in ('SOCCER_FM_ZERO_FILL', 'SOCCER_SA_INPUTS', 'TENNIS_THIN_LEAN_CAP', 'TENNIS_POP_SHRINK'):
+    for k in ('SOCCER_FM_ZERO_FILL', 'SOCCER_SA_INPUTS', 'TENNIS_THIN_LEAN_CAP', 'TENNIS_POP_SHRINK', 'SOCCER_GA_PRIOR',
+              'TENNIS_UD_CHANCE_LETTER'):
         monkeypatch.delenv(k, raising=False)
 
 
@@ -247,3 +248,22 @@ def test_ga_prior_off_by_default_and_shrinks_a_hot_scorer_with_the_flag(monkeypa
     assert f['projection'] < base['projection'] and f['side'] == 'over' and f['grade']
     offer['stat'] = 'shots'                                  # other stats untouched
     assert 'ga_prior' not in model.make_forecast(offer, facts, NOW)[0]
+
+
+# ---------------------------------------------------------------- ud-chance-1
+
+def test_ud_chance_letter_off_by_default_and_payout_agnostic_with_the_flag(monkeypatch):
+    offer, facts = fixture('tennis')
+    offer.update(platform='underdog', line=4.5, sides={'over': {'multiplier': 0.75}, 'under': {'multiplier': 1.2}})
+    for g, v in zip(facts['games'], [6, 5, 6, 4, 6, 3, 6, 5, 4, 6]):
+        g['value'] = v                                  # p_over ~0.67 against a ~0.71 break-even at 0.75x
+    base, _ = model.make_forecast(offer, facts, NOW)
+    assert base['side'] == 'over' and base['grade'] == policy.LEAN and 'ud_chance' not in base   # reduced payout
+    monkeypatch.setenv('TENNIS_UD_CHANCE_LETTER', '1')
+    f, _ = model.make_forecast(offer, facts, NOW)
+    assert f['grade'] == policy.letter_for(f['p_side']) != policy.LEAN
+    assert f['ud_chance'] == {'version': 'ud-chance-1', 'policy_letter': policy.LEAN}
+    assert (f['side'], f['p_side'], f['units']) == (base['side'], base['p_side'], base['units'])
+    offer['platform'] = 'prizepicks'                                  # other books untouched
+    offer['sides'] = {'over': {}, 'under': {}}
+    assert 'ud_chance' not in model.make_forecast(offer, facts, NOW)[0]

@@ -181,6 +181,16 @@ def tennis_thin_cap_on():
     return os.environ.get('TENNIS_THIN_LEAN_CAP', '1') != '0'
 
 
+UD_CHANCE_VERSION = 'ud-chance-1'
+
+
+def ud_chance_letter_on():
+    """ud-chance-1: tennis Underdog letters from the model chance only (payout-agnostic). Failed its real-line test
+    (CI crosses 0, 4 days) -> default OFF; shadow evidence only."""
+    import os
+    return os.environ.get('TENNIS_UD_CHANCE_LETTER', '0') == '1'
+
+
 def forecast_inputs():
     """FORECAST_INPUTS plus the rows a walk-forward-gated flag switches on (read per call: flags flip without a restart)."""
     return FORECAST_INPUTS | SA_INPUT_ROWS if sa_inputs_on() else FORECAST_INPUTS
@@ -491,6 +501,17 @@ def make_forecast(offer, facts, now):
                       grade_reason=[*result['grade_reason'], why])
         if not fitted.get('component_model') and not fitted.get('thin_model'):
             result['stake_reason'] = why
+    if (offer['sport'] == 'tennis' and offer['platform'] == 'underdog' and grade.letter is not None
+            and ud_chance_letter_on()):
+        # ud-chance-1 (exp-proj-1121, TENNIS_UD_CHANCE_LETTER=1, default OFF): the letter is the band of the model
+        # chance alone, not of chance vs the per-side Underdog payout. audit_1121: the reduced-payout side keeps winning
+        # (printed Leans at p >= 0.55 went 55-24 while printed letters went 79-63 on real first_seen lines). Real-line
+        # re-score (cs2_scout_ops/logs/audit_1121/round2/expansion/r2b/real_tennis_results.json): letters 79-63 (55.6%)
+        # -> 134-87 (60.6%), match-grouped CI of the letter-hit gain -0.9..+10.6 pts over 4 days -> not passed, so OFF.
+        letter = policy.letter_for(side_probs[chosen])
+        if letter != result['grade']:
+            result.update(grade=letter, letter_basis='chance_payout_agnostic',
+                          ud_chance={'version': UD_CHANCE_VERSION, 'policy_letter': grade.letter})
     thin = fitted.get('thin_model') or {}
     if (offer['sport'] == 'soccer' and thin and thin.get('games') == 0 and
             result['grade'] not in (None, policy.LEAN)):
