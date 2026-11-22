@@ -61,3 +61,32 @@ def test_admin_export_reads_only_known_snapshot_name():
     doc={'schema':'gradecore-export-1','rows':[]}
     (folder/'gradecore_export_nba.json').write_text(json.dumps(doc))
     assert api_model.admin_model(req('nba'))==(200,doc)
+
+
+def test_export_marks_offer_forced_side_without_changing_saved_side():
+    """audit_1121 nfl r2: an Over-only offer with p_over < 0.5 keeps side='over' (the saved chosen side) but is marked
+    side_offer_forced with the model's own max-p side, so max-p scorecards stop counting it as the model's pick."""
+    c=store.connect()
+    store.put(c,h.event())
+    o=h.offer(line=20,sides=(h.SideQuote("over",True),h.SideQuote("under",False)),variant="demon")
+    oid=store.put(c,o)['record_id']
+    l=learning.db()
+    at='2026-10-23T21:00:00Z'
+    fc=h.forecast(offer_snapshot_ids=(oid,),input_snapshot_ids=('input:f',),model_version='sm-1',artifact_version='frozen-1',
+                  forecast_at=at,p_over=.38,p_under=.57,p_push=.05,p_over_given_no_push=.38/.95,p_under_given_no_push=.57/.95,
+                  sides_available=('over',),chosen_side='over')
+    store.put(c,fc)
+    l.execute('INSERT INTO scorecard(forecast_id,settlement_id,model_version,league,stat,event_id,platform,line,side,p_side,p_over,p_under,p_push,status,outcome,value,forecast_at,settled_at,superseded) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)',
+              (fc.forecast_id,'sf','sm-1','nba','points',fc.event_id,'prizepicks',20,'over',.4,.38,.57,.05,'settled','under',14,at,'2026-10-24T03:00:00Z'))
+    l.commit(); l.close(); c.close()
+    row=gradecore_export.export(config.DATA_DIR,'nba')['rows'][0]
+    assert row['side']=='over' and row['p']==pytest.approx(.38/.95) and row['status']=='loss'
+    assert row['side_offer_forced'] is True and row['max_p_side']=='under'
+    assert row['p_max_side']==pytest.approx(.57/.95) and row['sides_available']==['over']
+
+
+def test_export_two_sided_offer_is_not_forced():
+    world()
+    row=gradecore_export.export(config.DATA_DIR,'nba')['rows'][0]
+    assert row['side_offer_forced'] is False and row['max_p_side']==row['side']=='over'
+    assert row['p_max_side']==pytest.approx(row['p'])

@@ -64,6 +64,13 @@ def export(data_dir, league, model_version='sm-1'):
             side = fc.chosen_side
             if side not in ('over','under'):
                 skip('no_selected_side'); continue
+            # audit_1121 nfl r2: chosen_side is the max over the OFFERED sides (grade_policy.apply), so an Over-only
+            # offer (PrizePicks demon / goblin, Underdog Over-only) records Over even when the model favours Under
+            # (143 NFL train rows, p < 0.5, hit 45.7%). 'side' / 'p' stay exactly as saved (chance_cal reads them);
+            # max_p_side / p_max_side are the model's own preferred side, and side_offer_forced marks the rows where
+            # the two differ, so max-p populations can drop or re-key them instead of scoring a forced side.
+            max_side = 'over' if fc.p_over >= fc.p_under else 'under'
+            offered = tuple(s for s in (fc.sides_available or ()) if s in ('over','under'))
             published = None
             if shown:
                 sh = shown.execute('SELECT * FROM shown WHERE forecast_id=?',(fc.forecast_id,)).fetchone()
@@ -77,6 +84,8 @@ def export(data_dir, league, model_version='sm-1'):
                              'match_key':fc.event_id,'player_id':fc.player_id,'market':fc.stat,
                              'scope':fc.scope,'line':fc.line,'book':r['platform'],'side':side,
                              'p':getattr(fc,'p_'+side)/dec,'market_p':None,'published_p':published,
+                             'sides_available':list(offered),'max_p_side':max_side,
+                             'p_max_side':getattr(fc,'p_'+max_side)/dec,'side_offer_forced':side != max_side,
                              'status':r['outcome'] if r['outcome'] in ('push','void') else 'win' if r['outcome']==side else 'loss',
                              'forecast_at':fc.forecast_at,'start_at':event.start_utc,'settled_at':r['settled_at'],
                              'settlement_id':r['settlement_id'],

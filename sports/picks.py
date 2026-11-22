@@ -141,7 +141,7 @@ def research_grade(fc, side, league, probs=None, rid=None):
     if rid is not None and held_quote(league, rid, fc.forecast_id):
         return None
     from . import grade_rules                           # mvlean-1 / os-2: the letter the board showed on this quote
-    return grade_rules.letter_for(league, rid, side, board_view.research_grade(po if side == "over" else pu))
+    return grade_rules.letter_for(league, rid, side, board_view.research_grade(po if side == "over" else pu, league, fc.stat))
 
 
 _HELD = {}

@@ -644,7 +644,7 @@ class Grades:
         from . import board_view
         if not (r["status"] == "settled" and r["lean"] and not _contained(self.league, r.get("stat"))):
             return
-        g = board_view.research_grade(r["p_over"] if r["lean"] == "over" else r["p_under"])
+        g = board_view.research_grade(r["p_over"] if r["lean"] == "over" else r["p_under"], self.league, r.get("stat"))
         g = grade_rules.shown_letter(self.league, r, g)     # mvlean-1 (default off): the board's Lean (= recent())
         b = self.g.get(g)
         if b is None:
@@ -720,7 +720,7 @@ def recent(rows, names=None, n=RECENT_N, league=None):
     out = []
     for r in sorted(best.values(), key=lambda x: (x.get("settled_at") or "", x["forecast_id"]), reverse=True)[:n]:
         p_side = r["p_over"] if r["lean"] == "over" else r["p_under"]
-        g0 = None if _contained(league, r.get("stat")) else board_view.research_grade(p_side)
+        g0 = None if _contained(league, r.get("stat")) else board_view.research_grade(p_side, league, r["stat"])
         g = grade_rules.shown_letter(league, r, g0)     # mvlean-1 (default off): the board's Lean, as the Grades table
         out.append({"forecast_id": r["forecast_id"], "model": r["model"], "event_id": r["event_id"],
                     "player_id": r["player_id"], "player": (names or {}).get(r["player_id"]), "stat": r["stat"],

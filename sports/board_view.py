@@ -66,9 +66,23 @@ GRADE_VERSION = "rg-1"
 GRADE_TAG = "Scout grade"               # ct-1b (owner 2026-11-08): no research / "not validated" text beside released letters
 
 
-def research_grade(p_side):
-    """sports-gp-1 band (A >= 0.60, B >= 0.5559, C >= 0.5345, else Lean) of the unrounded chosen-side chance."""
-    return None if p_side is None else _band(float(p_side))
+def points_noletter(league, stat):
+    """Owner option NBA_POINTS_NOLETTER (default OFF, round2 nba-cal 2026-11-21): NBA points keep their side but show
+    "Lean" instead of a letter while no tested points correction exists (walk-forward graded points at the cal-mi
+    chance hit 50.5%, 576-565, over 10-28..11-20 - 49.2% train era, 57.6% on 177 holdout-era rows; the NBA_POINTS_BIAS1
+    mean-shift candidate failed the walk-forward). Owner-only decision. Off = the current letters, unchanged."""
+    import os
+    return (league, stat) == ("nba", "points") and os.environ.get("NBA_POINTS_NOLETTER", "0").strip().lower() in (
+        "1", "true", "yes", "on")
+
+
+def research_grade(p_side, league=None, stat=None):
+    """sports-gp-1 band (A >= 0.60, B >= 0.5559, C >= 0.5345, else Lean) of the unrounded chosen-side chance. With
+    league / stat: the owner option NBA_POINTS_NOLETTER (default OFF) turns an NBA points letter into "Lean"."""
+    if p_side is None:
+        return None
+    g = _band(float(p_side))
+    return "Lean" if g != "Lean" and points_noletter(league, stat) else g
 
 
 def contain_reason(league, stat):
@@ -505,8 +519,8 @@ def calibrated(league, stat, po, pu, pp, model, mkc):
     """THE displayed Scout chance at one quote. pc-1 (sports/model/chance_cal.py, owner decision 2026-11-05) first:
     every NBA / NFL sm-1 view (own forecast or line read) prints its chronologically fitted, held-out-tested calibrated
     chance; it supersedes cal-mi-1 for display while on. SPORTS_CHANCE_CAL=0 (or no valid pc-1 parameters) -> the
-    previous rule: cal-mi-1 (sports/model/cal.py adjust) with the mv-1 market chance at that quote, or None (raw
-    chance shown). Every surface (board, cards, compare, sheets, slips, tracked picks, EV) reads the quote's `ca`
+    previous rule: cal-mi-1 (sports/model/cal.py adjust) with the mv-1 market chance at that quote, then for NBA
+    assists only ac-2 (sports/model/ac2.py, NBA_ASSISTS_CAL2), or None (raw chance shown). Every surface (board, cards, compare, sheets, slips, tracked picks, EV) reads the quote's `ca`
     written from this; the raw chance stays in the immutable forecast record and in ca["raw"]."""
     if model not in CAL_MODELS or po is None or pu is None:
         return None
@@ -519,7 +533,14 @@ def calibrated(league, stat, po, pu, pp, model, mkc):
         pass
     try:
         from .model import cal
-        return cal.adjust(league, stat, po, pu, pp, mkc)
+        ca = cal.adjust(league, stat, po, pu, pp, mkc)
+        if ca:
+            return ca
+    except Exception:                                   # noqa: BLE001 - a calibration error never breaks a snapshot
+        pass
+    try:                                                # ac-2 (NBA_ASSISTS_CAL2, default OFF): NBA assists only, while
+        from .model import ac2                          # cal-mi-1 is OFF for it (cal-mi wins whenever it passes)
+        return ac2.adjust(league, stat, po, pu, pp)
     except Exception:                                   # noqa: BLE001 - a calibration error never breaks a snapshot
         return None
 
@@ -546,7 +567,7 @@ def quote_x(league, stat, po, pu, mu, line, mkc, l10=None, iv=None, raw=None, vi
     if cap:                                            # cap-3: a long-odds book / exchange line gets no side or letter
         return cap, None
     if sig.get("ln"):                                  # rg-1: grade from the UNROUNDED lean-side chance
-        sig["gr"] = research_grade(po if sig["ln"] == "over" else pu)
+        sig["gr"] = research_grade(po if sig["ln"] == "over" else pu, league, stat)
         sig["gp"] = GRADE_POLICY
     if gate:                                           # failed-gate market, letters released: lean + grade only
         for k in ("e", "s", "g"):                      # (A9 5: edges, confidence and rank stay withheld); the

@@ -1355,6 +1355,13 @@ def write_cal_index(root, base_meta, board_rows):
                           "quotes": sum(1 for v in idx.values() if v.get("mode") == "P")}
     except Exception as e:                              # noqa: BLE001 - never breaks the snapshot
         summary["pc1_error"] = type(e).__name__
+    try:                                                 # ac-2 (NBA_ASSISTS_CAL2): NBA assists displayed chance
+        from .model import ac2
+        aobj, _ = ac2.load()
+        summary["ac2"] = {"version": ac2.VERSION, "enabled": ac2.enabled(), "sha": (aobj or {}).get("sha"),
+                          "quotes": sum(1 for v in idx.values() if str(v.get("v") or "").startswith(ac2.VERSION + ":"))}
+    except Exception as e:                              # noqa: BLE001 - never breaks the snapshot
+        summary["ac2_error"] = type(e).__name__
     # A9a 6: persist the shown (calibrated) chance beside the offer's OWN forecast (a line read's chance belongs to
     # another line's record, so it is never stored); first write wins; never breaks the snapshot
     items = [(q["cal"].get("f"), r.get("stat"), q.get("line"), q["cal"]) for r in board_rows

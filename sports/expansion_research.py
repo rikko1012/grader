@@ -259,6 +259,8 @@ def _publish(sport, budget_s=20, results_at=None):
                         [root / 'stages.json'] if sport == 'soccer' else [])
                 sig_cache[name] = '|'.join(f'{f.stat().st_mtime_ns}:{f.stat().st_size}' if f.exists() else '-'
                                            for f in files)
+                if sport == 'soccer' and history.fm_zero_fill_on():
+                    sig_cache[name] += '|fmz1'          # fm-zero-1: flipping the flag re-reads carried entries at once
             except (OSError, KeyError, ValueError):
                 sig_cache[name] = None
         return sig_cache[name]
@@ -333,7 +335,7 @@ def _publish(sport, budget_s=20, results_at=None):
                                                          identity['player_id'], before, catalogs[comp])
                     entry['component_model'] = component
                 else:
-                    entry['games'] = history._history(str(path), history._file_signature(path),
+                    entry['games'] = history.history_games(str(path), history._file_signature(path),
                         identity['player_id'], offer['stat'], scope, before)
                 if comp not in catalogs:
                     catalog = path.parent / 'matches.json'

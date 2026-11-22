@@ -417,7 +417,7 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
            "prop_keys": prop_keys(o.league, o.player_id, o.stat),
            # rg-1: the board's research letter for this forecast / line (same unrounded chance, same lean rule)
            # mvlean-1 / os-2 (grade_rules): the board's own letter on this quote; bp-1: the board's featured best prop
-           "research_grade": grade_rules.letter_for(o.league, rid, side, board_view.research_grade(p_win))
+           "research_grade": grade_rules.letter_for(o.league, rid, side, board_view.research_grade(p_win, o.league, o.stat))
            if board_view.lean_of(po, pu, f.projection_mean, float(o.line)) == side else None,
            "featured": grade_rules.featured(o.league, rid, side)}
     return None, leg

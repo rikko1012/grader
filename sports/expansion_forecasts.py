@@ -18,7 +18,7 @@ from . import expansion_board as boards, expansion_research as research, expansi
 from . import expansion_thin_tennis as thin_tennis
 from .contracts import now_utc, parse_utc
 from .expansion import COMPETITIONS, isolated_database
-from .expansion_history import atomic_json
+from .expansion_history import atomic_json, FM_ZERO_STATS, fm_zero_fill_on
 
 VERSION = 'expansion-count-predictive-v1.1'
 MIN_GAMES = 5
@@ -144,6 +144,59 @@ def position_group(role):
 
 # Grade leak guard (2026-11-18). Frozen: changing it changes grades and needs a walk-forward test first.
 FORECAST_INPUTS = _inputs() | PROMOTED_INPUTS
+# sa-inputs-1 (exp-proj-1121): Shots Assisted reads FotMob chances_created (+ the minutes row that anchors each game).
+# Those rows were never forecast inputs for the four sg-scope promoted competitions, so every such line fell to the
+# thin-2 population prior (a constant 0.616 projection, sample 0) whatever the player's history. Behind
+# SOCCER_SA_INPUTS (rollback =0); evidence cs2_scout_ops/logs/audit_1121/round2/expansion/.
+SA_INPUT_ROWS = frozenset((c, 'fotmob', s) for c in ('mex.1', 'aus.1', 'usa.1', 'uefa.champions')
+                          for s in ('chances_created', 'minutes'))
+
+
+def sa_inputs_on():
+    import os
+    return os.environ.get('SOCCER_SA_INPUTS', '0') == '1'
+
+
+GA_PRIOR_VERSION = 'ga-prior-1'
+
+
+def ga_prior(sport, stat, role):
+    """ga-prior-1: (m0, K) of the thin-1 Gamma-Poisson prior for soccer goals / assists lines with 5+ games, or None.
+    The fixed +.5 prior over-states the top scorers (audit_1121 recon: goals p_over 0.55-0.60 hit 41%, assists 25-36%).
+    m0 / K are thin-1's (tune window before 2026-09-01). Behind SOCCER_GA_PRIOR (default off; rollback =0)."""
+    import os
+    if sport != 'soccer' or stat not in ('goals', 'assists') or os.environ.get('SOCCER_GA_PRIOR', '0') != '1':
+        return None
+    group = position_group(role)
+    group = group if group in THIN_PRIOR[stat] else 'U'
+    return {'version': GA_PRIOR_VERSION, 'group': group, 'm0': THIN_PRIOR[stat][group][0], 'k': THIN_K[stat]}
+
+
+TENNIS_CAP_VERSION = 'tt-cap-1'
+
+
+def tennis_thin_cap_on():
+    """tt-cap-1: failed-test thin letters capped at Lean, like soccer thin-3. Default OFF (prover, exp-proj-1121): no
+    real-line walk-forward exists (0 settled real thin rows) and the cap removes letters (recon: 16,430-7,404 train,
+    2,915-1,241 holdout on synthetic lines) - an open owner call that needs a board preview (grades-accuracy-not-fewer).
+    TENNIS_THIN_LEAN_CAP=1 turns it on."""
+    import os
+    return os.environ.get('TENNIS_THIN_LEAN_CAP', '0') == '1'
+
+
+UD_CHANCE_VERSION = 'ud-chance-1'
+
+
+def ud_chance_letter_on():
+    """ud-chance-1: tennis Underdog letters from the model chance only (payout-agnostic). Failed its real-line test
+    (CI crosses 0, 4 days) -> default OFF; shadow evidence only."""
+    import os
+    return os.environ.get('TENNIS_UD_CHANCE_LETTER', '0') == '1'
+
+
+def forecast_inputs():
+    """FORECAST_INPUTS plus the rows a walk-forward-gated flag switches on (read per call: flags flip without a restart)."""
+    return FORECAST_INPUTS | SA_INPUT_ROWS if sa_inputs_on() else FORECAST_INPUTS
 
 
 def encode(x):
@@ -191,7 +244,7 @@ def fit(offer, facts, now):
     if component:
         # sg-stats component models (fantasy scores, sums, first-half goals, 2nd-set games): stats the count model
         # below never graded. Every other offer takes the unchanged path.
-        return stats.fit(offer, facts, now, FORECAST_INPUTS, parse_utc, MIN_GAMES)
+        return stats.fit(offer, facts, now, forecast_inputs(), parse_utc, MIN_GAMES)
     if sport == 'soccer':
         if stat not in SOCCER_COUNTS:
             return None, 'stat_not_modelled'
@@ -289,6 +342,7 @@ def fit(offer, facts, now):
     values = [g['value'] for g in games]
     n = len(values)
     avg = sum(values) / n if n else 0.0
+    ga = None
     if thin is not None:
         mu = (sum(values) + thin['k'] * thin['m0']) / (n + thin['k'])
         shape = 1 / thin['alpha0']
@@ -308,6 +362,11 @@ def fit(offer, facts, now):
     elif tennis_thin is not None:
         mass = thin_tennis.mass(values, support, tennis_pop, tennis_thin['k'])
         model = 'thin-history-population-prior-finite'
+    elif support is not None and sport == 'tennis' and (shrink := thin_tennis.shrink_prior(
+            ident.get('competition'), context.get('best_of'), scope, stat, support)) is not None:
+        # tp-shrink-1 (TENNIS_POP_SHRINK=1, default off): K tour pseudo-matches instead of one uniform pseudo-match
+        mass = thin_tennis.mass(values, support, shrink[0], shrink[1])
+        model = 'finite-score-population-shrink'
     elif support is not None:
         # One total pseudogame spread across the finite score support. A market
         # with more possible scores must not silently receive a stronger prior.
@@ -319,6 +378,12 @@ def fit(offer, facts, now):
         mu = (sum(values) + .5) / n
         variance = sum((v-avg)**2 for v in values) / (n-1)
         alpha = max(1 / (sum(values)+.5), (variance-mu)/(mu*mu))
+        ga = ga_prior(sport, stat, facts.get('role') or offer.get('role'))
+        if ga is not None:
+            # ga-prior-1 (SOCCER_GA_PRIOR=1, default off): goals / assists shrink toward the thin-1 population rate of
+            # the position group (K pseudo-games) instead of the fixed half-goal prior; dispersion as before.
+            mu = (sum(values) + ga['k'] * ga['m0']) / (n + ga['k'])
+            alpha = max(1 / (sum(values) + ga['k'] * ga['m0']), (variance-mu)/(mu*mu))
         shape = 1 / alpha
         prob = shape / (shape + mu)
         support, mass, cumulative = [], [], 0.0
@@ -384,6 +449,10 @@ def fit(offer, facts, now):
             out['settle_scopes'] = ['full_game', 'regulation']   # extra-time box totals first, else the 90 minutes
     if tennis_rule is not None:
         out['format_rule'] = {k: tennis_rule[k] for k in ('best_of', 'basis') if k in tennis_rule}
+    if model.startswith('overdispersed-count-predictive') and ga is not None:
+        out['ga_prior'] = ga
+    if model == 'finite-score-population-shrink':
+        out['pop_shrink'] = {'version': thin_tennis.SHRINK_VERSION, 'k': thin_tennis.SHRINK_K}
     if thin is not None or tennis_thin is not None:
         out['thin_model'] = thin or tennis_thin
         out['stake_tier'] = out['thin_model']['tier']
@@ -435,6 +504,17 @@ def make_forecast(offer, facts, now):
                       grade_reason=[*result['grade_reason'], why])
         if not fitted.get('component_model') and not fitted.get('thin_model'):
             result['stake_reason'] = why
+    if (offer['sport'] == 'tennis' and offer['platform'] == 'underdog' and grade.letter is not None
+            and ud_chance_letter_on()):
+        # ud-chance-1 (exp-proj-1121, TENNIS_UD_CHANCE_LETTER=1, default OFF): the letter is the band of the model
+        # chance alone, not of chance vs the per-side Underdog payout. audit_1121: the reduced-payout side keeps winning
+        # (printed Leans at p >= 0.55 went 55-24 while printed letters went 79-63 on real first_seen lines). Real-line
+        # re-score (cs2_scout_ops/logs/audit_1121/round2/expansion/r2b/real_tennis_results.json): letters 79-63 (55.6%)
+        # -> 134-87 (60.6%), match-grouped CI of the letter-hit gain -0.9..+10.6 pts over 4 days -> not passed, so OFF.
+        letter = policy.letter_for(side_probs[chosen])
+        if letter != result['grade']:
+            result.update(grade=letter, letter_basis='chance_payout_agnostic',
+                          ud_chance={'version': UD_CHANCE_VERSION, 'policy_letter': grade.letter})
     thin = fitted.get('thin_model') or {}
     if (offer['sport'] == 'soccer' and thin and thin.get('games') == 0 and
             result['grade'] not in (None, policy.LEAN)):
@@ -445,6 +525,13 @@ def make_forecast(offer, facts, now):
         # starter-like, league starter-like, league all-minutes). Kept as a letter, capped at Lean; chance unchanged.
         result.update(grade=policy.LEAN, lean_cap={'version': LEAN_CAP_VERSION, 'model_letter': result['grade']},
                       grade_reason=[*result['grade_reason'], 'Lean: no past games at this stat.'])
+    elif (offer['sport'] == 'tennis' and thin and thin.get('tier') == 'failed' and tennis_thin_cap_on() and
+          result['grade'] not in (None, policy.LEAN)):
+        # tt-cap-1 (exp-proj-1121, owner open item): tennis thin-t1 / thin-t2 (under 5 exact past matches) missed their
+        # walk-forward for every stat, yet printed A+..B letters. Same rule as soccer thin-3 and doubles-1: kept as a
+        # letter, capped at Lean; side and chance unchanged. Default OFF; on with TENNIS_THIN_LEAN_CAP=1.
+        result.update(grade=policy.LEAN, lean_cap={'version': TENNIS_CAP_VERSION, 'model_letter': result['grade']},
+                      grade_reason=[*result['grade_reason'], 'Lean: fewer than 5 past matches at this stat.'])
     elif fitted.get('doubles_model') and fitted['stake_tier'] == 'failed' and result['grade'] not in (None, policy.LEAN):
         # doubles-1: no pair input at all, and the population pmf missed its walk-forward (ATP total games: holdout
         # matches ran longer than the tune window, so the prior leans Under) - same rule as thin-3: letter capped at Lean
@@ -696,12 +783,25 @@ def settle(sport, now=None, budget_s=3):
                         candidates = by_key.get((f['identity']['player_id'],f['stat'],result_scope),[])
                         if candidates:
                             break
+                    zero = False
+                    if (not candidates and f['stat'] in FM_ZERO_STATS and f['history_scope'] == 'regulation'
+                            and fm_zero_fill_on()):
+                        # fm-zero-1: FotMob reported the player's match (minutes row) and omitted the stat = 0, as the
+                        # platform settles it. No FotMob minutes row yet -> no review (wait, never a guessed 0).
+                        candidates = [(r, o) for r, o in by_key.get((f['identity']['player_id'], 'minutes', 'regulation'), [])
+                                      if o.source == 'fotmob']
+                        zero = bool(candidates)
                     if not candidates:
                         continue
-                    values = {o.value for _,o in candidates}
-                    valid = all(o.final and o.participation=='played' and o.value is not None and math.isfinite(o.value)
-                                for _,o in candidates) and len(values)==1
-                    actual = next(iter(values)) if valid else None
+                    if zero:
+                        valid = all(o.final and o.participation == 'played' and o.value is not None and 0 < o.value <= 90
+                                    for _, o in candidates)
+                        actual = 0.0 if valid else None
+                    else:
+                        values = {o.value for _,o in candidates}
+                        valid = all(o.final and o.participation=='played' and o.value is not None and math.isfinite(o.value)
+                                    for _,o in candidates) and len(values)==1
+                        actual = next(iter(values)) if valid else None
                 result_ids = sorted(r['record_id'] for r,_ in candidates)
                 rid = digest([f['id'],result_ids])
                 outcome = None if actual is None else 'push' if actual==f['line'] else 'over' if actual>f['line'] else 'under'
