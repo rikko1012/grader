@@ -528,7 +528,7 @@ def make_forecast(offer, facts, now):
         # walk-forward for every stat, yet printed A+..B letters. Same rule as soccer thin-3 and doubles-1: kept as a
         # letter, capped at Lean; side and chance unchanged. Rollback: TENNIS_THIN_LEAN_CAP=0.
         result.update(grade=policy.LEAN, lean_cap={'version': TENNIS_CAP_VERSION, 'model_letter': result['grade']},
-                      grade_reason=[*result['grade_reason'], 'Lean: fewer than 5 past matches - population model missed its test.'])
+                      grade_reason=[*result['grade_reason'], 'Lean: fewer than 5 past matches at this stat.'])
     elif fitted.get('doubles_model') and fitted['stake_tier'] == 'failed' and result['grade'] not in (None, policy.LEAN):
         # doubles-1: no pair input at all, and the population pmf missed its walk-forward (ATP total games: holdout
         # matches ran longer than the tune window, so the prior leans Under) - same rule as thin-3: letter capped at Lean
