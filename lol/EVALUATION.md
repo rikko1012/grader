@@ -1010,6 +1010,15 @@ page minus its stage. The pool reads the projection before any offset (so-1 rows
 rows: inputs.lpf1.lambda_lol1f). Forecasts carry model_version `lol-1f+so-1` and inputs.scope_offset; the card shows "Map-count
 offset from settled lines". A read failure keeps the last good offsets; with none, a line whose last saved forecast is so-1 at
 the same line keeps it. Tests: lol/tests/test_so1_scope_offset.py.
+**Relation to ep-1 / ep-2 / ep-3 (A8, A15, A16, all FAILED).** Those were one event-pace multiplier per event (all scopes
+alike, shrunk by K), judged by the NB log-score rule (i); ep-2 / ep-3 failed (i) with chosen-side hit +2.5 / +0.9 pts. so-1
+is a separate multiplier per stat x scope cell (it carries the Maps 1-3 vs Map 1 / Maps 1-2 offset the audit found: kills
+Maps 1-3 +1.06 residual vs Map 1 -0.23), unshrunk, and it was judged under the owner's 2026-11-09 rule (hit rate at real
+offered lines, volume, balance; log loss is information only) plus the bad-day gate. It is the same family of idea, and
+its pass is thin: the shipped form's bad-day drop (9 -> 7) is exactly the gate's minimum; on the 13 original days the gain
+is mostly rows moving to an unoffered side (W 500 -> 498, L 398 -> 374), the added wins are on the 5 development days (83-81
+-> 94-79); on the fixed all-graded set it is +0.73 (series CI -0.69, 2.12), bad days 7 -> 5; playable-letters Over share
+52.0 -> 46.2 (primary 54.5 -> 50.8). At ship it is dormant (a new event starts at no offset) and lol-1f is only the fallback.
 
 **rp-1 (shipped behind `LOL_RECORD_PLAYABLE`, default on, rollback =0):** the slip band table (workspace_api._lol_settled) also
 leaves out one-sided lines, as the member record (lol/center/learning.dashboard in_record) already did: 1,216 -> 1,068 a15 rows,

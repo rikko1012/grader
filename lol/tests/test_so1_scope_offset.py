@@ -175,9 +175,34 @@ def test_a_saved_so1_forecast_stands_when_offsets_are_unavailable(con, tmp_path,
     assert con.execute("SELECT COUNT(*) FROM lol_forecasts").fetchone()[0] == 1
 
 
-def test_card_shows_the_offset_row():
-    import card_grade_inputs as gi_mod
-    rec = {"scout": {"side": "over", "model_version": "lol-1f+so-1"}}
-    out = gi_mod.lol({"member": {}, "gi": {"scope_offset": {"version": "so-1", "multiplier": 0.9048, "c": -0.1}}}, rec)
-    rows = [r for r in (out.get("factors") or []) if r and r.get("id") == "scope_offset"]
-    assert out["model"]["name"] == "lol-1f+so-1" and rows and rows[0]["label"] == "Map-count offset from settled lines"
+def test_maps_1_3_on_a_best_of_3_scales_every_mixture_part(con, tmp_path, monkeypatch):
+    """The A2 mixture path (Maps 1-3 line on a BO3): both parts' means scale by the offset; the chance is the mixture's."""
+    from lol import model
+    from lol.tests.test_audit_g_lol import _world
+    from lol.tests.test_consolidation import RR
+    monkeypatch.setenv("LOL_LPF1", "0")
+    monkeypatch.delenv("LOL_SCOPE_OFFSET", raising=False)
+    monkeypatch.setattr(forecast, "so1_offsets", lambda c: {(EV, "kills", "123"): (-0.2, 50)})
+    db, start, raw = _world(con, tmp_path, monkeypatch, stat="kills_on_maps_1_2_3")
+    assert forecast.run(con, db)["saved"] == 1
+    f = dict(con.execute("SELECT * FROM lol_forecasts").fetchone())
+    inp = json.loads(f["inputs"])
+    assert "format_scope_mismatch" in json.loads(f["flags"]) and f["model_version"] == "lol-1f+so-1"
+    k, p3, lg = math.exp(-0.2), inp["p_3_games"], inp["lambda_game"]          # lambda_game is saved after the offset
+    assert inp["scope_offset"]["lambda_before"] == pytest.approx(lg / k * (2 + p3), abs=2e-3)
+    assert f["lambda"] == pytest.approx(lg * (2 + p3), abs=2e-3) and inp["lambda_3_games"] == pytest.approx(3 * lg, abs=2e-3)
+    o3, u3, _ = model.probs(3 * lg, RR[("kills", "123")], f["line"])
+    o2, u2, _ = model.probs(2 * lg, RR[("kills", "12")], f["line"])
+    assert f["p_over"] == pytest.approx(p3 * o3 + (1 - p3) * o2, abs=2e-3)
+    assert f["p_under"] == pytest.approx(p3 * u3 + (1 - p3) * u2, abs=2e-3)
+
+
+def test_rollback_on_the_same_database_saves_a_plain_lol1f_record_next_cycle(con, tmp_path, monkeypatch):
+    f = _run(con, tmp_path, monkeypatch, {(EV, "kills", "12"): (-0.1, 40)})
+    assert f["model_version"] == "lol-1f+so-1"
+    monkeypatch.setenv("LOL_SCOPE_OFFSET", "0")
+    out = forecast.run(con, _run.db)
+    assert out.get("saved") == 1
+    g = dict(con.execute("SELECT * FROM lol_forecasts ORDER BY id DESC LIMIT 1").fetchone())
+    assert g["model_version"] == "lol-1f" and "scope_offset" not in json.loads(g["inputs"])
+    assert g["lambda"] == pytest.approx(json.loads(f["inputs"])["scope_offset"]["lambda_before"], abs=1e-3)
