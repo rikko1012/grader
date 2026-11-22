@@ -868,6 +868,10 @@ Code: `sports/model/nflfix.py`, wired in `forward.forecast_league` (NFL only) an
    log loss): 0.90 in 9/9 folds, paired log loss -0.048 per row, game CI [-0.101, -0.013] (6,710 rows, 43 games).
    Calibration objective only (grid set after the extreme rows were seen, 0.90 is the grid edge, no PREREG); hit
    rate cannot change, so it is not a grading passer. Any repair error keeps the raw PMF.
+   Exception to "side and letter never move": a forecast held today by the sg-2 'certain' rule (a chance >= 99.9%)
+   is capped to 90% and so is no longer held - it shows an A. Prover replay of the live NFL board (2026-11-22 02:11Z):
+   55 forecasts capped, 40 quotes changed: 34 print 90% instead of 95-99% (letter unchanged), 6 quotes of 1 prop move
+   from 'certain' hold to Under A; no letter lost, no letter moved.
 2. **rush-1** (`SPORTS_NFL_RUSH1`, default OFF, shadow). Two PMF layers for RB rush_att / rush_yds were fitted
    walk-forward by CRPS and scored at the real lines (R1 scale/spread, R2 line-anchored mean). Neither passed
    (R1 +0.19 pt, game CI [-3.25, +3.64]; R2 +2.66 pt, CI [-6.69, +11.55]). R2's last-fold layer is logged as
