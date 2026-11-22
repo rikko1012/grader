@@ -350,7 +350,7 @@ def _closeness(r):
 
 def representative(rows):
     """rp-2 steps 1-3: one forecast per (game, player, stat, model) - see the module doc. SPORTS_LATEST_LINE (default
-    on): only lines that are their book's latest (current_lines) can be chosen."""
+    off; grade_rules.latest_line_on): when on, only lines that are their book's latest (current_lines) can be chosen."""
     newest, latest, opens = {}, {}, {}
     for r in rows:
         _rep_newest_add(newest, r)

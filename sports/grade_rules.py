@@ -27,10 +27,12 @@ Rules and their switches (each one line to roll back: set the variable to 0 and 
       Lean; (d) an exact 50/50 between two offered sides no longer resolves to Over: the projection mean decides
       (mean above the line Over, below Under), else no side.
 
-  SPORTS_LATEST_LINE (default ON for NBA; NFL only with SPORTS_LATEST_LINE_NFL=1, default off - no NFL gain on the audit
-      record) - best prop and the public record use the book's LATEST offered line per (game,
-      player, stat, platform): a line the book moved away from before the game (superseded) is never the record's or
-      the board's representative line (audit: ~1 in 6 one-per-prop picks were superseded lines).
+  SPORTS_LATEST_LINE (default OFF; =1 turns it on for NBA, NFL also needs SPORTS_LATEST_LINE_NFL=1) - the public record
+      uses the book's LATEST offered line per (game, player, stat, platform): a line the book moved away from before the
+      game (superseded) is never the record's representative line. Not proven (round-2 prover): under the audit's pick
+      rule it adds +0.94 train / +0.97 holdout (day CI crosses 0) with Overs -5.8 pts, but under the record's own rule
+      (line closest to the projection, proxy) only +0.19 train game CI [-0.45, 0.82] / +0.48 holdout [-0.46, 1.39]; NFL
+      flat (56.16 -> 55.53, 48.72 -> 49.21). Shadow until a test at the record's own rule passes.
 
   NBA_BEST_PROP (default ON) - bp-1, DISPLAY ONLY (no grade, chance or stake changes): for each NBA player and game, the
       one pick'em quote with the highest shown chance on its side among lettered (A-C), offerable, current lines is
@@ -67,9 +69,9 @@ def side_fix_on():
 
 
 def latest_line_on(league=None):
-    """SPORTS_LATEST_LINE (NBA, default on). Other leagues need SPORTS_LATEST_LINE_NFL=1 as well (default off): the NFL
-    audit record showed no gain (train 56.16% -> 55.53%, holdout 48.72% -> 49.21%), so it stays off there."""
-    if not _on("SPORTS_LATEST_LINE"):
+    """SPORTS_LATEST_LINE (default off - not proven at the record's own pick rule; see the module doc). NFL also needs
+    SPORTS_LATEST_LINE_NFL=1 (default off: no NFL gain, train 56.16% -> 55.53%, holdout 48.72% -> 49.21%)."""
+    if not _on("SPORTS_LATEST_LINE", "0"):
         return False
     return league in (None, "nba") or _on("SPORTS_LATEST_LINE_NFL", "0")
 

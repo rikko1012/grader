@@ -153,6 +153,8 @@ def _rec(fid, line, at, plat="prizepicks", lean="over", outcome="over", p=0.6, m
 
 
 def test_record_uses_the_books_latest_line_not_a_superseded_one(monkeypatch):
+    assert not grade_rules.latest_line_on("nba")               # default off (not proven at the record's own rule)
+    monkeypatch.setenv("SPORTS_LATEST_LINE", "1")
     rows = [_rec("old", 20.5, "2026-11-20T12:00:00Z", mean=20.6),     # closest to the projection, but superseded
             _rec("new", 22.5, "2026-11-20T18:00:00Z", mean=21.0)]
     assert [r["forecast_id"] for r in results_public.representative(rows)] == ["new"]
@@ -164,6 +166,7 @@ def test_latest_line_is_nba_only_unless_the_nfl_switch_is_set(monkeypatch):
     """NFL audit record: no gain from the latest-line cut, so it stays off there unless SPORTS_LATEST_LINE_NFL=1."""
     rows = [dict(r, event_id="nfl:espn:1") for r in (_rec("old", 20.5, "2026-11-20T12:00:00Z", mean=20.6),
                                                       _rec("new", 22.5, "2026-11-20T18:00:00Z", mean=21.0))]
+    monkeypatch.setenv("SPORTS_LATEST_LINE", "1")
     assert grade_rules.latest_line_on("nba") and not grade_rules.latest_line_on("nfl")
     assert [r["forecast_id"] for r in results_public.representative(rows)] == ["old"]
     monkeypatch.setenv("SPORTS_LATEST_LINE_NFL", "1")
@@ -171,7 +174,8 @@ def test_latest_line_is_nba_only_unless_the_nfl_switch_is_set(monkeypatch):
     assert [r["forecast_id"] for r in results_public.representative(rows)] == ["new"]
 
 
-def test_two_books_keep_their_own_latest_lines():
+def test_two_books_keep_their_own_latest_lines(monkeypatch):
+    monkeypatch.setenv("SPORTS_LATEST_LINE", "1")
     rows = [_rec("pp", 20.5, "2026-11-20T12:00:00Z", mean=20.6),
             _rec("ud", 22.5, "2026-11-20T18:00:00Z", plat="underdog", mean=21.0)]
     assert [r["forecast_id"] for r in results_public.representative(rows)] == ["pp"]   # pp's 20.5 is still pp's latest

@@ -239,7 +239,7 @@ def test_results_public_ties_and_duplicates_keep_the_original_choice(monkeypatch
 def test_spill_build_equals_the_list_rules_with_the_audit_1121_rules_on(monkeypatch, seed):
     """SPORTS_LATEST_LINE + NBA_MVLEAN1 on: the spill build (SQL lat / opn tables) equals the list build when the list
     build uses the current representative() and grades() (latest line + mvlean-1 open line)."""
-    monkeypatch.delenv("SPORTS_LATEST_LINE", raising=False)
+    monkeypatch.setenv("SPORTS_LATEST_LINE", "1")
     monkeypatch.delenv("NBA_MVLEAN1", raising=False)
     rows = _hand_rows(seed)
     for i, r in enumerate(rows):                          # spread the runs so lines are superseded / moved
