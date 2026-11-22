@@ -125,6 +125,14 @@ def test_offer_forced_side_the_model_disfavours_gets_no_side_letter_or_lean():
     assert r["chosen_side"] == "over" and r["grade"] == "A"
 
 
+def test_offer_forced_check_compares_the_two_sides_not_one_half_on_integer_lines():
+    # integer line: push mass 0.16 leaves the favoured Over at 0.46 (< 0.5) - it is still the model's side
+    r = grade_policy.apply(0.46, 0.38, ("over",), "forward-validated")
+    assert r["chosen_side"] == "over"
+    r = grade_policy.apply(0.38, 0.46, ("over",), "forward-validated")      # Over offered, Under favoured: no side
+    assert r["chosen_side"] is None and r["grade"] is None
+
+
 def test_exact_tie_goes_to_the_projection_mean_not_over(monkeypatch):
     assert grade_policy.apply(0.5, 0.5, ("over", "under"), mean=19.8, line=20.5)["chosen_side"] == "under"
     assert grade_policy.apply(0.5, 0.5, ("over", "under"), mean=21.0, line=20.5)["chosen_side"] == "over"
