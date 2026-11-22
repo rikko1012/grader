@@ -37,8 +37,14 @@ ONE_SIDED_REASON = "one-sided line (Over only or Under only): not graded"
 CAPABILITY_VERSION = "cap-2"
 # NBA_STATS8 (round 2 2026-11-21, track nba-stats): the nba8-1 joint model (sports/model/nba8.py) covers PRA, P+R, P+A,
 # R+A, steals, blocks, Blks+Stls and turnovers. Only the stats that PASSED the pre-registered real-line walk-forward
-# (cs2_scout_ops/logs/audit_1121/round2/nba-stats/PREREG.md + walkforward_results.json) are listed here; with the
-# flag on (default) they are gradable exactly like points (0U, rg-1 letter). NBA_STATS8=0 -> cap-2 unchanged.
+# (cs2_scout_ops/logs/audit_1121/round2/nba-stats/PREREG.md + walkforward_results.json) are listed here.
+# DEFAULT OFF (round-2 review 2026-11-21): the TEST pass came almost entirely from Underdog balanced steals, which
+# Underdog stopped offering on Nov 19; on PrizePicks standard steals went 148-134 (52.5%, CI 47.2-57.9) - below the
+# pass rule. Only NBA_STATS8=1/true/yes/on letters the passed stats (0U, rg-1 letter, tested population only - see
+# nba8_tested); unset / anything else = cap-2 unchanged, member board / slips / record identical to before.
+# The forward SHADOW (NBA_STATS8_SHADOW, default on, rollback NBA_STATS8_SHADOW=0) records nba8-1 for all 8 stats in
+# model/shadow.db only (never the canonical store, never a member page) so PrizePicks-standard evidence accumulates
+# for a forward re-test (100+ rows, 20+ games, CI low > 50%) before anyone sets NBA_STATS8=1.
 # The failed stats stay research_only with their existing reason. Frozen list: never edited without a new test.
 NBA_STATS8_PASSED = frozenset({"steals"})       # walk-forward 2026-11-21: steals PASS; the other 7 failed
 NBA_STATS8_VERSION = "nba8-1"
@@ -48,8 +54,41 @@ NBA_STATS8_VERSION = "nba8-1"
 NBA_STATS8_STATE = "history-validated"
 
 
+_ON = ("1", "true", "yes", "on")
+# the walk-forward population (PREREG.md "Graded population"): PrizePicks standard + Underdog balanced, full game,
+# not promotional. FanDuel / Polymarket / any other book and every other variant were never tested.
+NBA_STATS8_TESTED = frozenset({("prizepicks", "standard"), ("underdog", "balanced")})
+# every nba8-1 market (sports/model/nba8.MARKETS) - the shadow records all 8, passed or not
+NBA_STATS8_ALL = ("pra", "pr", "pa", "ra", "steals", "blocks", "stocks", "turnovers")
+
+
 def nba_stats8_on():
-    return os.environ.get("NBA_STATS8", "1").strip().lower() not in ("0", "false", "off", "no")
+    """NBA_STATS8 - default OFF; only 1/true/yes/on turns the nba8-1 letters on."""
+    return os.environ.get("NBA_STATS8", "").strip().lower() in _ON
+
+
+def nba_stats8_shadow_on():
+    """NBA_STATS8_SHADOW - default ON (shadow.db only, never shown); 0/false/off/no stops the shadow recording."""
+    return os.environ.get("NBA_STATS8_SHADOW", "1").strip().lower() not in ("0", "false", "off", "no")
+
+
+def nba8_tested(offer):
+    """True when this offer is in the population the nba8-1 walk-forward scored: PrizePicks standard or Underdog
+    balanced, full game, not promotional, an event, and BOTH sides offered right now (a balanced Underdog line with one
+    side suspended is not a two-sided line at this moment). Flag independent (the shadow uses it too)."""
+    get = offer.get if isinstance(offer, dict) else (lambda k, d=None: getattr(offer, k, d))
+    if (get("platform"), variant_of(offer)) not in NBA_STATS8_TESTED:
+        return False
+    if get("scope", "full_game") != "full_game" or get("promotional") or get("event_id") is None:
+        return False
+    on = {(x.get("side") if isinstance(x, dict) else getattr(x, "side", None)) for x in (get("sides") or ())
+          if (x.get("offered") if isinstance(x, dict) else getattr(x, "offered", False))}
+    return {"over", "under"} <= on
+
+
+def nba8_models(base):
+    """A model-name tuple plus nba8-1 only while NBA_STATS8 is on (off -> `base` exactly as before)."""
+    return tuple(base) + (NBA_STATS8_VERSION,) if nba_stats8_on() else tuple(base)
 
 
 def nba_stats8_markets():

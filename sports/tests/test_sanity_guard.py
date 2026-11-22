@@ -23,13 +23,13 @@ def test_gate_follows_the_registry():
     for st in ("points", "rebounds", "assists", "threes"):                     # NBA sm-1: gate H passed
         assert board_view.gate_reason("nba", st) is None
     assert board_view.gate_reason("nba", "blocks") is not None                 # not registered = no gate passed
-    # NBA_STATS8 (2026-11-21): steals passed the nba8-1 real-line walk-forward (registry nba8-1); flag off = unregistered
-    assert board_view.gate_reason("nba", "steals") is None
+    # NBA_STATS8 (2026-11-21): default OFF -> steals unregistered as on main; NBA_STATS8=1 -> nba8-1 state
     import os
-    old = os.environ.get("NBA_STATS8")
-    os.environ["NBA_STATS8"] = "0"
+    old = os.environ.pop("NBA_STATS8", None)
     try:
         assert board_view.gate_reason("nba", "steals") is not None
+        os.environ["NBA_STATS8"] = "1"
+        assert board_view.gate_reason("nba", "steals") is None
     finally:
         if old is None:
             os.environ.pop("NBA_STATS8", None)

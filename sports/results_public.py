@@ -757,6 +757,7 @@ def league_block(con, lg, now, rows):
         rank = _model_rank()
         models, research = {}, {}
         batch_opp, batch_own, batch_lines = [], [], []
+        scout_mv = _scout()
         for pos, (blob,) in enumerate(reps):
             r = spill.unpack(blob)
             mv = r["model"]
@@ -767,7 +768,7 @@ def league_block(con, lg, now, rows):
             research[mv] = research.get(mv, True) and bool(r["research_only"])
             a, b, m = rank(r)
             batch_opp.append((pos, repr((r["event_id"], r["player_id"], r["stat"])), a, b, m, blob))
-            if r.get("model") in SCOUT:
+            if r.get("model") in scout_mv:
                 ln = round(float(r["line"]), 3)
                 batch_own.append((repr((r["event_id"], r["player_id"], r["stat"], r.get("model"))), ln))
                 batch_lines.append((repr((r["event_id"], r["player_id"], r["stat"], ln)),))
@@ -930,8 +931,9 @@ def head_to_head_rows(all_rows, reps):
     """A7 (follow-up 2026-11-06): each Scout model's forecasts ONLY at that model's own representative line, plus the
     market forecasts at those lines. Before, the union of every Scout model's lines paired each model once per line in
     the union (sm-1 @15.5 and mi-1 @16.5 -> 2 pairs each); now head_to_head yields one pair per model per prop."""
+    scout_mv = _scout()
     own = {(r["event_id"], r["player_id"], r["stat"], r.get("model")): round(float(r["line"]), 3)
-           for r in reps if r.get("model") in SCOUT}
+           for r in reps if r.get("model") in scout_mv}
     lines = {(k[0], k[1], k[2], ln) for k, ln in own.items()}
     out = []
     for r in all_rows:
@@ -965,7 +967,13 @@ def build_if_stale(con, force=False, base=None):
 #   difference Scout minus market per pair (Brier / log loss: negative = Scout better); 95% bootstrap interval over
 #              GAMES (all pairs of a game resampled together, 1,000 draws, seed 7)
 HH_VERSION = "hh-1"
-SCOUT = ("sm-1", "mi-1", "nba8-1")
+SCOUT = ("sm-1", "mi-1")
+
+
+def _scout():
+    """SCOUT, plus nba8-1 only while NBA_STATS8 is on (default off -> SCOUT exactly)."""
+    from . import capabilities
+    return capabilities.nba8_models(SCOUT)
 
 
 def _is_market(mv):
@@ -1028,7 +1036,7 @@ class HeadToHead:
         self.pushes = defaultdict(int)
 
     def add(self, ev, st, ms):
-        for s in SCOUT:
+        for s in _scout():
             if s not in ms:
                 continue
             for mk in ms:

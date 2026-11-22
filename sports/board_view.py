@@ -35,7 +35,13 @@ WINDOWS = (10, 5)
 GATE_VERSION = "vg-1"
 GATE_PASSED = _gp_states[1:]                                   # history or forward validated (grade_policy.STATES)
 GATE_TEXT = "{LG} model not validated - projection only"
-SCOUT_MODELS = ("sm-1", "mi-1", "nba8-1")      # nba8-1: NBA_STATS8 stats only (a forecast exists only for them)
+SCOUT_MODELS = ("sm-1", "mi-1")
+
+
+def scout_models():
+    """SCOUT_MODELS, plus nba8-1 only while NBA_STATS8 is on (default off -> SCOUT_MODELS exactly)."""
+    from . import capabilities
+    return capabilities.nba8_models(SCOUT_MODELS)
 _REGISTRY = Path(__file__).resolve().parent / "model" / "artifacts" / "registry.json"
 _reg_cache = {}
 

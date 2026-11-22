@@ -61,7 +61,7 @@ LADDER_TOL = 0.005                                 # distribution must reproduce
 MAX_GAMES = 60
 # display preference when several models forecast one offer: Scout's own model first (owner 2026-10-24: a projection
 # is not a market estimate; market estimates are shown separately as "Market estimate")
-DEFAULT_MODELS = ("sm-1", "nba8-1", "mi-1", "sharp-2")
+DEFAULT_MODELS = ("sm-1", "mi-1", "sharp-2")
 PRIMARY_STATS = capabilities.SUPPORTED
 EXTRA_PAIRS = {"fieldGoalsMade-fieldGoalsAttempted": ("fgm", "fga"),
                "freeThrowsMade-freeThrowsAttempted": ("ftm", "fta")}
@@ -552,10 +552,14 @@ def _team_view(teams, tid):
     return {"team_id": tid, "abbr": t.abbr if t else None, "name": t.name if t else None}
 
 
-def _live_attached(fcs, stat):
-    """Drop nba8-1 forecasts whose stat is not a live NBA_STATS8 stat (flag off = rollback: nothing of nba8-1 shows)."""
-    live = capabilities.nba_stats8_markets()
-    return [x for x in fcs if x[0].model_version != capabilities.NBA_STATS8_VERSION or stat in live]
+def _live_attached(fcs, o):
+    """Drop nba8-1 forecasts unless NBA_STATS8 is on, the stat is a live NBA_STATS8 stat AND this offer is in the tested
+    population (capabilities.nba8_tested: PrizePicks standard / Underdog balanced with both sides offered now). Flag
+    off = nothing of nba8-1 shows, exactly as before the model existed."""
+    if not any(x[0].model_version == capabilities.NBA_STATS8_VERSION for x in fcs):
+        return fcs
+    ok = o.stat in capabilities.nba_stats8_markets() and capabilities.nba8_tested(o)
+    return [x for x in fcs if x[0].model_version != capabilities.NBA_STATS8_VERSION or ok]
 
 
 def _choose(fcs):
@@ -869,8 +873,8 @@ def build(con, league, now=None, base=None, history=True, results=True):
         v = offer_view(rid, o, m)
         # owner 2026-11-06: a one-sided line (Over only / Under only) is shown with no forecast - a forecast saved for
         # it before cap-2 is never attached, so it shows no Scout chance, grade, letter or stake
-        # NBA_STATS8=0 (rollback): a stored nba8-1 forecast is no longer attached once its stat is not live
-        ch = None if capabilities.is_one_sided(o) else _choose(_live_attached(attached.get(rid, []), o.stat))
+        # NBA_STATS8 unset (default) / 0: a stored nba8-1 forecast is never attached; on: only to its own tested offer
+        ch = None if capabilities.is_one_sided(o) else _choose(_live_attached(attached.get(rid, []), o))
         if ch:
             fc, frid, frev = ch[0]
             v["forecast_id"] = fc.forecast_id
@@ -1044,7 +1048,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
                                            "betrivers (owner decision 2026-10-23); registered mc-1 forecasts keep "
                                            "REGISTER.md 10"},
                 "sources": source_coverage(platform_seen, last_read),
-                "scout_chance": {"definition": scout_chance.DEFINITION, "models": list(scout_chance.MODELS),
+                "scout_chance": {"definition": scout_chance.DEFINITION, "models": list(scout_chance.models()),
                                  "text": scout_chance.TEXT,
                                  "markets": sum(1 for r in board_rows if r.get("sc")),
                                  "quotes": sum(r.get("sc", 0) for r in board_rows)},
@@ -1473,7 +1477,8 @@ def same_line_forecasts(row, forecasts):
     by_line = {}
     for q in row.get("quotes") or []:
         f = forecasts.get(q.get("forecast_id") or "")
-        if f and kind(f.get("model_version")) in ("scout", "informed"):
+        # nba8-1 (NBA_STATS8) is never shared: it was tested on PrizePicks standard / Underdog balanced only
+        if f and kind(f.get("model_version")) in ("scout", "informed") and                 f.get("model_version") != capabilities.NBA_STATS8_VERSION:
             k = round(float(q["line"]), 3)
             if k not in by_line or f["forecast_at"] > forecasts[by_line[k]]["forecast_at"]:
                 by_line[k] = f["forecast_id"]
@@ -1495,7 +1500,7 @@ def scout_line_reads(row, forecasts):
     src = None
     for q in row["quotes"]:
         f = forecasts.get(q.get("forecast_id") or "")
-        if f and f.get("kind") == "scout" and (f.get("detail") or {}).get("pmf"):
+        if f and f.get("kind") == "scout" and (f.get("detail") or {}).get("pmf") and                 f.get("model_version") != capabilities.NBA_STATS8_VERSION:     # nba8-1: its own tested offer only
             if src is None or f["forecast_at"] > src["forecast_at"]:
                 src = f
     if src is None:

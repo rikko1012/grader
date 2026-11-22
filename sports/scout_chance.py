@@ -15,7 +15,13 @@ why, in member language, for the "N markets hidden: ..." note.
 from __future__ import annotations
 
 DEFINITION = "sc-1"
-MODELS = ("sm-1", "mi-1", "nba8-1")
+MODELS = ("sm-1", "mi-1")
+
+
+def models():
+    """MODELS, plus nba8-1 only while NBA_STATS8 is on (default off -> MODELS exactly)."""
+    from . import capabilities
+    return capabilities.nba8_models(MODELS)
 TEXT = ("A Scout chance is a sm-1 / mi-1 forecast on an offered, current line of a game that has not started "
         "(ordinary pick'em / book lines; Kalshi rungs, alternate and promotional lines excluded).")
 
@@ -25,7 +31,7 @@ def is_scout_chance(q, forecasts, started):
     if started or not q.get("forecast_id"):
         return False
     f = forecasts.get(q["forecast_id"]) or {}
-    if f.get("model_version") not in MODELS:
+    if f.get("model_version") not in models():
         return False
     if q.get("availability", "open") != "open":
         return False

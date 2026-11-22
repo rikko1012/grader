@@ -320,7 +320,7 @@ def guard_reason(f, league, rid=None, held=(), chances=()):
         av = held.get((rid, f.forecast_id)) or held.get((rid, None))
         if av in availability.CODES:
             return f"not playing: {availability.text(av)}"
-    if f.model_version not in board_view.SCOUT_MODELS:
+    if f.model_version not in board_view.scout_models():
         return None
     if board_view.contain_reason(league, f.stat) or (board_view.gate_reason(league, f.stat)
                                                      and not containment.released(league)):

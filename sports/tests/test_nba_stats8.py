@@ -1,6 +1,8 @@
 """NBA_STATS8 (round 2 2026-11-21, track nba-stats): the nba8-1 joint model for PRA, P+R, P+A, R+A, steals, blocks,
-Blks+Stls and turnovers. Only walk-forward-passed stats (capabilities.NBA_STATS8_PASSED) become gradable; NBA_STATS8=0
-leaves cap-2 exactly as before. Targeted tests only (no full suite on the shared machine)."""
+Blks+Stls and turnovers. NBA_STATS8 defaults OFF (round-2 review): unset = cap-2 exactly, nothing of nba8-1 on any member
+file; the forward shadow (NBA_STATS8_SHADOW, default on) records all 8 stats in shadow.db only. NBA_STATS8=1 letters the
+walk-forward-passed stats on the tested population only (PrizePicks standard / Underdog balanced, both sides offered).
+Targeted tests only (no full suite on the shared machine)."""
 import json
 
 import numpy as np
@@ -23,9 +25,14 @@ def _cap2_reason(stat):
 
 
 # ------------------------------------------------------------------------------------------------- capabilities
-def test_flag_off_is_cap2_exactly(monkeypatch):
-    monkeypatch.setenv("NBA_STATS8", "0")
+@pytest.mark.parametrize("val", [None, "0", "", "maybe", "off"])
+def test_flag_off_is_cap2_exactly(monkeypatch, val):
+    if val is None:
+        monkeypatch.delenv("NBA_STATS8", raising=False)                         # DEFAULT = OFF
+    else:
+        monkeypatch.setenv("NBA_STATS8", val)
     monkeypatch.setattr(capabilities, "NBA_STATS8_PASSED", frozenset(EIGHT))     # even if everything had passed
+    assert not capabilities.nba_stats8_on() and capabilities.nba_stats8_markets() == frozenset()
     for st in EIGHT:
         c = capabilities.classify("nba", st)
         assert (c.status, c.reason) == (CAP2[st], _cap2_reason(st))
@@ -36,13 +43,50 @@ def test_flag_off_is_cap2_exactly(monkeypatch):
     assert capabilities.CAPABILITY_VERSION == "cap-2"
 
 
+def test_flag_off_model_lists_equal_main(monkeypatch):
+    """Rollback / default: every model list a member file reads is exactly the pre-nba8 tuple."""
+    from sports import results_public, scout_chance
+    from sports.model import learning
+    monkeypatch.delenv("NBA_STATS8", raising=False)
+    assert board_view.scout_models() == board_view.SCOUT_MODELS == ("sm-1", "mi-1")
+    assert scout_chance.models() == scout_chance.MODELS == ("sm-1", "mi-1")
+    assert results_public._scout() == results_public.SCOUT == ("sm-1", "mi-1")
+    from sports import snapshots
+    assert snapshots.DEFAULT_MODELS == ("sm-1", "mi-1", "sharp-2")
+    sc = [{"model_version": "nba8-1", "league": "nba", "stat": "steals", "graded": 400, "games": 150}]
+    assert learning.forward_gate(scored=sc) == []
+    monkeypatch.setenv("NBA_STATS8", "1")
+    assert board_view.scout_models() == ("sm-1", "mi-1", "nba8-1")
+    assert scout_chance.models() == results_public._scout() == ("sm-1", "mi-1", "nba8-1")
+
+
+def test_tested_population_only():
+    """Walk-forward population: PrizePicks standard, Underdog balanced - both sides offered right now."""
+    both = (h.SideQuote("over", True), h.SideQuote("under", True))
+    one = (h.SideQuote("over", True), h.SideQuote("under", False))
+    assert capabilities.nba8_tested(h.offer(stat="steals", line=0.5))
+    assert capabilities.nba8_tested(h.offer(platform="underdog", oid="ud:1", stat="steals", line=0.5,
+                                            variant="balanced", sides=both))
+    assert not capabilities.nba8_tested(h.offer(platform="underdog", oid="ud:1", stat="steals", line=0.5,
+                                                variant="balanced", sides=one))       # one side suspended now
+    assert not capabilities.nba8_tested(h.offer(platform="underdog", oid="ud:1", stat="steals", line=0.5,
+                                                variant="one_sided", sides=one))
+    assert not capabilities.nba8_tested(h.offer(platform="fanduel", oid="fd:1", stat="steals", line=0.5,
+                                                variant="main"))
+    assert not capabilities.nba8_tested(h.offer(platform="polymarket", oid="pm:1", stat="steals", line=0.5,
+                                                variant="main"))
+    assert not capabilities.nba8_tested(h.offer(stat="steals", line=0.5, variant="demon"))
+    assert not capabilities.nba8_tested(h.offer(stat="steals", line=0.5, promotional=True))
+    assert not capabilities.nba8_tested(h.offer(stat="steals", line=0.5, scope="first_half"))
+
+
 def test_committed_pass_list_is_steals_only():
     """Walk-forward 2026-11-21 (round2/nba-stats): steals passed; pra/pr/pa/ra failed, blocks/stocks/turnovers short."""
     assert capabilities.NBA_STATS8_PASSED == frozenset({"steals"})
 
 
 def test_only_passed_stats_become_gradable(monkeypatch):
-    monkeypatch.delenv("NBA_STATS8", raising=False)                               # default ON
+    monkeypatch.setenv("NBA_STATS8", "1")
     monkeypatch.setattr(capabilities, "NBA_STATS8_PASSED", frozenset({"pra", "turnovers"}))
     assert capabilities.gate(h.offer(stat="pra", line=30.5)) == (True, [])
     assert capabilities.gate(h.offer(stat="turnovers", line=2.5)) == (True, [])
@@ -67,11 +111,14 @@ def test_one_sided_and_alternate_lines_stay_ungraded(monkeypatch):
 
 
 def test_gate_state_of_a_passed_stat(monkeypatch):
+    monkeypatch.setenv("NBA_STATS8", "1")
     monkeypatch.setattr(capabilities, "NBA_STATS8_PASSED", frozenset({"pra"}))
     monkeypatch.setattr(board_view, "_registry", lambda: {"versions": {"sm-1": {"validation": {"points": "history-validated"}}}})
     assert board_view.gate_state("pra") == capabilities.NBA_STATS8_STATE == "history-validated"
     assert board_view.gate_state("points") == "history-validated"
     assert board_view.gate_state("steals") == "unvalidated"
+    monkeypatch.delenv("NBA_STATS8")                                             # default off: not registered
+    assert board_view.gate_state("pra") == "unvalidated"
 
 
 def test_nba8_chance_is_never_recalibrated_by_the_sm1_layers():
@@ -147,7 +194,7 @@ def _pra_offer(scon):
 
 
 def test_forward_writes_nba8_for_a_passed_stat_and_replays_identically(tmp_path, monkeypatch):
-    monkeypatch.delenv("NBA_STATS8", raising=False)
+    monkeypatch.setenv("NBA_STATS8", "1")
     monkeypatch.setattr(capabilities, "NBA_STATS8_PASSED", frozenset({"pra"}))
     hcon = _world(tmp_path, monkeypatch)
     with store.opened(tmp_path / "canonical.db") as scon:
@@ -165,16 +212,64 @@ def test_forward_writes_nba8_for_a_passed_stat_and_replays_identically(tmp_path,
         assert again == orig
 
 
-def test_forward_writes_nothing_new_with_the_flag_off(tmp_path, monkeypatch):
-    monkeypatch.setenv("NBA_STATS8", "0")
+def _shadow_rows():
+    from sports.model import shadow
+    con = shadow.db()
+    try:
+        cur = con.execute("SELECT * FROM shadow_forecasts WHERE model_version = 'nba8-1'")
+        names = [d[0] for d in cur.description]
+        return [dict(zip(names, r)) for r in cur.fetchall()]
+    finally:
+        con.close()
+
+
+@pytest.mark.parametrize("val", [None, "0"])
+def test_flag_off_writes_no_canonical_forecast_only_the_shadow(tmp_path, monkeypatch, val):
+    if val is None:
+        monkeypatch.delenv("NBA_STATS8", raising=False)
+    else:
+        monkeypatch.setenv("NBA_STATS8", val)
+    monkeypatch.delenv("NBA_STATS8_SHADOW", raising=False)                       # shadow default on
     monkeypatch.setattr(capabilities, "NBA_STATS8_PASSED", frozenset({"pra"}))
     hcon = _world(tmp_path, monkeypatch)
     with store.opened(tmp_path / "canonical.db") as scon:
         _store_world(scon)
-        _pra_offer(scon)
+        rid = _pra_offer(scon)
         res = forward.forecast_league(scon, hcon, "nba", "2026-01-31T21:00:00Z", log=lambda *x: None)
         assert res["written"].get("sm-1") == 1 and "nba8-1" not in res["written"]
         assert not [f for _, f in store.forecasts(scon, model_version="nba8-1")]
+        assert not any(k.endswith("|pra") for k in res["why_none"])              # the board reads why_none
+        sh = res["shadow_nba8"]
+        assert sh["written"] == 1 and sh["markets"] == list(EIGHT) and sh["display"].startswith("never"), sh
+        rows = _shadow_rows()
+        assert len(rows) == 1 and rows[0]["offer_record_id"] == rid and rows[0]["stat"] == "pra"
+        assert rows[0]["platform"] == "prizepicks" and rows[0]["sides"] == "over,under"
+        assert rows[0]["chosen_side"] in ("over", "under") and abs(rows[0]["p_over"] + rows[0]["p_under"]
+                                                                   + rows[0]["p_push"] - 1) < 1e-9
+        # a second run with the same inputs keeps ONE row with the same id (shadow_id has no forecast_at). In this
+        # Jan-2026 world the sm-2 recorder's 180-day retention may drop and re-insert it; in production it is ignored.
+        sid = rows[0]["shadow_id"]
+        forward.forecast_league(scon, hcon, "nba", "2026-01-31T21:05:00Z", log=lambda *x: None)
+        again = _shadow_rows()
+        assert [r["shadow_id"] for r in again] == [sid]
+
+
+def test_shadow_kill_switch_and_population(tmp_path, monkeypatch):
+    monkeypatch.delenv("NBA_STATS8", raising=False)
+    hcon = _world(tmp_path, monkeypatch)
+    with store.opened(tmp_path / "canonical.db") as scon:
+        _store_world(scon)
+        kw = dict(stat="pra", line=25.5, player_id="nba:player:espn:0", source_stat="Pts+Rebs+Asts",
+                  observed_at="2026-01-31T20:00:00Z", listed_start_utc="2026-02-01T00:00:00Z")
+        store.put(scon, h.offer(oid="pp:demon", variant="demon", **kw))
+        store.put(scon, h.offer(platform="underdog", oid="ud:one", variant="balanced",
+                                sides=(h.SideQuote("over", True), h.SideQuote("under", False)), **kw))
+        monkeypatch.setenv("NBA_STATS8_SHADOW", "0")
+        res = forward.forecast_league(scon, hcon, "nba", "2026-01-31T21:00:00Z", log=lambda *x: None)
+        assert "shadow_nba8" not in res and not _shadow_rows()
+        monkeypatch.delenv("NBA_STATS8_SHADOW")
+        res = forward.forecast_league(scon, hcon, "nba", "2026-01-31T21:00:00Z", log=lambda *x: None)
+        assert res["shadow_nba8"]["written"] == 0 and not _shadow_rows()          # neither line is in the population
 
 
 def test_nba8_logs_are_point_in_time(tmp_path):
@@ -208,7 +303,7 @@ def _board_quote(base, rid):
 
 def test_board_letters_a_passed_stat_and_the_flag_rolls_it_back(tmp_path, monkeypatch):
     from sports import snapshots
-    monkeypatch.delenv("NBA_STATS8", raising=False)
+    monkeypatch.setenv("NBA_STATS8", "1")
     with store.opened() as con:
         rid = _steals_board(con)
         snapshots.build(con, "nba", now="2026-10-23T21:00:00Z", base=tmp_path / "on", history=False, results=False)
@@ -220,3 +315,78 @@ def test_board_letters_a_passed_stat_and_the_flag_rolls_it_back(tmp_path, monkey
     m_off, q_off = _board_quote(tmp_path / "off", rid)
     assert q_off is not None and not q_off.get("f") and not q_off.get("g"), q_off
     assert not (q_off.get("x") or {}).get("ln") and not (q_off.get("x") or {}).get("gr"), q_off
+
+
+def _read_all(base):
+    return {str(p.relative_to(base)): p.read_bytes() for p in sorted(base.rglob("*")) if p.is_file()}
+
+
+def test_flag_unset_board_is_byte_identical_with_or_without_a_stored_nba8_forecast(tmp_path, monkeypatch):
+    """Default (NBA_STATS8 unset): a stored nba8-1 forecast changes no member file at all."""
+    from sports import snapshots
+    monkeypatch.delenv("NBA_STATS8", raising=False)
+    now = "2026-10-23T21:00:00Z"
+    for name, with_fc in (("without", False), ("with", True)):
+        with store.opened(tmp_path / f"{name}.db") as con:
+            if with_fc:
+                _steals_board(con)
+            else:
+                store.put(con, h.event())
+                store.put(con, h.offer(oid="pp:stl", stat="steals", line=1.5, source_stat="Steals"))
+            store.put(con, h.offer(oid="pp:pts", line=20.5))
+            snapshots.build(con, "nba", now=now, base=tmp_path / name, history=False, results=False)
+    a, b = _read_all(tmp_path / "without"), _read_all(tmp_path / "with")
+    assert a.keys() == b.keys()
+    diff = [k for k in a if a[k] != b[k]]
+    for k in diff:                                   # the manifest carries the build's own timing / memory only
+        assert k.endswith("manifest.json"), k
+        ja, jb = json.loads(a[k]), json.loads(b[k])
+        for j in (ja, jb):
+            for t in ("build_s", "build_rss_mb", "build_stage_s"):
+                j.pop(t, None)
+        assert ja == jb, k
+    assert not any(b"nba8" in v for v in b.values())
+
+
+def _row_quotes(base, stat):
+    out = []
+    for part in ("board.json", "board_more.json"):
+        f = base / "nba" / part
+        if f.exists():
+            for m in json.loads(f.read_text()).get("markets") or []:
+                if m.get("st") == stat:
+                    out.extend(m.get("q") or [])
+    return out
+
+
+def test_flag_on_letters_only_the_tested_population(tmp_path, monkeypatch):
+    """Round-2 review: FanDuel / Polymarket at the same line and a balanced Underdog line with one side suspended get
+    NO nba8-1 letter (never tested); the PrizePicks standard and two-sided Underdog quotes with their own forecast do."""
+    from sports import snapshots
+    monkeypatch.setenv("NBA_STATS8", "1")
+    both = (h.SideQuote("over", True, "decimal", price=1.9), h.SideQuote("under", True, "decimal", price=1.9))
+    with store.opened(tmp_path / "b.db") as con:
+        pp = _steals_board(con)
+        ud2 = store.put(con, h.offer(platform="underdog", oid="ud:2", stat="steals", line=1.5, source_stat="Steals",
+                                     variant="balanced"))["record_id"]
+        ud1 = store.put(con, h.offer(platform="underdog", oid="ud:1s", stat="steals", line=1.5, source_stat="Steals",
+                                     variant="balanced", player_id="nba:player:espn:3134907",
+                                     sides=(h.SideQuote("over", True), h.SideQuote("under", False))))["record_id"]
+        fd = store.put(con, h.offer(platform="fanduel", oid="fd:stl", stat="steals", line=1.5, source_stat="Steals",
+                                    variant="main", sides=both))["record_id"]
+        pm = store.put(con, h.offer(platform="polymarket", oid="pm:stl", stat="steals", line=1.5, source_stat="Steals",
+                                    variant="main", sides=both))["record_id"]
+        # each Underdog line has its OWN nba8-1 forecast (the suspended-Under line: one made for its Over side only)
+        for rid, sides, side in ((ud2, ("over", "under"), "under"), (ud1, ("over",), "over")):
+            store.put(con, h.forecast(line=1.5, stat="steals", offer_snapshot_ids=(rid,), model_version="nba8-1",
+                                      artifact_version="nba8-1:69e5e27b376e5485", projection_mean=1.9, p_over=0.68,
+                                      p_under=0.32, p_push=0.0, p_over_given_no_push=0.68,
+                                      p_under_given_no_push=0.32, chosen_side=side, sides_available=sides))
+        snapshots.build(con, "nba", now="2026-10-23T21:00:00Z", base=tmp_path / "on", history=False, results=False)
+    qs = {q["r"]: q for q in _row_quotes(tmp_path / "on", "steals")}
+    assert qs[pp].get("f") and (qs[pp].get("x") or {}).get("gr"), qs[pp]
+    assert qs[ud2].get("f") and (qs[ud2].get("x") or {}).get("gr"), qs[ud2]
+    for rid in (ud1, fd, pm):
+        if rid in qs:
+            assert not qs[rid].get("f") and not (qs[rid].get("x") or {}).get("gr"), qs[rid]
+            assert not qs[rid].get("line_read"), qs[rid]

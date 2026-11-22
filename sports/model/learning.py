@@ -484,9 +484,11 @@ def forward_gate(lcon=None, *, scored=None):
     """Gate F as registered (REGISTER.md 7) - reported at review windows only."""
     sc = scorecard(lcon) if scored is None else scored
     by = {(r["model_version"], r["league"], r["stat"]): r for r in sc}
+    from .. import capabilities
+    _gate_models = capabilities.nba8_models(("sm-1", "mi-1", "mc-1"))       # nba8-1 only while NBA_STATS8 is on
     out = []
     for (mv, lg, st), r in by.items():
-        if mv not in ("sm-1", "mi-1", "mc-1", "nba8-1"):
+        if mv not in _gate_models:
             continue
         res = {"model_version": mv, "league": lg, "stat": st, "graded": r["graded"], "games": r["games"]}
         if r["graded"] < 300 or r["games"] < 100:

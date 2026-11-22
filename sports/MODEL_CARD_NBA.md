@@ -198,4 +198,22 @@ Board side rule (lean_of: chance > 50% AND mean on that side, info-only re-read)
 (PREREG excluded them): steals TEST 337-194 (63.5%, [58.8, 68.1]) - still passes; the other 7 still fail. Not
 reproduced: the board's N4 rule (a lean the market already prices is dropped) and sanity holds - the lettered board
 subset is narrower than the scored rows.
-Rollback: NBA_STATS8=0 (cap-2 exactly as before; no nba8-1 forecast is written and a stored one is not attached).
+**Status: SHADOW, NBA_STATS8 default OFF (round-2 review 2026-11-21).** The TEST pass is almost all Underdog balanced
+steals (graded UD 237-118), where the model adds nothing over the book favourite, and Underdog has offered no two-sided
+steals since Nov 19. On PrizePicks standard - the line members would actually see lettered - graded steals went 36-31
+TEST / 112-103 DEV, 148-134 together (52.5%, game CI 47.2-57.9): fails pass rules 1-2. So nothing is lettered by default.
+- Unset (default): cap-2 exactly; no canonical nba8-1 forecast is written; a stored one is never attached; every model
+  list a member file reads (board_view.scout_models, scout_chance.models, results_public._scout, learning.forward_gate)
+  equals the pre-nba8 tuple. Verified: board / board_more / players / slate / forecasts / results / slip pools /
+  public record byte-identical to origin/main 7be1957 on the same seeded store (timing fields excluded).
+- Forward shadow (NBA_STATS8_SHADOW, default on; rollback NBA_STATS8_SHADOW=0): every forecast run records nba8-1 for
+  all 8 stats on the walk-forward population (PrizePicks standard / Underdog balanced, both sides offered, full game, not
+  promotional, game not started) into model/shadow.db shadow_forecasts only - never the canonical store or a member
+  route. shadow.settle scores them under model_version nba8-1 (admin grade-band report). One row per (offer record,
+  line, inputs): unchanged inputs are not re-written. Re-test before any NBA_STATS8=1: last pre-tip forecast per
+  (player, game, stat, PrizePicks standard), graded A-C >= 100 rows, >= 20 games, hit >= 53% and game CI low > 50%.
+- NBA_STATS8=1 (not to be set without that forward pass): only the passed stat, and only on the tested population -
+  a canonical forecast is written only for PrizePicks standard / Underdog balanced offers with both sides offered, and
+  the board attaches it only to that offer: never shared to FanDuel / Polymarket / other books at the same line
+  (same_line_forecasts) or read at another line (scout_line_reads), never on a balanced Underdog line with a side
+  suspended. Rollback NBA_STATS8 unset / 0.

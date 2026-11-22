@@ -479,11 +479,16 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
             rec4.market(mk, df, hl, rowpos, sh_items, events, base_of, pmf_of)
         log({"league": league, "market": mk, "written": out["written"]})
     if league == "nba" and capabilities.nba_stats8_markets():
-        try:                                     # NBA_STATS8: nba8-1 for the walk-forward-passed stats; never breaks sm-1
+        try:                                     # NBA_STATS8=1 only: nba8-1 for the passed stats; never breaks sm-1
             _nba8_league(scon, hcon, forecast_at, up, idmap, events, out, icon, log)
         except Exception as e:                   # noqa: BLE001
             out["nba8_error"] = str(e)[:300]
             log({"league": league, "nba8_error": str(e)[:300]})
+    if league == "nba" and capabilities.nba_stats8_shadow_on():
+        try:                                     # nba8-1 SHADOW (shadow.db only, never shown); never breaks sm-1
+            out["shadow_nba8"] = _nba8_shadow(scon, hcon, forecast_at, idmap, events)
+        except Exception as e:                   # noqa: BLE001
+            out["shadow_nba8"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
     icon.close()
     if rec is not None:
         out["shadow"] = rec.close()
@@ -542,21 +547,10 @@ def _nba8_league(scon, hcon, forecast_at, up, idmap, events, out, icon, log):
                 continue
             ok, _ = capabilities.gate(o)
             ev = events.get(o.event_id)
-            if not ok or ev is None or ev.start_utc <= forecast_at:
+            # round-2 review: only the walk-forward population gets a canonical (letterable) forecast
+            if not ok or not capabilities.nba8_tested(o) or ev is None or ev.start_utc <= forecast_at:
                 continue
-            pid = idmap[(o.event_id, o.player_id)]
-            fk = (pid, ev.start_utc)
-            if fk not in feats:
-                lg, pos = nba8_logs(hcon, pid, ev.start_utc)
-                if not lg:
-                    feats[fk] = None
-                else:
-                    f = nba8.features(lg, art)
-                    pg = nba8.pos_group(pos or "G")
-                    feats[fk] = {"mu": {c: float(v) for c, v in nba8.component_means(art, f, pg).items()},
-                                 "pos_g": pg, "prior_n": int(f["prior_n"]), "l10_min": float(f["l10_min"]),
-                                 "ew_min": float(f["ew_min"]), "in_pop": bool(nba8.in_population(f))}
-            row = feats[fk]
+            row = _nba8_row(hcon, art, feats, idmap[(o.event_id, o.player_id)], ev.start_utc)
             if row is None or not (row["ew_min"] == row["ew_min"]):
                 out["why_none"][f"{o.event_id}|{o.player_id}|{mk}"] = "no played games in the player history"
                 continue
@@ -588,6 +582,77 @@ def _nba8_league(scon, hcon, forecast_at, up, idmap, events, out, icon, log):
                 out["unchanged"]["nba8-1"] = out["unchanged"].get("nba8-1", 0) + 1
         icon.commit()
         log({"league": "nba", "market": mk, "model": "nba8-1", "written": w.get("nba8-1", 0)})
+
+
+def _nba8_row(hcon, art, feats, pid, start):
+    """nba8-1 saved input row for one player before one tip (cached per (player, start) in `feats`), or None."""
+    from . import nba8
+    fk = (pid, start)
+    if fk not in feats:
+        lg, pos = nba8_logs(hcon, pid, start)
+        if not lg:
+            feats[fk] = None
+        else:
+            f = nba8.features(lg, art)
+            pg = nba8.pos_group(pos or "G")
+            feats[fk] = {"mu": {c: float(v) for c, v in nba8.component_means(art, f, pg).items()},
+                         "pos_g": pg, "prior_n": int(f["prior_n"]), "l10_min": float(f["l10_min"]),
+                         "ew_min": float(f["ew_min"]), "in_pop": bool(nba8.in_population(f))}
+    return feats[fk]
+
+
+def _nba8_shadow(scon, hcon, forecast_at, idmap, events, path=None):
+    """nba8-1 FORWARD SHADOW (round-2 review 2026-11-21): every nba8-1 market that is not live (all 8 while NBA_STATS8
+    is off) on the walk-forward population (capabilities.nba8_tested: PrizePicks standard / Underdog balanced, both
+    sides offered, full game, not promotional), games not started. Written to model/shadow.db shadow_forecasts ONLY -
+    never the canonical store, never a board / slip / record / member route; shadow.settle (learning.on_settled) scores
+    each row under model_version nba8-1 with its own line and side. Policy 'unvalidated' (no letter is ever shown).
+    One row per (offer record, line, input row): the same inputs on a later run are not written again (shadow_id has no
+    forecast_at), so 8 stats x every run never bloats the db. Platform + sides kept for the PrizePicks-standard split."""
+    import time
+    from . import nba8, shadow
+    t0 = time.time()
+    art = nba8.load()
+    if art is None:
+        return {"model_version": nba8.VERSION, "error": "no nba8 artifact"}
+    live = capabilities.nba_stats8_markets()
+    mks = [m for m in capabilities.NBA_STATS8_ALL if m not in live]
+    feats, n, seen, why = {}, 0, 0, {}
+    con = shadow.db(path)
+    try:
+        for mk in mks:
+            for rid, o in store.iter_offers(scon, league="nba", stat=mk, platforms=TARGETS, limit=500000):
+                ev = events.get(o.event_id)
+                if ev is None or ev.start_utc <= forecast_at or not capabilities.nba8_tested(o):
+                    continue
+                if (o.event_id, o.player_id) not in idmap:
+                    why["no_history_id"] = why.get("no_history_id", 0) + 1
+                    continue
+                seen += 1
+                row = _nba8_row(hcon, art, feats, idmap[(o.event_id, o.player_id)], ev.start_utc)
+                if row is None or not (row["ew_min"] == row["ew_min"]):
+                    why["no_played_games"] = why.get("no_played_games", 0) + 1
+                    continue
+                pmf = nba8_pmf_from_row(art, mk, row)
+                mean = float(dists.mean_of(pmf[None, :], np.arange(len(pmf), dtype=float))[0])
+                po, pu, pp = dists.line_probs(pmf, 0, o.line)
+                sides = o.offered_sides()
+                pol = grade_policy.apply(po, pu, sides, "unvalidated")
+                sid = _sha([nba8.VERSION, art["sha"], rid, float(o.line), _sha(row)])[:24]
+                fac = {"pos_g": row["pos_g"], "prior_n": row["prior_n"], "l10_min": row["l10_min"],
+                       "ew_min": row["ew_min"], "in_pop": row["in_pop"], "mu": row["mu"],
+                       "variant": capabilities.variant_of(o)}
+                n += con.execute("INSERT OR IGNORE INTO shadow_forecasts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"
+                                 "?,?,?,?,?,?)",
+                                 (sid, nba8.VERSION, art["sha"], "nba", mk, o.event_id, o.player_id, rid, o.platform,
+                                  o.line, forecast_at, ev.start_utc, mean, po, pu, pp, ",".join(sides),
+                                  pol["chosen_side"], pol.get("chosen_p"), pol["band"], json.dumps(fac, default=float),
+                                  0, json.dumps([round(float(x), 12) for x in pmf]), None)).rowcount
+            con.commit()
+    finally:
+        con.close()
+    return {"model_version": nba8.VERSION, "artifact": art["sha"], "display": "never (shadow only)", "markets": mks,
+            "offers_in_population": seen, "written": n, "skipped": why, "seconds": round(time.time() - t0, 2)}
 
 
 def _nba8_replay(r, row, orig, offer, vstate):

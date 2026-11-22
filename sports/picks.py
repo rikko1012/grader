@@ -128,7 +128,7 @@ def research_grade(fc, side, league, probs=None, rid=None):
     board's market (N4) hold is applied by the page before it shows a letter - a letter it did show must equal this.
     probs = the DISPLAYED chances ({p_over, p_under}: the quote's cal-mi-1 chance when the board showed one)."""
     from . import board_view
-    if fc.p_over is None or fc.p_under is None or fc.model_version not in board_view.SCOUT_MODELS:
+    if fc.p_over is None or fc.p_under is None or fc.model_version not in board_view.scout_models():
         return None
     po, pu = (probs["p_over"], probs["p_under"]) if probs else (fc.p_over, fc.p_under)
     line = float(fc.line)
