@@ -4,9 +4,13 @@ real-shaped board / record / review documents built here.
 - every number comes from the shared bodies (board snapshot, /api/record, /api/reviews); none is typed into the template;
 - the terminal picks rows by its stated rule and labels a board older than FRESH_MIN as "as of <time>", never "checked";
 - member review text is escaped; the wall features by its stated rule (no photos, no money talk, no shouting);
-- a missing input drops its block; the page never fails over one (the terminal falls back to the dated screenshot);
+- a missing input drops its block; the page never fails over one (the terminal falls back to the saved, dated board);
+- a terminal row opens in place (the first one open): chance at exactly the line, projection vs line, last 10, break-even, the letter's
+  own record from /api/record bands; the board gate counts the other letter-graded markets on a live board, never on the saved one;
+- "Move the line" is drawn only when its formula reproduces the seed row's own chance; its cut points match grader.grade_from_p;
 - the template's own text carries none of the owner's banned words and no static percentage;
 - the request path never computes (cached bodies only) and 700 visitors at once get one body and one ETag."""
+import html
 import http.client
 import json
 import re
@@ -31,13 +35,13 @@ def iso(dt):
     return dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
 
-def rec(nick, stat, line, book, p, grade, start, moved=None, side="over", be=0.5345, l10=(6, 4)):
+def rec(nick, stat, line, book, p, grade, start, moved=None, side="over", be=0.5345, l10=(6, 4), proj=None):
     return {"sport": "cs2", "key": f"k.{nick}.{book}",
             "event": {"id": f"hltv:{nick}", "label": "Alpha vs Beta", "start_utc": iso(start), "lock_utc": iso(start)},
             "player": {"key": nick.lower(), "name": nick},
             "market": {"stat": stat, "stat_label": stat.title(), "period": "maps12", "period_label": "Maps 1-2", "line_type": "standard"},
             "offer": {"platform": book, "platform_label": book.title(), "line": line, "moved_from": moved},
-            "scout": {"side": side, "p_side": p, "grade": grade},
+            "scout": {"side": side, "p_side": p, "grade": grade, "projection": proj, "forecast_at": "2026-11-22T10:01:00+00:00"},
             "history": {"l10": {"over": l10[0], "under": l10[1], "n": 10}},
             "parity": {"be": be, "entry": "Underdog standard 2-pick"}, "state": {"kind": "ok"}}
 
@@ -122,8 +126,8 @@ def build(srv):
 def test_terminal_rows_follow_the_stated_rule_with_real_values(srv, monkeypatch):
     seed(srv, monkeypatch, board())
     s = build(srv).decode("utf-8")
-    rows = re.findall(r'<li class="tr".*?</li>', s, re.S)
-    names = [re.search(r'<div class="who"><b>([^<]+)</b>', r).group(1) for r in rows]
+    rows = re.findall(r'<li class="tr[^"]*".*?</li>', s, re.S)
+    names = [re.search(r'class="who"[^>]*><b>([^<]+)<i', r).group(1) for r in rows]
     assert names == ["Gap", "Mover", "Zeta"]                         # two-app gaps, then moved lines, then the rest
     assert "NoLetter" not in s and "Past" not in s                      # no letter never leads; a locked match never shows
     gap = rows[0]
@@ -175,8 +179,9 @@ def test_missing_inputs_drop_their_blocks_and_the_page_still_serves(srv, monkeyp
     monkeypatch.setenv("SCOUT_PUBLIC_RECORD", "0")
     monkeypatch.setattr(reviews, "page_on", lambda: False)
     s = build(srv).decode("utf-8")
-    assert "/landing/board.webp" in s and 'class="rows"' not in s     # the dated screenshot instead of rows
-    assert 'id="record"' not in s and 'id="reviews"' not in s and 'class="proof"' not in s
+    assert "/landing/board.webp" not in s and 'data-state="saved"' in s   # the saved board, dated, instead of live rows
+    assert "as of Nov 19, 16:20 UTC · saved board" in s and 'data-at=""' in s and 'class="gate"' not in s
+    assert 'id="record"' not in s and 'id="reviews"' not in s and "decided picks" not in s and "member reviews" not in s
     assert "{{" not in s and "<!--if:" not in s
     assert s.count(f'href="{JOIN.replace("&", "&amp;")}"') >= 4 and s.count('href="/auth/login"') >= 3
 
@@ -200,7 +205,7 @@ def test_template_text_has_no_banned_words_or_static_numbers():
                 r"financial advice", r"not advice", r"\bheld\b", r"\bmaybe\b", r"provisional", r"unconfirmed", r"\$"):
         assert not re.search(bad, t), bad
     assert "realslip-pp" not in raw and "<script src" not in raw
-    assert set(re.findall(r'<img src="([^"]+)"', raw)) <= {"/landing/board.webp", "/landing/realslip-scout.webp"} | {
+    assert set(re.findall(r'<img src="([^"]+)"', raw)) <= {"/landing/realslip-scout.webp"} | {
         f"/v3/art/{m}.svg" for m in ("anubis", "dust2", "ancient", "cache")}
     assert '<span class="mark" aria-hidden="true">1T</span><b>Scout</b>' in raw
 
@@ -277,3 +282,141 @@ def test_a_landing_v3_failure_serves_the_previous_v3_page(srv, monkeypatch):
     monkeypatch.setattr(landing_v3, "page", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
     body = server.landing_v3_page()
     assert b'data-v3-page="landing"' in body and b"/v3/landing.css" in body
+
+
+# ---------------------------------------------------------------------------------------------------- final: grafts and SEO
+BANDS = [{"name": "B", "wins": 1137, "losses": 1026, "pushes": 19, "picks": 2163},
+         {"name": "B+", "wins": 214, "losses": 192, "pushes": 5, "picks": 406}]
+
+
+def seed_bands(srv):
+    doc = record_doc("cs2", 100, 90, 2)
+    doc["bands"] = BANDS
+    srv._store_result(landing_v3.record_key("cs2"), 200, json.dumps(doc).encode(), 600, 600)
+
+
+def wait_builder():
+    for _ in range(100):
+        if not landing_v3._BUILDER["busy"]:
+            return
+        time.sleep(0.05)
+
+
+def test_rows_open_in_place_with_the_card_read_and_the_letters_own_record(srv, monkeypatch):
+    b = board()
+    b["records"][0]["scout"]["projection"] = 32.4                       # Zeta, kills 30.5
+    seed(srv, monkeypatch, b)
+    seed_bands(srv)
+    s = build(srv).decode("utf-8")
+    rows = re.findall(r'<li class="tr[^"]*".*?</li>', s, re.S)
+    assert 'aria-expanded="true" aria-controls="td0"' in rows[0] and 'id="td0">' in rows[0]   # the first row opens as the glossary
+    assert all('aria-expanded="false"' in r and ' hidden>' in r for r in rows[1:])
+    assert 'Scout&#x27;s chance at exactly <span data-k="line">12.5</span>' in rows[0] or "Scout's chance at exactly <span data-k=\"line\">12.5</span>" in rows[0]
+    assert 'data-k="p">58.3<' in rows[0]
+    assert 'data-k="l10">6 of 10<' in rows[0] and "Break-even, Underdog standard 2-pick" in rows[0]
+    assert "Projection" not in rows[0]                                  # no projection on the record: no "why" line, never a guess
+    zeta = rows[2]
+    assert "Projection <b>32.4</b> vs line" in zeta
+    assert "On the record, CS2 calls graded" in zeta and "1,137-1,026-19" in zeta     # B's band from /api/record
+    assert 'data-band=""' in rows[0] and 'class="dt-rec" hidden' in rows[0]           # B- has no band: the line is hidden
+    assert 'data-band="214-192-5"' in rows[1]                                          # each app's line carries its own letter's band
+    assert "Graded Nov 22, 10:01 UTC" in s
+    for r in rows:                                                     # the member card's stake never shows on the public page
+        assert "Stake" not in r and "0.5U" not in r and "units" not in r.lower()
+
+
+def test_the_board_gate_counts_the_other_graded_markets_live_only(srv, monkeypatch):
+    b = board()
+    s0 = datetime.now(timezone.utc) + timedelta(hours=3)
+    b["records"] += [rec(f"Extra{i}", "kills", 20.5, "underdog", .6, "B", s0) for i in range(7)]
+    seed(srv, monkeypatch, b)
+    s = build(srv).decode("utf-8")
+    assert len(re.findall(r'<li class="tr[^"]*"', s)) == 6
+    assert "4 more letter-graded CS2 props on this board" in s and "Join to open the board" in s      # 3 + 7 graded markets - 6 shown
+    assert re.search(r'<a class="gate" href="([^"]+)"', s).group(1) == JOIN.replace("&", "&amp;")
+
+
+def test_move_the_line_only_when_the_formula_reproduces_the_row(srv, monkeypatch):
+    import grader
+    for p in (0.5, 0.549, 0.55, 0.569, 0.57, 0.629, 0.63, 0.679, 0.68, 0.739, 0.74, 0.799, 0.8, 0.9):
+        got = next((g for c, g in landing_v3.CUTS if p >= c), "C")
+        assert got == grader.grade_from_p(p), p                        # the widget's cut points are the grader's
+    b = board()
+    lam, line = 32.4, 30.5
+    p = landing_v3.kills_chance(line, lam)
+    b["records"][0]["scout"].update(side="over", p_side=round(p, 4), grade="B", projection=lam)
+    seed(srv, monkeypatch, b)
+    seed_bands(srv)
+    s = build(srv).decode("utf-8")
+    assert 'id="gw"' in s and "projection is <b>32.4</b>" in s
+    cfg = json.loads(html.unescape(re.search(r'data-gw="([^"]+)"', s).group(1)))
+    assert cfg["proj"] == 32.4 and cfg["line"] == 30.5 and cfg["bands"]["B"] == "1,137-1,026-19" and cfg["cuts"][0] == [0.8, "A+"]
+    assert f'id="gw-p">{round(p, 4) * 100:.1f}<' in s
+    b["records"][0]["scout"]["p_side"] = round(p + 0.02, 4)              # the board's number differs (another model): no widget
+    workspace_api._SNAP["body"] = json.dumps(b).encode()
+    assert 'id="gw"' not in build(srv).decode("utf-8")
+
+
+def test_seo_tags_use_the_configured_public_url_only(srv, monkeypatch):
+    seed(srv, monkeypatch, board())
+    monkeypatch.delenv("PUBLIC_URL", raising=False)
+    s = build(srv).decode("utf-8")
+    assert "og:image" not in s and "canonical" not in s and 'property="og:title"' in s and "summary_large_image" in s
+    monkeypatch.setenv("PUBLIC_URL", "https://cs2-scout.onrender.com/")
+    s = build(srv).decode("utf-8")
+    assert '<link rel="canonical" href="https://cs2-scout.onrender.com/">' in s
+    assert '<meta property="og:image" content="https://cs2-scout.onrender.com/landing/og.png">' in s
+    monkeypatch.setenv("PUBLIC_URL", "javascript:alert(1)")
+    assert "og:image" not in build(srv).decode("utf-8")
+
+
+def test_og_image_is_served_as_png(srv, monkeypatch):
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+    httpd.daemon_threads = True
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        st, h, body = get(httpd.server_address[1], "/landing/og.png")
+        assert st == 200 and h["content-type"] == "image/png" and body[:8] == b"\x89PNG\r\n\x1a\n" and len(body) < 200_000
+        assert "public" in h["cache-control"]
+    finally:
+        httpd.shutdown()
+
+
+def test_page_is_pinned_dark_and_every_join_goes_to_the_checkout(srv, monkeypatch):
+    seed(srv, monkeypatch, board())
+    s = build(srv).decode("utf-8")
+    assert '<html lang="en" data-ui-v3="1" data-v3-page="landing" data-sc-sport="cs2" data-theme="dark">' in s
+    assert "scout-theme" not in s and "prefers-color-scheme: light" not in landing_v3.ASSETS["PAGE_CSS"].read_text(encoding="utf-8")
+    joins = re.findall(r'<a [^>]*href="([^"]+)"[^>]*>Join on Whop</a>', s)
+    assert len(joins) >= 6 and set(joins) == {JOIN.replace("&", "&amp;")}
+    assert "1-800-GAMBLER" in s and "Cancel anytime from your Whop account." in s and "<details>" in s
+
+
+def test_saved_board_is_real_rows_with_their_own_time():
+    doc = json.loads(landing_v3.FALLBACK.read_text(encoding="utf-8"))
+    assert doc["board_at"] == "2026-11-19T16:20:55+00:00" and len(doc["records"]) >= 6
+    for r in doc["records"]:
+        assert r["market"]["line_type"] == "standard" and r["offer"]["line"] is not None and r["scout"]["p_side"] is not None
+        assert "units" not in r["scout"] and "stake_reason" not in r["scout"]
+    rows, meta, n, _t = landing_v3.terminal(doc)
+    assert n == 6 and meta == "as of Nov 19, 16:20 UTC"
+
+
+def test_one_changed_input_makes_exactly_one_new_page(srv, monkeypatch):
+    seed(srv, monkeypatch, board())
+    a = landing_v3.page(srv, JOIN)
+    wait_builder()
+    a = landing_v3.page(srv, JOIN)
+    builds = []
+    real = landing_v3.build
+    monkeypatch.setattr(landing_v3, "build", lambda *x, **k: builds.append(1) or real(*x, **k))
+    assert landing_v3.page(srv, JOIN) is a                               # unchanged inputs: the same object, no build
+    b2 = board()
+    b2["records"] = [r for r in b2["records"] if r["player"]["name"] != "Zeta"]
+    workspace_api._SNAP["body"] = json.dumps(b2).encode()
+    landing_v3._STATE["built"] = 0.0
+    with ThreadPoolExecutor(max_workers=200) as pool:                  # 200 visitors at the moment the page is due: one rebuild
+        list(pool.map(lambda _: landing_v3.page(srv, JOIN), range(200)))
+    wait_builder()
+    new = landing_v3.page(srv, JOIN)
+    assert len(builds) == 1 and new is not a and b"Zeta" not in new and landing_v3.page(srv, JOIN) is new

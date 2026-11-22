@@ -56,9 +56,10 @@ def test_v3_shell_on_every_page_group(browser, env, monkeypatch, group, size, th
     try:
         member = GROUPS[group][2]
         assert p.evaluate("document.documentElement.dataset.uiV3") == "1"
-        assert p.evaluate("document.documentElement.dataset.theme") == theme
+        want = "dark" if group == "landing" else theme        # the v3 landing (landing_v3.py) is pinned dark
+        assert p.evaluate("document.documentElement.dataset.theme") == want
         bg = p.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sc-bg').trim()")
-        assert bg.upper() == ("#F6F7F9" if theme == "light" else "#080B13")
+        assert bg.upper() == ("#F6F7F9" if want == "light" else "#080B13")
         assert p.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sc-font')").strip().startswith("Outfit")
         if member:
             p.wait_for_selector(".sc-appbar.sc-v3-bar", state="visible")

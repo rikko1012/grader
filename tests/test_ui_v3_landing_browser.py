@@ -127,16 +127,15 @@ def test_landing_v3_first_screen_targets_and_width(browser, lbase, size, theme):
     warm(lbase, 12)
     ctx, page = open_page(browser, lbase, size, theme)
     try:
-        assert page.evaluate("document.documentElement.dataset.theme") == theme
+        assert page.evaluate("document.documentElement.dataset.theme") == "dark"    # pinned dark: a stored light theme does not apply
         for a in ("Join on Whop", "Sign in with Whop"):                      # both in the first phone screen (standing rule)
             loc = page.locator(".hero a", has_text=a).first
             assert loc.is_visible() and loc.bounding_box()["y"] + loc.bounding_box()["height"] <= size["height"], a
         assert page.locator(".hero a.btn.primary").get_attribute("href") == JOIN
         assert page.locator(".term .tr").first.bounding_box()["y"] < size["height"]   # the first real row starts in the first screen
-        # the hero band stays dark in light mode; the body follows the theme
-        hero_bg = page.evaluate("getComputedStyle(document.querySelector('.hero')).backgroundColor")
-        assert hero_bg == "rgb(8, 11, 19)"
-        small = page.evaluate("""() => [...document.querySelectorAll('a,button,summary')].filter(e => e.offsetParent && !e.closest('.dock')
+        for sel in (".hero", "body"):
+            assert page.evaluate(f"getComputedStyle(document.querySelector('{sel}')).backgroundColor") in ("rgb(8, 11, 19)", "rgb(12, 18, 34)"), sel
+        small = page.evaluate("""() => [...document.querySelectorAll('a,button,summary,input')].filter(e => e.offsetParent && !e.closest('.dock')
             && e.getBoundingClientRect().height < 44).map(e => e.textContent.trim().slice(0, 30))""")
         assert not small, small
         no_h_scroll(page)
@@ -281,3 +280,82 @@ def test_member_nav_stays_while_sign_in_is_checked(browser, env, monkeypatch, si
     for r in held:
         r.continue_()
     c.close()
+
+
+def gw_board():
+    """board() with Zeta's kills row carrying a projection whose formula chance is the row's own (the widget draws only then)."""
+    b = board()
+    p = landing_v3.kills_chance(30.5, 32.4)
+    b["records"][0]["scout"].update(p_side=round(p, 4), projection=32.4)
+    return b
+
+
+def test_landing_v3_row_opens_in_place_and_a_line_tap_updates_the_read(browser, lbase):
+    warm(lbase, 0)
+    ctx, page = open_page(browser, lbase, PHONE, "dark")
+    try:
+        first = page.locator(".tr").first
+        assert first.locator(".dt").is_visible() and first.locator("button.who").get_attribute("aria-expanded") == "true"
+        first.locator("button.bk", has_text="13.5").click()                 # the other app's line: the open read follows it
+        assert first.locator('.dt [data-k="p"]').text_content() == "52.2"
+        assert first.locator('.dt-h [data-k="line"]').text_content() == "13.5" and first.locator('.dt-h [data-k="app"]').text_content() == "Prizepicks"
+        first.locator("button.who").click()
+        assert not first.locator(".dt").is_visible() and first.locator("button.who").get_attribute("aria-expanded") == "false"
+        second = page.locator(".tr").nth(1)
+        second.locator("button.who").click()
+        assert second.locator(".dt").is_visible()
+        no_h_scroll(page)
+        assert not page.errors, page.errors
+    finally:
+        ctx.close()
+
+
+def test_landing_v3_two_maps_pool_and_move_the_line(browser, lbase, monkeypatch):
+    monkeypatch.setattr(workspace_api, "_SNAP", dict(workspace_api._SNAP, body=json.dumps(gw_board()).encode()))
+    landing_v3.reset()
+    warm(lbase, 0)
+    for size in (PHONE, DESK):
+        ctx, page = open_page(browser, lbase, size, "dark")
+        try:
+            assert page.locator("#pool-v").text_content() == "14.88"                    # Anubis + Dust 2, weighted by maps played
+            page.locator("button.map", has_text="Cache").click()                          # the oldest choice drops out
+            assert page.locator("#pool-names").text_content() == "Dust 2 + Cache"
+            assert page.locator("#pool-v").text_content() == f"{(14.35 * 54 + 13.00 * 17) / 71:.2f}"
+            p0 = page.locator("#gw-p").text_content()
+            assert p0 == f"{landing_v3.kills_chance(30.5, 32.4) * 100:.1f}"           # at the real line: the board's number
+            slider = page.locator("#gw-line")
+            slider.focus()
+            for _ in range(8):
+                page.keyboard.press("ArrowRight")                                          # line 34.5: past the projection, Under
+            assert page.locator("#gw-lv").text_content() == "34.5" and page.locator("#gw-side").text_content().startswith("Under")
+            want = 1 - landing_v3.kills_chance(34.5, 32.4)
+            assert abs(float(page.locator("#gw-p").text_content()) - want * 100) < 0.11
+            assert "Under" in slider.get_attribute("aria-valuetext")
+            no_h_scroll(page)
+            assert not page.errors, page.errors
+        finally:
+            ctx.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_landing_v3_web_vitals_lcp_and_cls(browser, lbase, size):
+    """Largest contentful paint and layout shift on the served page (local server, web fonts blocked so the fallback face is what
+    paints): LCP under 2.5 s and CLS under 0.1, the "good" Core Web Vitals marks, with the dock and the reveal running."""
+    warm(lbase, 12)
+    ctx = browser.new_context(viewport=size, reduced_motion="no-preference")
+    ctx.route("https://fonts.*/**", lambda r: r.abort())
+    ctx.add_init_script("""window.__cls=0;window.__lcp=0;
+      new PerformanceObserver(l=>{for(const e of l.getEntries()){if(!e.hadRecentInput)window.__cls+=e.value}}).observe({type:'layout-shift',buffered:true});
+      new PerformanceObserver(l=>{for(const e of l.getEntries()){window.__lcp=e.startTime;window.__lcpEl=e.element&&e.element.tagName}}).observe({type:'largest-contentful-paint',buffered:true});""")
+    page = ctx.new_page()
+    try:
+        page.goto(lbase + "/", wait_until="load")
+        page.wait_for_timeout(800)
+        for y in range(0, 4000, 500):
+            page.mouse.wheel(0, 500)
+            page.wait_for_timeout(60)
+        lcp, cls = page.evaluate("window.__lcp"), page.evaluate("window.__cls")
+        assert lcp < 2500, lcp
+        assert cls < 0.1, cls
+    finally:
+        ctx.close()

@@ -4989,6 +4989,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if u.path in LANDING_IMAGES:
                 return self.send(200, web_file(u.path.lstrip("/")), "image/webp", {"Cache-Control": "public, max-age=86400"})
+            if u.path == "/landing/og.png":                 # the link-preview image (original art, no numbers): public, cached like the screenshots
+                return self.send(200, web_file("landing/og.png"), "image/png", {"Cache-Control": "public, max-age=86400"})
             if reviews.handles_get(u.path):                 # public like /record: served before the signed-out landing gate
                 return reviews.handle_get(self, sys.modules[__name__], u.path, q)
             if u.path in ('/record','/record.js','/api/record','/api/record/slips'):
