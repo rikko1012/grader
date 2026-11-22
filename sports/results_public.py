@@ -356,9 +356,9 @@ def representative(rows):
         _rep_newest_add(newest, r)
         _latest_add(latest, r)
         _open_add(opens, r)
-    if grade_rules.latest_line_on():
-        cur = _current_set(latest)
-        newest = {k: r for k, r in newest.items() if (k[:4], k[4]) in cur}
+    cur = _current_set(latest)
+    newest = {k: r for k, r in newest.items()
+              if (k[:4], k[4]) in cur or not grade_rules.latest_line_on(str(k[0]).split(":", 1)[0])}
     out = _rep_select(newest)
     for r in out:
         r["mv_open"] = _open_of(opens, r)
@@ -825,7 +825,7 @@ def league_block(con, lg, now, rows):
         # id, then the key's arrival; the first row per (game, player, stat, model) is its representative
         # SPORTS_LATEST_LINE: only a line that is some book's latest (_current_set) can be the representative
         cur = ("WHERE (k4, ln) IN (SELECT k4, ln FROM (SELECT k4, ln, fa, MAX(fa) OVER (PARTITION BY kp) AS top "
-               "FROM lat) WHERE fa = top)") if grade_rules.latest_line_on() else ""
+               "FROM lat) WHERE fa = top)") if grade_rules.latest_line_on(lg) else ""
         reps = _ordered(sp, "rep", "SELECT id FROM (SELECT rowid AS id, r0, r1, fa, fid, k_seq, ROW_NUMBER() OVER "
                                    "(PARTITION BY k4 ORDER BY r0, r1, fa DESC, fid, k_seq) AS rn FROM rep " + cur +
                                    ") WHERE rn = 1 ORDER BY r0, r1, fa DESC, fid, k_seq")

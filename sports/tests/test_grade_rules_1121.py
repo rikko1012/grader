@@ -20,7 +20,7 @@ OVER_ONLY = (SideQuote("over", True), SideQuote("under", False))
 @pytest.fixture(autouse=True)
 def _flags(monkeypatch):
     for k in ("NBA_MVLEAN1", "SPORTS_PP_ONESIDED", "SPORTS_GP_SIDE_FIX", "SPORTS_LATEST_LINE", "NBA_BEST_PROP",
-              "NBA_MVLEAN1_FROM"):
+              "NBA_MVLEAN1_FROM", "SPORTS_LATEST_LINE_NFL"):
         monkeypatch.delenv(k, raising=False)
 
 
@@ -158,6 +158,17 @@ def test_record_uses_the_books_latest_line_not_a_superseded_one(monkeypatch):
     assert [r["forecast_id"] for r in results_public.representative(rows)] == ["new"]
     monkeypatch.setenv("SPORTS_LATEST_LINE", "0")
     assert [r["forecast_id"] for r in results_public.representative(rows)] == ["old"]
+
+
+def test_latest_line_is_nba_only_unless_the_nfl_switch_is_set(monkeypatch):
+    """NFL audit record: no gain from the latest-line cut, so it stays off there unless SPORTS_LATEST_LINE_NFL=1."""
+    rows = [dict(r, event_id="nfl:espn:1") for r in (_rec("old", 20.5, "2026-11-20T12:00:00Z", mean=20.6),
+                                                      _rec("new", 22.5, "2026-11-20T18:00:00Z", mean=21.0))]
+    assert grade_rules.latest_line_on("nba") and not grade_rules.latest_line_on("nfl")
+    assert [r["forecast_id"] for r in results_public.representative(rows)] == ["old"]
+    monkeypatch.setenv("SPORTS_LATEST_LINE_NFL", "1")
+    assert grade_rules.latest_line_on("nfl")
+    assert [r["forecast_id"] for r in results_public.representative(rows)] == ["new"]
 
 
 def test_two_books_keep_their_own_latest_lines():

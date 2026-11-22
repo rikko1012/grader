@@ -27,7 +27,8 @@ Rules and their switches (each one line to roll back: set the variable to 0 and 
       Lean; (d) an exact 50/50 between two offered sides no longer resolves to Over: the projection mean decides
       (mean above the line Over, below Under), else no side.
 
-  SPORTS_LATEST_LINE (default ON) - best prop and the public record use the book's LATEST offered line per (game,
+  SPORTS_LATEST_LINE (default ON for NBA; NFL only with SPORTS_LATEST_LINE_NFL=1, default off - no NFL gain on the audit
+      record) - best prop and the public record use the book's LATEST offered line per (game,
       player, stat, platform): a line the book moved away from before the game (superseded) is never the record's or
       the board's representative line (audit: ~1 in 6 one-per-prop picks were superseded lines).
 
@@ -65,8 +66,12 @@ def side_fix_on():
     return _on("SPORTS_GP_SIDE_FIX")
 
 
-def latest_line_on():
-    return _on("SPORTS_LATEST_LINE")
+def latest_line_on(league=None):
+    """SPORTS_LATEST_LINE (NBA, default on). Other leagues need SPORTS_LATEST_LINE_NFL=1 as well (default off): the NFL
+    audit record showed no gain (train 56.16% -> 55.53%, holdout 48.72% -> 49.21%), so it stays off there."""
+    if not _on("SPORTS_LATEST_LINE"):
+        return False
+    return league in (None, "nba") or _on("SPORTS_LATEST_LINE_NFL", "0")
 
 
 def best_prop_on(league=None):
