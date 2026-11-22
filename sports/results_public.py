@@ -643,11 +643,7 @@ class Grades:
         if not (r["status"] == "settled" and r["lean"] and not _contained(self.league, r.get("stat"))):
             return
         g = board_view.research_grade(r["p_over"] if r["lean"] == "over" else r["p_under"])
-        demote = (g in ("A", "B", "C") and self.league == "nba" and grade_rules.mvlean_on(self.league)
-                  and (r.get("forecast_at") or "") >= grade_rules.mvlean_from()
-                  and grade_rules.mvlean_demotes(r["lean"], r["line"], r.get("mv_open")))
-        if demote:
-            g = "Lean"                                  # mvlean-1: the board showed this side as Lean (grade_rules)
+        g = grade_rules.shown_letter(self.league, r, g)     # mvlean-1 (default off): the board's Lean (= recent())
         b = self.g.get(g)
         if b is None:
             return
@@ -722,11 +718,13 @@ def recent(rows, names=None, n=RECENT_N, league=None):
     out = []
     for r in sorted(best.values(), key=lambda x: (x.get("settled_at") or "", x["forecast_id"]), reverse=True)[:n]:
         p_side = r["p_over"] if r["lean"] == "over" else r["p_under"]
+        g0 = None if _contained(league, r.get("stat")) else board_view.research_grade(p_side)
+        g = grade_rules.shown_letter(league, r, g0)     # mvlean-1 (default off): the board's Lean, as the Grades table
         out.append({"forecast_id": r["forecast_id"], "model": r["model"], "event_id": r["event_id"],
                     "player_id": r["player_id"], "player": (names or {}).get(r["player_id"]), "stat": r["stat"],
                     "line": r["line"], "side": r["lean"], "result": r["lean_result"], "outcome": r["outcome"],
                     "actual": r.get("actual"), "p_side": _r(p_side),
-                    "grade": None if _contained(league, r.get("stat")) else board_view.research_grade(p_side),
+                    "grade": g, **({"grade_why": grade_rules.MV_WHY} if g != g0 else {}),
                     "settled_at": r.get("settled_at"), "forecast_at": r.get("forecast_at")})
     return out
 
@@ -871,6 +869,7 @@ def league_block(con, lg, now, rows):
                 oks = _open_keys(r)
                 got = sp.execute("SELECT ln FROM opn WHERE k = ?", (repr(oks[0]),)).fetchone() if len(oks) == 1 else None
                 r["mv_open"] = got[0] if got else None
+                blob = spill.pack(r)                    # recent() reads this blob: it carries mv_open too
             grd.add(r)
             batch_cal.append((pos, r.get("settled_at"), r.get("lean_result")))
             if r["status"] == "settled" and r["lean"]:

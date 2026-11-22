@@ -20,8 +20,22 @@ OVER_ONLY = (SideQuote("over", True), SideQuote("under", False))
 @pytest.fixture(autouse=True)
 def _flags(monkeypatch):
     for k in ("NBA_MVLEAN1", "SPORTS_PP_ONESIDED", "SPORTS_GP_SIDE_FIX", "SPORTS_LATEST_LINE", "NBA_BEST_PROP",
-              "NBA_MVLEAN1_FROM", "SPORTS_LATEST_LINE_NFL"):
+              "NBA_MVLEAN1_FROM", "SPORTS_LATEST_LINE_NFL", "SPORTS_PP_SIDE_HOLD", "SPORTS_PP_ONESIDED_FROM"):
         monkeypatch.delenv(k, raising=False)
+
+
+def _mv_on(monkeypatch, start="2026-11-01T00:00:00Z"):
+    monkeypatch.setenv("NBA_MVLEAN1", "1")
+    monkeypatch.setenv("NBA_MVLEAN1_FROM", start)
+
+
+def test_round2_defaults_only_the_side_hold_is_on():
+    """Round-2 review: only the verified display bug fix (SPORTS_PP_SIDE_HOLD) defaults ON; every untested rule is off."""
+    assert grade_rules.pp_side_hold_on()
+    assert not grade_rules.pp_onesided_on() and not grade_rules.side_fix_on() and not grade_rules.best_prop_on("nba")
+    assert not grade_rules.mvlean_on("nba") and not grade_rules.latest_line_on("nba")
+    assert grade_rules.mvlean_from() is None                       # never relabel unless set
+    assert not grade_rules.pp_onesided_record_drop("2026-11-21T00:00:00Z")
 
 
 # ------------------------------------------------------------------------------------------------ mvlean-1
@@ -80,24 +94,40 @@ def test_mark_quote_demotes_a_letter_when_the_line_moved_toward_the_side(monkeyp
     o = grade_rules.OpenLines()
     o.add(_Fc("f1", "2026-11-20T12:00:00Z", 20.5))
     q = {"platform": "prizepicks", "line": 21.5}
-    x = {"ln": "over", "gr": "A", "pl": 0.62}                   # +1.0 toward Over -> Lean, side kept
-    assert grade_rules.mark_quote("nba", _row(), q, x, o) == 1.0
+    at = "2026-11-20T18:00:00Z"
+    x = {"ln": "over", "gr": "A", "pl": 0.62}
+    assert grade_rules.mark_quote("nba", _row(), q, x, o, at) is None and x["gr"] == "A"   # default OFF
+    monkeypatch.setenv("NBA_MVLEAN1", "1")                      # on but NBA_MVLEAN1_FROM unset: never applies
+    assert grade_rules.mark_quote("nba", _row(), q, x, o, at) is None and x["gr"] == "A"
+    _mv_on(monkeypatch)
+    assert grade_rules.mark_quote("nba", _row(), q, x, o, at) == 1.0   # +1.0 toward Over -> Lean, side kept
     assert x["gr"] == "Lean" and x["ln"] == "over" and x["gr0"] == "A" and x["mr"] == "mvlean-1"
+    assert x["mw"] == grade_rules.MV_WHY                         # the tooltip's reason
+    x = {"ln": "over", "gr": "A"}                               # forecast before FROM: unchanged (= the record)
+    assert grade_rules.mark_quote("nba", _row(), q, x, o, "2026-10-31T00:00:00Z") is None and x["gr"] == "A"
+    x = {"ln": "over", "gr": "Lean"}                            # already Lean: not counted as a demotion
+    assert grade_rules.mark_quote("nba", _row(), q, x, o, at) is None and "mr" not in x
     x = {"ln": "under", "gr": "A"}                              # moved away from Under: unchanged
-    assert grade_rules.mark_quote("nba", _row(), q, x, o) is None and x["gr"] == "A"
+    assert grade_rules.mark_quote("nba", _row(), q, x, o, at) is None and x["gr"] == "A"
     q2 = {"platform": "prizepicks", "line": 21.0}               # exactly 0.5 (not > 0.75): unchanged
     x = {"ln": "over", "gr": "B"}
-    assert grade_rules.mark_quote("nba", _row(), q2, x, o) is None and x["gr"] == "B"
+    assert grade_rules.mark_quote("nba", _row(), q2, x, o, at) is None and x["gr"] == "B"
     x = {"ln": "over", "gr": "A"}
-    assert grade_rules.mark_quote("nfl", _row(), q, x, o) is None and x["gr"] == "A"     # NBA only
+    assert grade_rules.mark_quote("nfl", _row(), q, x, o, at) is None and x["gr"] == "A"     # NBA only
     monkeypatch.setenv("NBA_MVLEAN1", "0")
     x = {"ln": "over", "gr": "A"}
-    assert grade_rules.mark_quote("nba", _row(), q, x, o) is None and x["gr"] == "A"     # rollback
+    assert grade_rules.mark_quote("nba", _row(), q, x, o, at) is None and x["gr"] == "A"     # rollback
+    for bad in ("never", "", "garbage"):
+        monkeypatch.setenv("NBA_MVLEAN1", "1")
+        monkeypatch.setenv("NBA_MVLEAN1_FROM", bad)
+        assert grade_rules.mvlean_from() is None and not grade_rules.mvlean_active("nba", at)
 
 
 # ------------------------------------------------------------------------------------------------ os-2
 def test_prizepicks_line_listing_one_side_is_one_sided_and_never_graded(monkeypatch):
     one = h.offer(sides=OVER_ONLY)
+    assert capabilities.variant_of(one) == "standard" and capabilities.gate(one)[0]       # default OFF (shadow)
+    monkeypatch.setenv("SPORTS_PP_ONESIDED", "1")
     assert capabilities.variant_of(one) == "one_sided" and capabilities.is_one_sided(one)
     assert capabilities.only_side(one) == "over"
     ok, why = capabilities.gate(one)
@@ -110,23 +140,32 @@ def test_prizepicks_line_listing_one_side_is_one_sided_and_never_graded(monkeypa
     assert capabilities.variant_of(one) == "standard" and capabilities.gate(one)[0]       # rollback
 
 
-def test_side_hold_never_letters_a_side_the_quote_does_not_offer():
+def test_side_hold_never_letters_a_side_the_quote_does_not_offer(monkeypatch):
     q = {"platform": "prizepicks", "sides": [{"side": "over", "offered": True}, {"side": "under", "offered": False}]}
-    hold = grade_rules.side_hold(q, {"ln": "under", "gr": "B"})
-    assert hold["b"] == "side" and "Over only" in hold["t"]
-    assert grade_rules.side_hold(q, {"ln": "over", "gr": "B"}) is None
+    hold = grade_rules.side_hold(q, {"ln": "under", "gr": "B"})            # default ON (SPORTS_PP_SIDE_HOLD)
+    assert hold["b"] == "side" and hold["t"] == grade_rules.HOLD_TEXT      # never claims the line is not graded
+    assert grade_rules.side_hold(q, {"ln": "over", "gr": "A"}) is None     # the LISTED side keeps its letter
+    assert grade_rules.side_hold({"platform": "prizepicks", "o": [1, 0]}, {"ln": "over", "gr": "B"}) is None
+    assert grade_rules.side_hold({"platform": "prizepicks", "o": [1, 0]}, {"ln": "under", "gr": "B"})["b"] == "side"
     assert grade_rules.side_hold({"platform": "prizepicks", "o": [1, 1]}, {"ln": "under", "gr": "B"}) is None
+    monkeypatch.setenv("SPORTS_PP_ONESIDED", "1")                          # with the reclassification: "Over only"
+    assert "Over only" in grade_rules.side_hold(q, {"ln": "under", "gr": "B"})["t"]
+    monkeypatch.setenv("SPORTS_PP_SIDE_HOLD", "0")                         # rollback
+    assert grade_rules.side_hold(q, {"ln": "under", "gr": "B"}) is None
 
 
 # ------------------------------------------------------------------------------------------------ gp-1 sides
-def test_offer_forced_side_the_model_disfavours_gets_no_side_letter_or_lean():
+def test_offer_forced_side_the_model_disfavours_gets_no_side_letter_or_lean(monkeypatch):
+    assert grade_policy.apply(0.42, 0.58, ("over",), "forward-validated")["chosen_side"] == "over"   # default OFF
+    monkeypatch.setenv("SPORTS_GP_SIDE_FIX", "1")
     r = grade_policy.apply(0.42, 0.58, ("over",), "forward-validated")
     assert r["chosen_side"] is None and r["grade"] is None and r["band"] is None and "Lean" not in r["label"]
     r = grade_policy.apply(0.62, 0.38, ("over",), "forward-validated")          # offered side favoured: graded
     assert r["chosen_side"] == "over" and r["grade"] == "A"
 
 
-def test_offer_forced_check_compares_the_two_sides_not_one_half_on_integer_lines():
+def test_offer_forced_check_compares_the_two_sides_not_one_half_on_integer_lines(monkeypatch):
+    monkeypatch.setenv("SPORTS_GP_SIDE_FIX", "1")
     # integer line: push mass 0.16 leaves the favoured Over at 0.46 (< 0.5) - it is still the model's side
     r = grade_policy.apply(0.46, 0.38, ("over",), "forward-validated")
     assert r["chosen_side"] == "over"
@@ -135,6 +174,8 @@ def test_offer_forced_check_compares_the_two_sides_not_one_half_on_integer_lines
 
 
 def test_exact_tie_goes_to_the_projection_mean_not_over(monkeypatch):
+    assert grade_policy.apply(0.5, 0.5, ("over", "under"), mean=19.8, line=20.5)["chosen_side"] == "over"  # default
+    monkeypatch.setenv("SPORTS_GP_SIDE_FIX", "1")
     assert grade_policy.apply(0.5, 0.5, ("over", "under"), mean=19.8, line=20.5)["chosen_side"] == "under"
     assert grade_policy.apply(0.5, 0.5, ("over", "under"), mean=21.0, line=20.5)["chosen_side"] == "over"
     assert grade_policy.apply(0.5, 0.5, ("over", "under"))["chosen_side"] is None
@@ -181,14 +222,19 @@ def test_two_books_keep_their_own_latest_lines(monkeypatch):
     assert [r["forecast_id"] for r in results_public.representative(rows)] == ["pp"]   # pp's 20.5 is still pp's latest
 
 
-def test_record_grade_table_counts_mvlean_rows_as_lean(monkeypatch):
-    monkeypatch.setenv("NBA_MVLEAN1_FROM", "2026-11-01T00:00:00Z")
+def test_record_grade_table_and_recent_list_count_mvlean_rows_as_lean(monkeypatch):
     rows = [_rec("f1", 20.5, "2026-11-20T12:00:00Z", p=0.7, mean=24.0),
             _rec("f2", 21.5, "2026-11-20T18:00:00Z", p=0.7, mean=24.0)]      # moved +1.0 toward Over since open 20.5
     reps = results_public.representative(rows)
     assert len(reps) == 1 and reps[0]["mv_open"] == 20.5
     g = {x["grade"]: x["n"] for x in results_public.grades(reps, "nba")["rows"]}
+    assert g["A"] == 1 and g["Lean"] == 0                                    # default OFF: unchanged
+    assert results_public.recent(reps, league="nba")[0]["grade"] == "A"
+    _mv_on(monkeypatch)
+    g = {x["grade"]: x["n"] for x in results_public.grades(reps, "nba")["rows"]}
     assert g["A"] == 0 and g["Lean"] == 1
+    rec = results_public.recent(reps, league="nba")[0]                      # the recent list says Lean too (= board)
+    assert rec["grade"] == "Lean" and rec["grade_why"] == grade_rules.MV_WHY and rec["p_side"] >= 0.6
 
 
 # ------------------------------------------------------------------------------------------------ bp-1
@@ -198,7 +244,10 @@ def _q(rid, plat, pl, gr="A", ln="over", o=(1, 1), b=None):
             "sides": [{"side": "over", "offered": bool(o[0])}, {"side": "under", "offered": bool(o[1])}]}
 
 
-def test_featured_best_prop_is_one_per_player_game_and_display_only():
+def test_featured_best_prop_is_one_per_player_game_and_display_only(monkeypatch):
+    assert grade_rules.feature_best("nba", [{"event_id": "e", "player_id": "p", "quotes": [
+        _q("z", "prizepicks", 0.61)]}]) == 0                                # default OFF
+    monkeypatch.setenv("NBA_BEST_PROP", "1")
     rows = [{"event_id": "e1", "player_id": "p1", "quotes": [_q("a", "prizepicks", 0.61), _q("b", "underdog", 0.64)]},
             {"event_id": "e1", "player_id": "p1", "quotes": [_q("c", "underdog", 0.66, gr="Lean"),     # Lean: never
                                                              _q("d", "prizepicks", 0.70, b="l10_contra"),  # held
@@ -266,8 +315,10 @@ def _snap_quotes(con, tmp_path):
 
 
 @pytest.mark.parametrize("moved_line, demoted", [(20.5, True), (19.5, False)])
-def test_snapshot_build_applies_mvlean_end_to_end(tmp_path, moved_line, demoted):
+def test_snapshot_build_applies_mvlean_end_to_end(tmp_path, moved_line, demoted, monkeypatch):
     from sports import store
+    _mv_on(monkeypatch, "2026-10-01T00:00:00Z")
+    monkeypatch.setenv("NBA_BEST_PROP", "1")
     con = store.connect()
     r2, r3 = _build_world(con, moved_line)
     qs, marks, manifest = _snap_quotes(con, tmp_path)
@@ -286,7 +337,8 @@ def test_snapshot_build_applies_mvlean_end_to_end(tmp_path, moved_line, demoted)
     con.close()
 
 
-def test_board_file_and_workspace_record_carry_the_featured_mark(tmp_path):
+def test_board_file_and_workspace_record_carry_the_featured_mark(tmp_path, monkeypatch):
+    monkeypatch.setenv("NBA_BEST_PROP", "1")
     import workspace_sports
     from sports import snapshots, store
     con = store.connect()
@@ -307,7 +359,8 @@ def test_side_hold_leaves_a_suspended_underdog_side_alone():
     assert grade_rules.side_hold(q, {"ln": "under", "gr": "B"}) is None          # cap-2: suspension never regrades
 
 
-def test_forecast_run_records_no_side_for_a_lone_disfavoured_side_and_an_even_tie():
+def test_forecast_run_records_no_side_for_a_lone_disfavoured_side_and_an_even_tie(monkeypatch):
+    monkeypatch.setenv("SPORTS_GP_SIDE_FIX", "1")
     import numpy as np
     from sports.model import forward
     pmf = np.full(10, 0.1)                                   # 15..24 uniform
@@ -335,6 +388,90 @@ def test_record_relabels_mvlean_only_from_the_effective_time(monkeypatch):
     rows = [_rec("f1", 20.5, "2026-11-20T12:00:00Z", p=0.7, mean=24.0),
             _rec("f2", 21.5, "2026-11-20T18:00:00Z", p=0.7, mean=24.0)]
     reps = results_public.representative(rows)
-    monkeypatch.setenv("NBA_MVLEAN1_FROM", "2026-11-21T00:00:00Z")        # forecast before the rule went live
+    monkeypatch.setenv("NBA_MVLEAN1", "1")                                # on, FROM unset: never relabels
+    assert {x["grade"]: x["n"] for x in results_public.grades(reps, "nba")["rows"]}["A"] == 1
+    _mv_on(monkeypatch, "2026-11-21T00:00:00Z")                           # forecast before the rule went live
     g = {x["grade"]: x["n"] for x in results_public.grades(reps, "nba")["rows"]}
     assert g["A"] == 1 and g["Lean"] == 0
+    assert results_public.recent(reps, league="nba")[0]["grade"] == "A"
+    _mv_on(monkeypatch, "2026-11-20T18:00:00+00:00")                      # exactly at FROM: relabelled
+    assert results_public.recent(reps, league="nba")[0]["grade"] == "Lean"
+
+
+# ------------------------------------------------------------------- os-2 defaults: the Spencer / Acuff case
+def _onesided_world(con):
+    """Three PrizePicks Over-only lines with sm-1 forecasts: Over favoured A (Cam Spencer A Over case), Over favoured B
+    (Darius Acuff Jr. B Over case) and Under favoured B on the unlisted Under (De'Aaron Fox 6.0 Under B case)."""
+    from sports.contracts import Membership, Player, Team
+    from sports import store
+    for t in h.NBA_TEAMS:
+        store.put(con, Team(team_id=f"nba:team:espn:{t['id']}", league="nba", abbr=t["abbr"], name=t["name"],
+                            observed_at=h.T0, known_at=h.T0))
+    store.put(con, h.event())
+    pid = "nba:player:espn:3134907"
+    store.put(con, Player(player_id=pid, league="nba", name="Fixture Forward", position="F", status="active",
+                          observed_at=h.T0, known_at=h.T0))
+    store.put(con, Membership(player_id=pid, team_id=h.NY, valid_from="2026-07-01T00:00:00Z", source="espn",
+                              observed_at=h.T0, known_at=h.T0))
+    out = {}
+    for name, oid, st, line, po in (("a_over", "pp:11", "assists", 4.5, 0.64), ("b_over", "pp:12", "rebounds", 6.5, 0.57),
+                                    ("b_under", "pp:13", "points", 20.5, 0.42)):
+        rid = store.put(con, h.offer(oid=oid, stat=st, line=line, sides=OVER_ONLY))["record_id"]
+        store.put(con, h.forecast(offer_snapshot_ids=(rid,), input_snapshot_ids=(rid,), line=line, stat=st,
+                                  model_version="sm-1", p_over=po, p_under=1 - po, p_push=0.0,
+                                  p_over_given_no_push=po, p_under_given_no_push=1 - po, sides_available=("over",),
+                                  projection_mean=line + (1.5 if po > 0.5 else -1.5)))
+        out[name] = rid
+    return out
+
+
+def _player_quotes(con, tmp_path):
+    from sports import snapshots
+    snapshots.build(con, "nba", now="2026-10-23T21:00:00Z", base=tmp_path, history=False, results=False)
+    root = snapshots.snap_root(tmp_path) / "nba"
+    pf = json.loads((root / "players" / f"{snapshots.safe_name('nba:player:espn:3134907')}.json")
+                    .read_text(encoding="utf-8"))
+    return {q["record_id"]: q for r in pf["markets"] for q in r["quotes"]}
+
+
+def test_defaults_hold_only_the_unlisted_side_and_keep_the_listed_sides_letters(tmp_path, monkeypatch):
+    """Defaults (side hold on, reclassification off): the Over-only lines' favoured Overs keep A / B (Spencer / Acuff
+    case); the Under-favoured line loses only its letter on the unlisted Under (Fox case). With SPORTS_PP_SIDE_HOLD=0
+    the build equals main's (the Under keeps its letter); with SPORTS_PP_ONESIDED=1 every one-sided line is unlettered."""
+    from sports import store
+    con = store.connect()
+    rid = _onesided_world(con)
+    qs = _player_quotes(con, tmp_path)
+    assert qs[rid["a_over"]]["x"]["ln"] == "over" and qs[rid["a_over"]]["x"]["gr"] == "A"
+    assert qs[rid["b_over"]]["x"]["ln"] == "over" and qs[rid["b_over"]]["x"]["gr"] == "B"
+    held = qs[rid["b_under"]]["x"]
+    assert held["b"] == "side" and held["t"] == grade_rules.HOLD_TEXT and "gr" not in held
+    monkeypatch.setenv("SPORTS_PP_SIDE_HOLD", "0")                         # rollback = main's display
+    qs0 = _player_quotes(con, tmp_path / "off")
+    assert qs0[rid["b_under"]]["x"]["ln"] == "under" and qs0[rid["b_under"]]["x"]["gr"] == "B"
+    assert qs0[rid["a_over"]]["x"]["gr"] == "A" and qs0[rid["b_over"]]["x"]["gr"] == "B"
+    monkeypatch.delenv("SPORTS_PP_SIDE_HOLD")
+    monkeypatch.setenv("SPORTS_PP_ONESIDED", "1")                          # the owner-call reclassification
+    qs1 = _player_quotes(con, tmp_path / "on")
+    for k in rid.values():
+        assert not (qs1.get(k, {}).get("x") or {}).get("gr")
+    con.close()
+
+
+def test_record_drop_of_prizepicks_one_sided_forecasts_needs_the_flag_and_a_from_date(monkeypatch):
+    from sports import snapshots, store
+    pp = h.offer(sides=OVER_ONLY)
+    ud = h.offer(platform="underdog", oid="ud:1", sides=OVER_ONLY, variant="one_sided")
+    offers = {"offer:prizepicks:pp:1:r1:a": pp, "offer:underdog:ud:1:r1:a": ud}
+    monkeypatch.setattr(store, "get", lambda con, rid: offers.get(rid))
+
+    def fc(rid, at="2026-11-20T12:00:00Z"):
+        return h.forecast(forecast_at=at, offer_snapshot_ids=(rid,), sides_available=("over",))
+    pp_fc, ud_fc = fc("offer:prizepicks:pp:1:r1:a"), fc("offer:underdog:ud:1:r1:a")
+    assert snapshots.one_sided_forecast(None, ud_fc)                       # Underdog cap-2: main's rule, unchanged
+    assert not snapshots.one_sided_forecast(None, pp_fc)                   # default: the record keeps it
+    monkeypatch.setenv("SPORTS_PP_ONESIDED", "1")
+    assert not snapshots.one_sided_forecast(None, pp_fc)                   # on, no FROM: never rewrites history
+    monkeypatch.setenv("SPORTS_PP_ONESIDED_FROM", "2026-11-21T00:00:00Z")
+    assert not snapshots.one_sided_forecast(None, pp_fc)                   # saved before FROM: kept
+    assert snapshots.one_sided_forecast(None, fc("offer:prizepicks:pp:1:r1:a", "2026-11-21T06:00:00Z"))

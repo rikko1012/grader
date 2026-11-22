@@ -27,8 +27,8 @@ def band(p):
 
 def _choose(offered, mean=None, line=None, p_all=None):
     """The graded side among the offered (side, p) pairs -> (side, p) or None.
-    SPORTS_GP_SIDE_FIX (default on; =0 = the old max(), which returned Over on an exact tie and the only offered side
-    whatever its chance): (d) an exact tie between two offered sides goes to the side of the projection mean (mean above
+    SPORTS_GP_SIDE_FIX (default OFF = the old max(), which returned Over on an exact tie and the only offered side
+    whatever its chance; =1 turns on, not walk-forward passed): (d) an exact tie between two offered sides goes to the side of the projection mean (mean above
     the line Over, below Under), else no side; (b) a single offered side the model rates under 50% (an offer-forced side,
     audit_1121 hit 34.9%) is not chosen - no letter, no Lean. "Disfavours" compares the two sides' UNCONDITIONAL chances
     (p_all = {"over": p, "under": p}): on an integer line the push mass can leave the favoured side below 0.5."""

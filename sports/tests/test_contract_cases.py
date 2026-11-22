@@ -99,13 +99,9 @@ def test_unsupported_markets_refuse_to_grade_with_a_handler():
 
 
 def test_side_availability_is_per_offer():
-    # an Underdog standard line whose Under is suspended right now keeps its stored type (cap-2): still gradable
-    more_only = h.offer(platform="underdog", oid="ud:1", sides=(SideQuote("over", True), SideQuote("under", False)))
+    more_only = h.offer(sides=(SideQuote("over", True), SideQuote("under", False)))
     assert more_only.offered_sides() == ("over",)
     assert capabilities.gate(more_only)[0]
-    # os-2 (audit_1121): a PrizePicks line LISTING one side is a one-sided line - never graded
-    pp_more_only = h.offer(sides=(SideQuote("over", True), SideQuote("under", False)))
-    assert not capabilities.gate(pp_more_only)[0]
     none = h.offer(sides=(SideQuote("over", False), SideQuote("under", False)))
     assert not capabilities.gate(none)[0]
 

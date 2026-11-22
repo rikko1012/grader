@@ -1154,8 +1154,10 @@ def build(con, league, now=None, base=None, history=True, results=True):
     sizes["board_view"] = view_out.close()
     # bp-1 (display only): one featured best prop per NBA player and game, from the guarded signals (grade_rules)
     manifest["grade_rules"] = {"mvlean": {"version": grade_rules.MVLEAN_VERSION, "on": grade_rules.mvlean_on(league),
+                                          "from": grade_rules.mvlean_from(),
                                           "open_keys": len(opens)},
-                               "pp_onesided": grade_rules.pp_onesided_on(), "gp_side_fix": grade_rules.side_fix_on(),
+                               "pp_side_hold": grade_rules.pp_side_hold_on(), "pp_onesided": grade_rules.pp_onesided_on(),
+                               "gp_side_fix": grade_rules.side_fix_on(),
                                "best_prop": {"version": grade_rules.BEST_VERSION, "on": grade_rules.best_prop_on(league),
                                              "featured": n_featured}}
     manifest["grade_rules"]["marks"] = write_grade_marks(root, base_meta, board_rows)
@@ -1298,8 +1300,9 @@ def guard_row(league, row, forecasts, view_row, now, avail=None, opens=None):
         if avail:                                        # av-1: ruled out / inactive - no side, letter, stake or leg
             x, code = availability.x_of(avail), avail
         else:
-            x = grade_rules.side_hold(q, x) or x         # os-2: never a side / letter the line does not offer
-            grade_rules.mark_quote(league, row, q, x, opens)    # mvlean-1 (NBA): moved toward Scout's side -> Lean
+            x = grade_rules.side_hold(q, x) or x         # os-2 (SPORTS_PP_SIDE_HOLD): no letter on a side PP does not list
+            grade_rules.mark_quote(league, row, q, x, opens,    # mvlean-1 (NBA, default off): moved toward Scout's side
+                                   (forecasts.get(fid or "") or {}).get("forecast_at"))   # -> Lean (same test as the record)
         q["x"] = x
         if code:
             out.append({"at": now, "event_id": row["event_id"], "key": row["key"], "player": row.get("player"),
@@ -1889,9 +1892,16 @@ def one_sided_forecast(con, fc, cache=None):
                 o = store.get(con, orid)
             except Exception:                           # noqa: BLE001 - an unreadable revision is not evidence
                 o = None
-            cache[orid] = bool(o is not None and getattr(o, "KIND", None) == "offer" and capabilities.is_one_sided(o))
-        if cache[orid]:
+            if o is None or getattr(o, "KIND", None) != "offer" or not capabilities.is_one_sided(o):
+                cache[orid] = None
+            elif getattr(o, "variant", None) == "one_sided":
+                cache[orid] = "stored"                  # cap-2: the adapter stored it one-sided (Underdog) - main's rule
+            else:
+                cache[orid] = "pp"                      # os-2 reclassification (SPORTS_PP_ONESIDED on)
+        if cache[orid] == "stored":
             return True
+        if cache[orid] == "pp" and grade_rules.pp_onesided_record_drop(getattr(fc, "forecast_at", None)):
+            return True                                 # os-2: only forecasts at / after SPORTS_PP_ONESIDED_FROM
     return False
 
 
@@ -1913,7 +1923,7 @@ def results_view(con, league, setts, now, base_meta, rows_only=False):
                     continue
                 if (getattr(fc, "scope", "full_game") or "full_game") != "full_game":
                     continue                            # S1/S2: quarter / half lines never count
-                if plat in ("underdog", "prizepicks") and one_sided_forecast(con, fc, os_cache):
+                if plat in ("underdog", "prizepicks") and one_sided_forecast(con, fc, os_cache):   # PP: os-2 FROM only
                     continue                            # cap-2 (owner 2026-11-06): one-sided lines are not graded
                 seen.add(fid)
                 sides = {x.side: x for x in ss}

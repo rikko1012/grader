@@ -35,11 +35,12 @@ UNGRADED_VARIANTS = {"one_sided"}
 ONE_SIDED_REASON = "one-sided line (Over only or Under only): not graded"
 CAPABILITY_VERSION = "cap-2"
 ONE_SIDED_PLATFORMS = {"underdog", "prizepicks"}
-# os-2 (audit_1121 round 2, SPORTS_PP_ONESIDED default on; =0 rolls back): a PrizePicks line whose stored sides list ONE
+# os-2 (audit_1121 round 2, SPORTS_PP_ONESIDED default OFF - shadow, owner call; =1 turns it on): a PrizePicks line whose stored sides list ONE
 # side (allowed_wager_types "over" or "under") is one-sided too. PrizePicks has no per-side suspension - the adapter sets
 # a side's `offered` from the listing itself (sports/adapters.pp_offers) - so the listed sides ARE the line's type here.
 # Live 2026-11-21 these were "standard" More-only lines lettered on the unlisted Under (audit: Unders on PrizePicks lines
-# below Underdog's hit 44.6%, Overs above it 39.2%).
+# below Underdog's hit 44.6%, Overs above it 39.2%). The display bug alone (a letter on the UNLISTED side) is fixed by
+# grade_rules.side_hold (SPORTS_PP_SIDE_HOLD, default on), which leaves the listed side lettered and the line graded.
 PP_STANDARD = ("standard", None, "")
 
 

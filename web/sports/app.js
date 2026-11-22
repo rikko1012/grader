@@ -632,7 +632,7 @@
     // say the same (the side buttons below can only pick an offered side)
     var open = q.o ? !!q.o[x.ln === "over" ? 0 : 1] : !(q.sides || []).some(function (s) { return s.side === x.ln && !s.offered; });
     if (!open) return '<div class="sw-grade-line" data-not-offered><b>Not offered</b> <span class="sw-tb-note" data-grade-closed>' + (x.ln === "over" ? "Over" : "Under") + " not offered on " + esc(bookName(q.p || q.platform)) + "</span></div>";   // bug 3: no letter on a side this app does not offer
-    return '<div class="sw-grade-line">' + L.gradeHtml(x.gr, x.ln, x.nv) + (open ? "" : ' <span class="sw-tb-note" data-grade-closed>' +
+    return '<div class="sw-grade-line">' + L.gradeHtml(x.gr, x.ln, x.nv, x.mw) + (open ? "" : ' <span class="sw-tb-note" data-grade-closed>' +
       (x.ln === "over" ? "Over" : "Under") + " not offered on " + esc(bookName(q.p || q.platform)) + "</span>") + "</div>";
   }
   function gradeBanner(lg, B) {                         // the letter legend only when a letter can show (a contained

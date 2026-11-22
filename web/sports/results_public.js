@@ -135,7 +135,7 @@
       '</b><span class="rx-pick-prop">' + escH(statName ? statName(r.stat) : r.stat) + " · " + side + " " + lineText(r.line) + "</span></div>" +
       '<div class="rx-pick-side"><span class="rx-res rx-res-' + escH(r.result || "none") + '">' + resultWord(r.result) + "</span>" +
       '<span class="rx-pick-meta">' + (r.actual === null || r.actual === undefined ? "" : "Final " + lineText(r.actual) + " · ") +
-      (r.grade && !noGrade ? '<span class="rx-g rx-g-' + escH(String(r.grade).toLowerCase()) + '">' + escH(r.grade) + "</span> · " : "") + escH(shortDay(r.settled_at)) + "</span></div></li>";
+      (r.grade && !noGrade ? '<span class="rx-g rx-g-' + escH(String(r.grade).toLowerCase()) + '"' + (r.grade_why ? ' title="' + escH(r.grade_why) + '"' : "") + ">" + escH(r.grade) + "</span> · " : "") + escH(shortDay(r.settled_at)) + "</span></div></li>";
   }
   var RECENT_STEP = 10;
   function recentHtml(recent, statName, shown, noGrade) {
