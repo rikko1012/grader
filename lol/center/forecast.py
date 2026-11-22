@@ -784,7 +784,14 @@ def _last_model(con, offer):
 # 54.5 -> 50.8. Letters-only universes show no gain. It FAILED on the lpf-1 replay (T4a, Under skew), so it applies ONLY
 # when the shown forecast is lol-1f (LOL_LPF1=0 rollback, or no lpf-1 answer for a new line); lpf-1 output and its lol-1f
 # inputs are never touched. A new event starts at no offset until SO1_MIN_PM of its player-markets settle per cell.
-# Rollback LOL_SCOPE_OFFSET=0 (read every cycle).
+# Event = the exact tournament page (fix 2026-11-21, round-2 review: dropping the last '/' segment merged seasons/splits such
+# as 'Legends Premier League/Season 4' + '/Season 5' and 'LPL/2026 Season/Split 1..3' into one event); lolesports-only
+# 'LE:<league>' pages name a league, not an event, so they get no offset.
+# SHADOW: default OFF (review 2026-11-21: the event-scoped form was chosen after registration, on days that include the read
+# audit holdout, with no cross-event evidence; letters show no gain and playable-letters Over share fell 52.0 -> 46.2).
+# LOL_SCOPE_OFFSET=1 turns it on; unset / anything else = off (read every cycle).
+# ROLLBACK NOTE: while so-1 is on, LOL_LPF1=0 alone gives lol-1f+so-1, NOT the known lol-1f grades; a full rollback to lol-1f
+# needs LOL_LPF1=0 AND LOL_SCOPE_OFFSET=0 (the default).
 SO1_VERSION = "so-1"
 SO1_MIN_PM = 30
 SO1_STATS = ("kills", "assists")
@@ -792,16 +799,18 @@ _SO1_LAST = {"offsets": None}           # last good offsets: a failed read keeps
 
 
 def so1_on():
-    return os.environ.get("LOL_SCOPE_OFFSET", "1").strip() != "0"
+    """so-1 is shadow (off) by default; only LOL_SCOPE_OFFSET=1 turns it on."""
+    return os.environ.get("LOL_SCOPE_OFFSET", "0").strip() == "1"
 
 
 def so1_event(tournament_page):
-    """The event a series belongs to: its tournament page without the stage ('2026 Season World Championship/Main Event'
-    and '.../Play-In' -> '2026 Season World Championship'); None without a page."""
+    """The event a series belongs to: its exact tournament page ('Legends Premier League/Season 4' and '.../Season 5' are
+    two events; Worlds 'Main Event' and 'Play-In' are two events). None without a page, and None for a lolesports-only
+    'LE:<league_slug>' page (a league across seasons, not an event), so those series never get an offset."""
     p = (tournament_page or "").strip()
-    if not p:
+    if not p or p.startswith("LE:"):
         return None
-    return p.rsplit("/", 1)[0] if "/" in p else p
+    return p
 
 
 SO1_SQL = (
@@ -869,7 +878,8 @@ def so1_state(con, h):
 
 
 def lpf1_on():
-    """lpf-1 is live by default (owner 2026-11-09); LOL_LPF1=0 is the rollback switch (back to lol-1f)."""
+    """lpf-1 is live by default (owner 2026-11-09); LOL_LPF1=0 is the rollback switch (back to lol-1f). With so-1 on
+    (LOL_SCOPE_OFFSET=1) that rollback gives lol-1f+so-1; the known lol-1f grades also need LOL_SCOPE_OFFSET=0 (default)."""
     return os.environ.get("LOL_LPF1", "1").strip() != "0"
 
 

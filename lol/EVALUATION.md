@@ -1002,14 +1002,32 @@ T4b letters universes show no gain (letters +0.48, playable letters +0.84, bad d
 +1.75 [0.33, 3.46] day / [0.10, 3.45] series, 9 -> 7 bad days, Over share 54.5 -> 50.8, volume 0.984. The live
 `so1_offsets` on the Nov 5 copy reproduces the study's 11-05 offsets exactly (research/lol_r2_1121/so1_live_check.py).
 
-**so-1 (shipped behind `LOL_SCOPE_OFFSET`, default on, rollback `LOL_SCOPE_OFFSET=0`):** lol/center/forecast.py. Applies ONLY
+**so-1 (behind `LOL_SCOPE_OFFSET`, default OFF = shadow since the 2026-11-21 round-2 review; `LOL_SCOPE_OFFSET=1` turns it
+on):** lol/center/forecast.py. Why off: the event-scoped form was chosen after registration, on days that include the read audit
+holdout; 42 of 43 series are one event, so the 'never carry one event into the next' rule has no cross-event evidence; letters
+show no gain and playable-letters Over share falls 52.0 -> 46.2 (past the 5-point balance limit). Next step: register the
+exact-page form forward on fresh events. Applies ONLY
 when the shown forecast is lol-1f (LOL_LPF1=0, or a new line with no lpf-1 answer); lpf-1 forecasts are never touched (T4a
 failed). Per (event, stat, scope): c = log(sum actual / sum lol-1f projection) over the event's settled player-markets (first
 line per player-market, latest pre-match forecast, latest graded settlement), >= 30 player-markets else 0; event = tournament
-page minus its stage. The pool reads the projection before any offset (so-1 rows: inputs.scope_offset.lambda_before; lpf-1
+page EXACTLY (see the event fix below). The pool reads the projection before any offset (so-1 rows: inputs.scope_offset.lambda_before; lpf-1
 rows: inputs.lpf1.lambda_lol1f). Forecasts carry model_version `lol-1f+so-1` and inputs.scope_offset; the card shows "Map-count
 offset from settled lines". A read failure keeps the last good offsets; with none, a line whose last saved forecast is so-1 at
 the same line keeps it. Tests: lol/tests/test_so1_scope_offset.py.
+**so-1 event fix (2026-11-21, round-2 review blocker):** so1_event() used to drop the last '/' segment of the tournament page,
+which merged seasons and splits into one event ('Legends Premier League/Season 4' + '/Season 5'; 'LPL/2026 Season/Split 1..3'
+-> 'LPL/2026 Season'), so a new season started with the previous season's offset. Event is now the exact page; lolesports-only
+`LE:<league>` pages (a league, not an event) get no offset. Exact identity also splits Worlds 'Main Event' from 'Play-In'.
+Study helper fixed the same way (r2_t4b_scoped.py event_of). Re-run, post-registration information only, NOT a pass (same
+contaminated days): V2 (shipped form) playable 583-479 (54.9) -> 591-453 (56.6), +1.71 [0.40, 3.20] day / [0.14, 3.35]
+series, bad days 9 -> 6, Over share 54.5 -> 50.3; all graded +0.73 [-0.65, 2.10] series; letters -0.50; playable letters
++0.00 with Over share 52.0 -> 45.8. V1 +2.12 [0.20, 4.07] series, 9 -> 6. The live so1_offsets on the Nov 5 copy matches the
+re-run study's 11-05 cells (Worlds Main Event kills/assists Maps 1-3: 20 player-markets each, no offset; before the fix Main
+Event + Play-In pooled to 40 and gave one). Evidence: postreg/t4b_scoped_exactpage.json, postreg/so1_live_check_exactpage.json
+(the pre-fix files are kept). Tests: test_event_is_the_exact_tournament_page, test_a_previous_season_page_never_gives_a_new_
+season_an_offset, test_lolesports_league_pages_never_pool, test_forecast_path_with_real_offsets_uses_only_the_exact_page.
+**Rollback note (lpf-1 + so-1):** while so-1 is on, `LOL_LPF1=0` alone gives lol-1f+so-1, NOT the known lol-1f grades. A full
+rollback to lol-1f needs `LOL_LPF1=0` AND `LOL_SCOPE_OFFSET=0` (the default, or unset).
 **Relation to ep-1 / ep-2 / ep-3 (A8, A15, A16, all FAILED).** Those were one event-pace multiplier per event (all scopes
 alike, shrunk by K), judged by the NB log-score rule (i); ep-2 / ep-3 failed (i) with chosen-side hit +2.5 / +0.9 pts. so-1
 is a separate multiplier per stat x scope cell (it carries the Maps 1-3 vs Map 1 / Maps 1-2 offset the audit found: kills
@@ -1018,7 +1036,7 @@ offered lines, volume, balance; log loss is information only) plus the bad-day g
 its pass is thin: the shipped form's bad-day drop (9 -> 7) is exactly the gate's minimum; on the 13 original days the gain
 is mostly rows moving to an unoffered side (W 500 -> 498, L 398 -> 374), the added wins are on the 5 development days (83-81
 -> 94-79); on the fixed all-graded set it is +0.73 (series CI -0.69, 2.12), bad days 7 -> 5; playable-letters Over share
-52.0 -> 46.2 (primary 54.5 -> 50.8). At ship it is dormant (a new event starts at no offset) and lol-1f is only the fallback.
+52.0 -> 46.2 (primary 54.5 -> 50.8). With the default (off) it is never computed; on, it is dormant at first (a new event starts at no offset) and lol-1f is only the fallback.
 
 **rp-1 (shipped behind `LOL_RECORD_PLAYABLE`, default on, rollback =0):** the slip band table (workspace_api._lol_settled) also
 leaves out one-sided lines, as the member record (lol/center/learning.dashboard in_record) already did: 1,216 -> 1,068 a15 rows,

@@ -1,5 +1,5 @@
 """so-1 (LoL round 2, 2026-11-21): the event-scoped stat x scope offset on the lol-1f projection (flag LOL_SCOPE_OFFSET,
-default on, rollback =0). It touches only lol-1f forecasts, never lpf-1 ones; the pool uses the projection BEFORE any
+default OFF = shadow; LOL_SCOPE_OFFSET=1 turns it on). Event = the exact tournament page. It touches only lol-1f forecasts, never lpf-1 ones; the pool uses the projection BEFORE any
 offset (no feedback); a cell under 30 settled player-markets gives no offset; a read failure keeps the last good offsets
 and is never cached. Every team, player and number is a TEST FIXTURE."""
 import json
@@ -11,7 +11,7 @@ from lol.center import forecast, store
 from lol.tests.test_consolidation import _future_world
 from lol.tests.test_lpf1_live import _Stub
 
-EV = "Test League 2026"            # _future_world's series page (no stage segment)
+EV = "Test League 2026"            # _future_world's series page
 
 
 @pytest.fixture
@@ -25,34 +25,46 @@ def con(tmp_path, monkeypatch):
 
 def _strip(f):
     f = dict(f)
-    for k in ("id", "forecast_at", "quote_observed_at", "series_start"):
+    for k in ("id", "forecast_at", "quote_observed_at", "series_start", "state_sha"):   # state_sha hashes series_start (now + 2 d)
         f.pop(k, None)
     inp = json.loads(f.pop("inputs"))
     inp.pop("history_since", None)
     return f, inp
 
 
-def test_event_drops_only_the_stage():
-    assert forecast.so1_event("2026 Season World Championship/Main Event") == "2026 Season World Championship"
-    assert forecast.so1_event("2026 Season World Championship/Play-In") == "2026 Season World Championship"
-    assert forecast.so1_event("EMEA Masters/2026 Season/Summer Main Event") == "EMEA Masters/2026 Season"
-    assert forecast.so1_event("Test League 2026") == "Test League 2026"
+def test_event_is_the_exact_tournament_page():
+    """Round-2 review fix: seasons / splits / stages of one league are different events (exact page identity)."""
+    assert forecast.so1_event("Legends Premier League/Season 4") == "Legends Premier League/Season 4"
+    assert forecast.so1_event("Legends Premier League/Season 4") != forecast.so1_event("Legends Premier League/Season 5")
+    assert forecast.so1_event("LPL/2026 Season/Split 1") != forecast.so1_event("LPL/2026 Season/Split 2")
+    assert forecast.so1_event("2026 Season World Championship/Main Event") != forecast.so1_event("2026 Season World Championship/Play-In")
+    assert forecast.so1_event(" Test League 2026 ") == "Test League 2026"
     assert forecast.so1_event("") is None and forecast.so1_event(None) is None
+    assert forecast.so1_event("LE:lpl") is None                        # lolesports league page: not an event, no offset
 
 
-def test_flag_default_on_and_0_is_the_rollback(con, tmp_path, monkeypatch):
+def test_flag_default_off_and_1_turns_it_on(con, tmp_path, monkeypatch):
     monkeypatch.delenv("LOL_SCOPE_OFFSET", raising=False)
-    assert forecast.so1_on()
-    monkeypatch.setenv("LOL_SCOPE_OFFSET", "0")
     assert not forecast.so1_on() and forecast.so1_state(con, object()) is None
+    monkeypatch.setenv("LOL_SCOPE_OFFSET", "0")
+    assert not forecast.so1_on()
+    monkeypatch.setenv("LOL_SCOPE_OFFSET", "1")
+    assert forecast.so1_on()
 
 
-def _run(con, tmp_path, monkeypatch, offsets, flag=None):
+def test_default_unset_saves_a_plain_lol1f_record(con, tmp_path, monkeypatch):
     monkeypatch.setenv("LOL_LPF1", "0")
-    if flag is None:
-        monkeypatch.delenv("LOL_SCOPE_OFFSET", raising=False)
-    else:
-        monkeypatch.setenv("LOL_SCOPE_OFFSET", flag)
+    monkeypatch.delenv("LOL_SCOPE_OFFSET", raising=False)
+    monkeypatch.setattr(forecast, "so1_offsets", lambda c: {(EV, "kills", "12"): (-0.1, 40)})
+    db, start, raw = _future_world(con, tmp_path, monkeypatch)
+    assert forecast.run(con, db)["saved"] == 1
+    f = dict(con.execute("SELECT * FROM lol_forecasts").fetchone())
+    assert f["model_version"] == "lol-1f" and "scope_offset" not in json.loads(f["inputs"])
+
+
+def _run(con, tmp_path, monkeypatch, offsets, flag="1"):
+    monkeypatch.setenv("LOL_LPF1", "0")
+    monkeypatch.setenv("LOL_SCOPE_OFFSET", flag)
     monkeypatch.setattr(forecast, "so1_offsets", lambda c: offsets)
     db, start, raw = _future_world(con, tmp_path, monkeypatch)
     assert forecast.run(con, db)["saved"] == 1
@@ -72,10 +84,12 @@ def test_offset_scales_the_lol1f_projection_and_is_recorded(con, tmp_path, monke
 
 def test_rollback_and_other_events_and_thin_cells_change_nothing(tmp_path, monkeypatch):
     outs = []
-    for i, (offs, flag) in enumerate([({}, None),                                          # no cells at all
+    for i, (offs, flag) in enumerate([({}, "1"),                                           # no cells at all
                                       ({(EV, "kills", "12"): (-0.1, 40)}, "0"),             # rollback
-                                      ({("Other Event", "kills", "12"): (-0.1, 40)}, None),  # another event's offsets
-                                      ({(EV, "kills", "12"): (0.0, 12)}, None)]):           # under 30 pm -> c = 0
+                                      ({(EV, "kills", "12"): (-0.1, 40)}, ""),              # empty: default off
+                                      ({("Other Event", "kills", "12"): (-0.1, 40)}, "1"),   # another event's offsets
+                                      ({(EV + "/Season 4", "kills", "12"): (-0.1, 40)}, "1"),  # another season's page
+                                      ({(EV, "kills", "12"): (0.0, 12)}, "1")]):            # under 30 pm -> c = 0
         monkeypatch.setenv("LOL_CENTER_DB", str(tmp_path / f"c{i}.db"))
         monkeypatch.setattr(forecast, "_SO1_LAST", {"offsets": None})
         c = store.connect()
@@ -91,7 +105,7 @@ def test_rollback_and_other_events_and_thin_cells_change_nothing(tmp_path, monke
 
 
 def test_lpf1_answers_are_never_touched(con, tmp_path, monkeypatch):
-    monkeypatch.delenv("LOL_SCOPE_OFFSET", raising=False)
+    monkeypatch.setenv("LOL_SCOPE_OFFSET", "1")
     monkeypatch.setattr(forecast, "so1_offsets", lambda c: {(EV, "kills", "12"): (-0.3, 99)})
     db, start, raw = _future_world(con, tmp_path, monkeypatch)
     monkeypatch.setattr(forecast, "lpf1_state", lambda c, h, *a, **k: {"proj": _Stub(), "stats": ("kills",), "version": "lpf-1",
@@ -109,7 +123,7 @@ def test_lpf1_answers_are_never_touched(con, tmp_path, monkeypatch):
     assert inp0["lpf1"]["lambda_game_lol1f"] == lam_game and inp0["lpf1"]["lambda_lol1f"] == inp["lpf1"]["lambda_lol1f"]
 
 
-def _seed(con, n, stat="kills", scope="12", page="Test League 2026/Main Event", actual=5.0, lam=6.0, mv="lol-1f", inputs=None):
+def _seed(con, n, stat="kills", scope="12", page="Test League 2026", actual=5.0, lam=6.0, mv="lol-1f", inputs=None):
     for i in range(n):
         sid = f"s{i}"
         con.execute("INSERT OR IGNORE INTO c_series (sid, tournament_page) VALUES (?, ?)", (sid, page))
@@ -134,7 +148,7 @@ def test_offsets_need_30_player_markets_and_use_the_projection_before_any_offset
     _seed(con, 20)
     for i in range(20, 30):
         sid = f"s{i}"
-        con.execute("INSERT INTO c_series (sid, tournament_page) VALUES (?, 'Test League 2026/Main Event')", (sid,))
+        con.execute("INSERT INTO c_series (sid, tournament_page) VALUES (?, 'Test League 2026')", (sid,))
         con.execute("INSERT INTO lol_forecasts (forecast_at, platform, market_key, line, sid, pid, stat, scope, series_start, model_version, "
                     "lambda, inputs) VALUES ('2026-11-01T00:00:00Z', 'underdog', ?, 4.5, ?, 'p1', 'kills', '12', '2026-11-01T01:00:00Z', ?, ?, ?)",
                     (f"m{i}", sid, "lpf-1" if i % 2 else "lol-1f+so-1", 50.0,
@@ -149,7 +163,7 @@ def test_offsets_need_30_player_markets_and_use_the_projection_before_any_offset
 def test_a_read_failure_keeps_the_last_good_offsets_and_is_never_cached(con, monkeypatch):
     class H:
         pass
-    monkeypatch.delenv("LOL_SCOPE_OFFSET", raising=False)
+    monkeypatch.setenv("LOL_SCOPE_OFFSET", "1")
 
     def boom(c):
         raise RuntimeError("locked")
@@ -181,7 +195,7 @@ def test_maps_1_3_on_a_best_of_3_scales_every_mixture_part(con, tmp_path, monkey
     from lol.tests.test_audit_g_lol import _world
     from lol.tests.test_consolidation import RR
     monkeypatch.setenv("LOL_LPF1", "0")
-    monkeypatch.delenv("LOL_SCOPE_OFFSET", raising=False)
+    monkeypatch.setenv("LOL_SCOPE_OFFSET", "1")
     monkeypatch.setattr(forecast, "so1_offsets", lambda c: {(EV, "kills", "123"): (-0.2, 50)})
     db, start, raw = _world(con, tmp_path, monkeypatch, stat="kills_on_maps_1_2_3")
     assert forecast.run(con, db)["saved"] == 1
@@ -206,3 +220,36 @@ def test_rollback_on_the_same_database_saves_a_plain_lol1f_record_next_cycle(con
     g = dict(con.execute("SELECT * FROM lol_forecasts ORDER BY id DESC LIMIT 1").fetchone())
     assert g["model_version"] == "lol-1f" and "scope_offset" not in json.loads(g["inputs"])
     assert g["lambda"] == pytest.approx(json.loads(f["inputs"])["scope_offset"]["lambda_before"], abs=1e-3)
+
+
+def test_a_previous_season_page_never_gives_a_new_season_an_offset(con):
+    """Round-2 review bug: 'Legends Premier League/Season 4' and '/Season 5' were one event (last '/' segment dropped), so the
+    old season's settled lines offset the new season from day one. Exact page identity keeps them apart."""
+    _seed(con, 30, page="Legends Premier League/Season 4")
+    offs = forecast.so1_offsets(con)
+    c, n = offs[("Legends Premier League/Season 4", "kills", "12")]
+    assert n == 30 and math.isclose(c, math.log(5.0 / 6.0), abs_tol=1e-9)
+    assert ("Legends Premier League", "kills", "12") not in offs
+    assert offs.get((forecast.so1_event("Legends Premier League/Season 5"), "kills", "12"), (0.0, 0)) == (0.0, 0)
+
+
+def test_lolesports_league_pages_never_pool(con):
+    _seed(con, 30, page="LE:lpl")
+    assert forecast.so1_offsets(con) == {}
+
+
+@pytest.mark.parametrize("page, offset", [("Test League 2026/Season 4", False),   # the old rule merged this into 'Test League 2026'
+                                          ("Test League 2026", True)])            # exact page: the event's own lines
+def test_forecast_path_with_real_offsets_uses_only_the_exact_page(con, tmp_path, monkeypatch, page, offset):
+    monkeypatch.setenv("LOL_LPF1", "0")
+    monkeypatch.setenv("LOL_SCOPE_OFFSET", "1")
+    db, start, raw = _future_world(con, tmp_path, monkeypatch)
+    _seed(con, 30, scope="12", page=page)
+    assert forecast.run(con, db)["saved"] == 1
+    f = dict(con.execute("SELECT * FROM lol_forecasts WHERE market_key NOT LIKE 'mk%' ORDER BY id DESC LIMIT 1").fetchone())
+    inp = json.loads(f["inputs"])
+    if offset:
+        assert f["model_version"] == "lol-1f+so-1" and inp["scope_offset"]["event"] == EV
+        assert math.isclose(inp["scope_offset"]["c"], math.log(5.0 / 6.0), abs_tol=1e-4)
+    else:
+        assert f["model_version"] == "lol-1f" and "scope_offset" not in inp
