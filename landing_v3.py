@@ -282,8 +282,11 @@ def _offer_cell(r, lead, bands=None):
     l10 = _l10(r)
     be = _pct((r.get("parity") or {}).get("be"))
     l10s = f"{l10[0]} of {l10[1]}" if l10 else ""
+    seen, graded = _ts(of.get("seen_at")), _ts(sc.get("forecast_at"))
     data = (f' data-p="{esc(p)}" data-side="{side}" data-g="{esc(sc.get("grade") or "")}" data-line="{esc(_num(of.get("line")))}"'
-            f' data-app="{esc(of.get("platform_label") or "")}" data-l10="{esc(l10s)}" data-be="{esc(be or "")}"'
+            f' data-app="{esc(of.get("platform_label") or "")}" data-l10="{esc(l10s)}" data-h="{l10[0] if l10 else ""}" data-n="{l10[1] if l10 else ""}"'
+            f' data-be="{esc(be or "")}" data-entry="{esc((r.get("parity") or {}).get("entry") or "")}"'
+            f' data-seen="{seen.strftime("%H:%M") if seen else ""}" data-graded="{esc(_when(graded))}"'
             f' data-band="{esc(_band_text(bands, sc.get("grade")))}"')
     return (f'<button type="button" class="bk{" on" if lead else ""}"{data}'
             f' aria-pressed="{"true" if lead else "false"}"><b>{tag}</b><span>{esc(_num(of.get("line")))}</span>{mv}</button>')
@@ -333,23 +336,26 @@ def _detail(i, lead, bands, opened):
     band = _band_text(bands, sc.get("grade"))
     graded, seen = _ts(sc.get("forecast_at")), _ts(of.get("seen_at"))
     app = esc(of.get("platform_label") or "")
+    hid = lambda v: "" if v else " hidden"
     cells = [f'<div><dt>Grade at this line</dt><dd><b class="gt {_gcls(sc.get("grade"))}" data-k="g">{esc(sc.get("grade") or "–")}</b></dd></div>',
-             f'<div><dt>Scout\'s chance at exactly <span data-k="line">{line}</span></dt><dd class="big"><b data-k="p">{esc(p)}</b>%</dd></div>']
+             f'<div><dt>Scout&#x27;s chance at exactly <span data-k="line">{line}</span></dt><dd class="big"><b data-k="p">{esc(p)}</b>%</dd></div>']
     if isinstance(proj, (int, float)):
         cells.append(f'<div><dt>Why</dt><dd>Projection <b>{float(proj):.1f}</b> vs line <b data-k="line">{line}</b></dd></div>')
-    if l10:
-        cells.append(f'<div><dt>Last 10 at this line</dt><dd><b data-k="l10">{l10[0]} of {l10[1]}</b> went <span data-k="side">{side}</span></dd></div>')
-    if be:
-        cells.append(f'<div><dt>Break-even, {esc(par.get("entry") or "this entry")}</dt><dd><b data-k="be">{esc(be)}</b>%</dd></div>')
-    foot = " · ".join(x for x in ((f"Graded {_when(graded)}" if graded else ""),
-                                   (f"{app} line seen {seen.strftime('%H:%M')} UTC" if seen else "")) if x)
+    l10s = f"{l10[0]} of {l10[1]}" if l10 else ""
+    cells.append(f'<div data-c="l10"{hid(l10)}><dt>Last 10 at this line</dt><dd><b data-k="l10">{l10s}</b>'
+                 f' went <span data-k="side">{side}</span></dd></div>')
+    cells.append(f'<div data-c="be"{hid(be)}><dt>Break-even, <span data-k="entry">{esc(par.get("entry") or "")}</span></dt>'
+                 f'<dd><b data-k="be">{esc(be or "")}</b>%</dd></div>')
+    gtxt, stxt = _when(graded), (seen.strftime("%H:%M") if seen else "")
+    foot = (f'<span data-c="graded"{hid(gtxt)}>Graded <span data-k="graded">{esc(gtxt)}</span></span>'
+            f'<span data-c="seen"{hid(stxt)}> · <span data-k="app">{app}</span> line seen <span data-k="seen">{stxt}</span> UTC</span>')
     return (f'<div class="dt" id="td{i}"{"" if opened else " hidden"}>'
             f'<p class="dt-h"><b data-k="side">{side}</b> <b data-k="line">{line}</b> {esc(mk.get("stat_label"))} · {esc(mk.get("period_label"))}'
             f' <span class="dt-app">on <span data-k="app">{app}</span></span></p>'
             f'<dl class="dt-g">{"".join(cells)}</dl>'
             f'<p class="dt-rec"{"" if band else " hidden"}>On the record, CS2 calls graded <b data-k="g">{esc(sc.get("grade") or "")}</b>: '
             f'<b class="wl" data-k="band">{esc(band)}</b> <a href="/record">See them all <span aria-hidden="true">→</span></a></p>'
-            f'{f"<p class=dt-f>{foot}</p>" if foot else ""}'
+            f'<p class="dt-f">{foot}</p>'
             f'</div>')
 
 
@@ -369,12 +375,12 @@ def terminal(board, bands=None):
         l10 = _l10(lead)
         be = _pct((lead.get("parity") or {}).get("be"))
         chips = ('<em class="chip gap">Line gap</em>' if gap else "") + ('<em class="chip mvd">Moved</em>' if moved else "")
-        dots = f'<span class="l10" title="Last 10 at this line"><b>{l10[0]}</b>/{l10[1]}</span>' if l10 else ""
+        dots = f'<span class="l10" title="Last 10 at this line"{"" if l10 else " hidden"}><b>{l10[0] if l10 else ""}</b>/<i>{l10[1] if l10 else ""}</i></span>'
         start = _ts(ev.get("start_utc"))
         opened = i == 0
         when = (" · " + esc(start.strftime("%a %H:%M")) + " UTC") if start else ""
-        bee = f'<u style="--b:{esc(be)}"></u>' if be else ""
-        bes = f"<small>break-even {esc(be)}%</small>" if be else ""
+        bee = f'<u style="--b:{esc(be or 0)}"{"" if be else " hidden"}></u>'
+        bes = f'<small{"" if be else " hidden"}>break-even <b>{esc(be or "")}</b>%</small>'
         rows.append(
             f'<li class="tr{" open" if opened else ""}" data-sport="cs2">'
             f'<button type="button" class="who" aria-expanded="{"true" if opened else "false"}" aria-controls="td{i}">'
@@ -557,8 +563,8 @@ def _widget(seed, bands, saved_at):
     sc, of, pl = seed.get("scout") or {}, seed.get("offer") or {}, seed.get("player") or {}
     line, lam = float(of.get("line")), float(sc.get("projection"))
     lo, hi = max(0.5, math.floor(lam * 0.5) + 0.5), math.floor(lam * 1.5) + 0.5
-    cuts = [[c, g] for c, g in CUTS]
-    bt = {g: _band_text(bands, g) for _c, g in CUTS if _band_text(bands, g)}
+    cuts = [[c, g] for c, g in CUTS if c <= KILLS_CAP]      # kills are capped at 78% either side: no A+ on kills (grader p_cap_kills)
+    bt = {g: _band_text(bands, g) for _c, g in cuts if _band_text(bands, g)}
     g = sc.get("grade") or ""
     data = {"proj": round(lam, 2), "line": line, "spread": KILLS_SPREAD, "cap": KILLS_CAP, "cuts": cuts, "bands": bt}
     return {
@@ -566,7 +572,7 @@ def _widget(seed, bands, saved_at):
         "GW_WHO": esc(pl.get("name")), "GW_PROJ": f"{lam:.1f}", "GW_LINE": esc(_num(line)), "GW_MIN": _num(lo), "GW_MAX": _num(hi),
         "GW_SIDE": "Over" if sc.get("side") == "over" else "Under", "GW_P": esc(_pct(sc.get("p_side"))), "GW_G": esc(g),
         "GW_GCLS": _gcls(g), "GW_BAND": esc(bt.get(g, "")), "GW_RECHIDE": "" if bt.get(g) else " hidden", "GW_ASOF": esc(saved_at),
-        "GW_LADDER": "".join(f'<li data-g="{x}"{" class=on" if x == g else ""}>{x}</li>' for x in ("Lean",) + tuple(reversed([c[1] for c in CUTS]))),
+        "GW_LADDER": "".join(f'<li data-g="{x}"{" class=on" if x == g else ""}>{x}</li>' for x in ["Lean"] + [c[1] for c in reversed(cuts)]),
     }
 
 
@@ -601,6 +607,7 @@ def build(srv, join_url, fetch=True):
         "SPORT_CHIPS": "".join(f'<li data-sport="{s}">{LABEL[s]}</li>' for s in sp),
         "SPORT_LIST": esc(_list([LONG[s] for s in sp])),
         "SPORT_SHORT": esc(_list([LABEL[s] for s in sp])),
+        "SPORT_REST": esc(_list([LONG[s] if s in ("nba", "nfl") else LONG[s].lower() for s in sp if s not in ("cs2", "lol")])),
         "SPORT_N": str(len(sp)),
         "BOOK_N": str(len(BOOKS)),
         "BOOK_CHIPS": "".join(f"<li>{b}</li>" for b in BOOKS),
@@ -611,7 +618,7 @@ def build(srv, join_url, fetch=True):
         "FRESH_MIN": str(FRESH_MIN),
         "TERM_N": str(nrows),
         "TERM_MORE": f"{more:,}",
-        "TERM_MORE_WORD": "prop" if more == 1 else "props",
+        "TERM_MORE_PHONE": f"{more + max(0, nrows - 3):,}",
         "LEDGER": cells,
         "LEDGER_ASOF": esc(asof),
         "LEDGER_TOTAL": f"{total:,}" if total else "",

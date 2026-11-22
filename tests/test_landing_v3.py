@@ -313,14 +313,14 @@ def test_rows_open_in_place_with_the_card_read_and_the_letters_own_record(srv, m
     assert all('aria-expanded="false"' in r and ' hidden>' in r for r in rows[1:])
     assert 'Scout&#x27;s chance at exactly <span data-k="line">12.5</span>' in rows[0] or "Scout's chance at exactly <span data-k=\"line\">12.5</span>" in rows[0]
     assert 'data-k="p">58.3<' in rows[0]
-    assert 'data-k="l10">6 of 10<' in rows[0] and "Break-even, Underdog standard 2-pick" in rows[0]
+    assert 'data-k="l10">6 of 10<' in rows[0] and 'Break-even, <span data-k="entry">Underdog standard 2-pick</span>' in rows[0]
     assert "Projection" not in rows[0]                                  # no projection on the record: no "why" line, never a guess
     zeta = rows[2]
     assert "Projection <b>32.4</b> vs line" in zeta
     assert "On the record, CS2 calls graded" in zeta and "1,137-1,026-19" in zeta     # B's band from /api/record
     assert 'data-band=""' in rows[0] and 'class="dt-rec" hidden' in rows[0]           # B- has no band: the line is hidden
     assert 'data-band="214-192-5"' in rows[1]                                          # each app's line carries its own letter's band
-    assert "Graded Nov 22, 10:01 UTC" in s
+    assert "Graded <span data-k=\"graded\">Nov 22, 10:01 UTC</span>" in s
     for r in rows:                                                     # the member card's stake never shows on the public page
         assert "Stake" not in r and "0.5U" not in r and "units" not in r.lower()
 
@@ -332,7 +332,9 @@ def test_the_board_gate_counts_the_other_graded_markets_live_only(srv, monkeypat
     seed(srv, monkeypatch, b)
     s = build(srv).decode("utf-8")
     assert len(re.findall(r'<li class="tr[^"]*"', s)) == 6
-    assert "4 more letter-graded CS2 props on this board" in s and "Join to open the board" in s      # 3 + 7 graded markets - 6 shown
+    # 3 + 7 graded markets - 6 shown (desktop); phones show 3 rows, so their count is 3 higher
+    assert '<span class="n-d">4</span><span class="n-m">7</span> more letter-graded CS2 props on this board' in s
+    assert "Join to open the board" in s
     assert re.search(r'<a class="gate" href="([^"]+)"', s).group(1) == JOIN.replace("&", "&amp;")
 
 
@@ -350,7 +352,10 @@ def test_move_the_line_only_when_the_formula_reproduces_the_row(srv, monkeypatch
     s = build(srv).decode("utf-8")
     assert 'id="gw"' in s and "projection is <b>32.4</b>" in s
     cfg = json.loads(html.unescape(re.search(r'data-gw="([^"]+)"', s).group(1)))
-    assert cfg["proj"] == 32.4 and cfg["line"] == 30.5 and cfg["bands"]["B"] == "1,137-1,026-19" and cfg["cuts"][0] == [0.8, "A+"]
+    assert cfg["proj"] == 32.4 and cfg["line"] == 30.5 and cfg["bands"]["B"] == "1,137-1,026-19" and cfg["cuts"][0] == [0.74, "A"]
+    import grader as g
+    assert g.CONFIG["p_cap_kills"] == landing_v3.KILLS_CAP
+    assert 'data-g="A+"' not in s and 'data-g="A"' in s                # kills are capped at 78%: the ladder stops at A
     assert f'id="gw-p">{round(p, 4) * 100:.1f}<' in s
     b["records"][0]["scout"]["p_side"] = round(p + 0.02, 4)              # the board's number differs (another model): no widget
     workspace_api._SNAP["body"] = json.dumps(b).encode()

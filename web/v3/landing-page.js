@@ -57,13 +57,19 @@
     if (d.p && mt) mt.style.setProperty('--p', d.p);
     if (sd && d.side) sd.textContent = d.side;
     if (g) { g.textContent = gv; g.className = gcls(gv); }
-    var map = { p: d.p, side: d.side, g: gv, line: d.line, app: d.app, l10: d.l10, be: d.be, band: d.band };
+    /* the row's last 10 and break-even, and the meter's break-even tick, follow the tapped line (hidden when that line has none) */
+    var l10 = $('.rc .l10', row), bes = $('.rc small', row), tick = $('.mt u', row);
+    if (l10) { l10.hidden = !d.n; $('b', l10).textContent = d.h || ''; $('i', l10).textContent = d.n || ''; }
+    if (bes) { bes.hidden = !d.be; $('b', bes).textContent = d.be || ''; }
+    if (tick) { tick.hidden = !d.be; if (d.be) tick.style.setProperty('--b', d.be); }
+    /* the open read: every value and label comes from the tapped line; a cell whose value that line lacks is hidden, never kept */
+    var map = { p: d.p, side: d.side, g: gv, line: d.line, app: d.app, l10: d.l10, be: d.be, entry: d.entry, seen: d.seen, graded: d.graded, band: d.band };
     $$('.dt [data-k]', row).forEach(function (n) {
       var k = n.getAttribute('data-k'), v = map[k];
-      if (v == null || v === '') return;
-      n.textContent = v;
+      n.textContent = v == null ? '' : v;
       if (k === 'g' && n.classList.contains('gt')) n.className = 'gt ' + gcls(gv);
     });
+    $$('.dt [data-c]', row).forEach(function (n) { n.hidden = !map[n.getAttribute('data-c')]; });
     var rec = $('.dt-rec', row);
     if (rec) rec.hidden = !d.band;
   });

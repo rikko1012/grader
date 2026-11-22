@@ -359,3 +359,30 @@ def test_landing_v3_web_vitals_lcp_and_cls(browser, lbase, size):
         assert cls < 0.1, cls
     finally:
         ctx.close()
+
+
+def test_landing_v3_a_line_without_last_10_hides_it_never_keeps_the_other_lines(browser, base, monkeypatch):
+    b = board()
+    pp = next(r for r in b["records"] if r["offer"]["platform"] == "prizepicks")
+    pp["history"] = {"l10": None}
+    pp["parity"] = {"be": 0.577, "entry": "PrizePicks power 2-pick"}
+    pp["offer"]["seen_at"] = "2026-11-22T10:04:00+00:00"
+    monkeypatch.setattr(workspace_api, "_SNAP", dict(workspace_api._SNAP, body=json.dumps(b).encode()))
+    monkeypatch.setattr(workspace_api, "snapshot", lambda s: workspace_api._SNAP)
+    landing_v3.reset()
+    warm(base, 0)
+    ctx, page = open_page(browser, base, DESK, "dark")
+    try:
+        row = page.locator(".tr").first
+        assert row.locator('.dt [data-c="l10"]').is_visible() and row.locator(".rc .l10").is_visible()
+        row.locator("button.bk", has_text="13.5").click()
+        assert not row.locator('.dt [data-c="l10"]').is_visible() and not row.locator(".rc .l10").is_visible()
+        assert row.locator('.dt [data-k="entry"]').text_content() == "PrizePicks power 2-pick"
+        assert row.locator('.dt [data-k="be"]').text_content() == "57.7" and row.locator(".rc small b").text_content() == "57.7"
+        assert row.locator('.dt [data-k="seen"]').text_content() == "10:04"
+        row.locator("button.bk", has_text="12.5").click()
+        assert row.locator('.dt [data-k="l10"]').text_content() == "6 of 10" and row.locator(".rc .l10").is_visible()
+        assert row.locator('.dt [data-k="entry"]').text_content() == "Underdog standard 2-pick"
+        assert not page.errors, page.errors
+    finally:
+        ctx.close()

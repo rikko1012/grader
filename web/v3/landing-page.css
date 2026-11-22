@@ -570,3 +570,6 @@ h2{font:600 clamp(30px,6.4vw,48px)/1.04 var(--sc-font);letter-spacing:var(--sc-t
   .kv+.kv{display:none}
   .pool-h{margin-bottom:10px}
 }
+.gate .n-m{display:none}
+@media (max-width:999px){.gate .n-d{display:none}.gate .n-m{display:inline}}
+.l10 i{font-style:normal}

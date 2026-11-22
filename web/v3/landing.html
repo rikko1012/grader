@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>1time Scout · Know the chance before you pick</title>
-<meta name="description" content="Scout grades player props at the exact line your app shows, tells you why, and saves every call before the game so you can check the score. CS2 and League built in, plus NBA, NFL, soccer and tennis.">
+<meta name="description" content="Scout grades player props at the exact line your app shows, tells you why, and saves every call before the game so you can check the score. CS2 and League built in, plus {{SPORT_REST}}.">
 <meta name="theme-color" content="#080B13">
 <meta name="color-scheme" content="dark">
 <meta property="og:type" content="website">
@@ -75,7 +75,7 @@
       <div class="th" aria-hidden="true"><span>Player</span><span>Market</span><span>Line by app</span><span>Scout's chance</span><span>Grade</span><span>Last 10</span></div>
       <ol class="rows">{{TERM_ROWS}}</ol>
       <div class="term-foot">
-        <!--if:MORE--><a class="gate" href="{{JOIN_URL}}"><b>{{TERM_MORE}} more letter-graded CS2 {{TERM_MORE_WORD}} on this board</b><span>Join to open the board <i aria-hidden="true">→</i></span></a><!--/if:MORE-->
+        <!--if:MORE--><a class="gate" href="{{JOIN_URL}}"><b><span class="n-d">{{TERM_MORE}}</span><span class="n-m">{{TERM_MORE_PHONE}}</span> more letter-graded CS2 props on this board</b><span>Join to open the board <i aria-hidden="true">→</i></span></a><!--/if:MORE-->
         <!--if:SAVED--><p class="saved">A saved board: real rows exactly as members saw them at the time above.</p><!--/if:SAVED-->
         <p>Picked by one rule: props with a letter grade, two-app line gaps first, then moved lines, then the soonest. Tap a player for the full read, or an app's line for Scout's chance at that line. A grade is a chance, not a promise.</p>
       </div>

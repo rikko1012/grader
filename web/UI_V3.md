@@ -49,7 +49,7 @@ The page files on disk are never edited.
 | `/sports`, `/sports/` | `sports` | member | nba |
 | `/sports/results` | `sports-results` | member | nba |
 | `/record` (public; needs `SCOUT_PUBLIC_RECORD=1`) | `record` | record | cs2 |
-| `/` signed out, `/preview/v3/landing` | `landing` | landing | cs2 |
+| `/` signed out, `/preview/v3/landing` | `landing` | none: `landing_v3.py` serves `web/v3/landing.html` with tokens + `landing-page.css/js` inlined (one cached body per build) | cs2 |
 
 ## Bundles (fixed names; the server concatenates `web/v3/` files in this order)
 
@@ -181,7 +181,7 @@ own quick filters `#hub-movedOnly` / `#hub-diff` (one board view at a time). `te
 
 **Classic views** (`?view=classic`). The shell does not recolour or re-font the page. It pads the body for the bar and keeps classic sticky headers at `top: 56px`.
 
-**Theme.** Light/dark use the same `scout-theme` key as the hub. With no stored value, the OS setting is followed.
+**Theme.** Light/dark use the same `scout-theme` key as the hub. With no stored value, the OS setting is followed. The signed-out landing is pinned dark (`data-theme="dark"`).
 
 **Public pages.** `record` and `landing` load the `ScoutV3` API and tokens but no member header. Their own header belongs to C and D.
 
