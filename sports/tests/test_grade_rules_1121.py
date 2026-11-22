@@ -19,7 +19,8 @@ OVER_ONLY = (SideQuote("over", True), SideQuote("under", False))
 
 @pytest.fixture(autouse=True)
 def _flags(monkeypatch):
-    for k in ("NBA_MVLEAN1", "SPORTS_PP_ONESIDED", "SPORTS_GP_SIDE_FIX", "SPORTS_LATEST_LINE", "NBA_BEST_PROP"):
+    for k in ("NBA_MVLEAN1", "SPORTS_PP_ONESIDED", "SPORTS_GP_SIDE_FIX", "SPORTS_LATEST_LINE", "NBA_BEST_PROP",
+              "NBA_MVLEAN1_FROM"):
         monkeypatch.delenv(k, raising=False)
 
 
@@ -110,11 +111,11 @@ def test_prizepicks_line_listing_one_side_is_one_sided_and_never_graded(monkeypa
 
 
 def test_side_hold_never_letters_a_side_the_quote_does_not_offer():
-    q = {"sides": [{"side": "over", "offered": True}, {"side": "under", "offered": False}]}
+    q = {"platform": "prizepicks", "sides": [{"side": "over", "offered": True}, {"side": "under", "offered": False}]}
     hold = grade_rules.side_hold(q, {"ln": "under", "gr": "B"})
     assert hold["b"] == "side" and "Over only" in hold["t"]
     assert grade_rules.side_hold(q, {"ln": "over", "gr": "B"}) is None
-    assert grade_rules.side_hold({"o": [1, 1]}, {"ln": "under", "gr": "B"}) is None
+    assert grade_rules.side_hold({"platform": "prizepicks", "o": [1, 1]}, {"ln": "under", "gr": "B"}) is None
 
 
 # ------------------------------------------------------------------------------------------------ gp-1 sides
@@ -165,7 +166,8 @@ def test_two_books_keep_their_own_latest_lines():
     assert [r["forecast_id"] for r in results_public.representative(rows)] == ["pp"]   # pp's 20.5 is still pp's latest
 
 
-def test_record_grade_table_counts_mvlean_rows_as_lean():
+def test_record_grade_table_counts_mvlean_rows_as_lean(monkeypatch):
+    monkeypatch.setenv("NBA_MVLEAN1_FROM", "2026-11-01T00:00:00Z")
     rows = [_rec("f1", 20.5, "2026-11-20T12:00:00Z", p=0.7, mean=24.0),
             _rec("f2", 21.5, "2026-11-20T18:00:00Z", p=0.7, mean=24.0)]      # moved +1.0 toward Over since open 20.5
     reps = results_public.representative(rows)
@@ -267,3 +269,57 @@ def test_snapshot_build_applies_mvlean_end_to_end(tmp_path, moved_line, demoted)
     q3 = qs.get(r3)
     assert q3 is None or not (q3.get("x") or {}).get("gr")      # Over-only PrizePicks line: never a letter
     con.close()
+
+
+def test_board_file_and_workspace_record_carry_the_featured_mark(tmp_path):
+    import workspace_sports
+    from sports import snapshots, store
+    con = store.connect()
+    r2, _ = _build_world(con, 19.5)
+    snapshots.build(con, "nba", now="2026-10-23T21:00:00Z", base=tmp_path, history=False, results=False)
+    board = json.loads((snapshots.snap_root(tmp_path) / "nba" / "board.json").read_text(encoding="utf-8"))
+    hit = [(m, q) for m in board["markets"] for q in m.get("q") or () if q.get("r") == r2]
+    assert hit, "quote not on the compact board"
+    m, q = hit[0]
+    assert (q.get("x") or {}).get("bp") == 1
+    rec, _ = workspace_sports.record_of("nba", board, m, q, {})
+    assert rec["scout"]["grade"] == "A" and rec["scout"]["featured"] is True
+    con.close()
+
+
+def test_side_hold_leaves_a_suspended_underdog_side_alone():
+    q = {"platform": "underdog", "sides": [{"side": "over", "offered": True}, {"side": "under", "offered": False}]}
+    assert grade_rules.side_hold(q, {"ln": "under", "gr": "B"}) is None          # cap-2: suspension never regrades
+
+
+def test_forecast_run_records_no_side_for_a_lone_disfavoured_side_and_an_even_tie():
+    import numpy as np
+    from sports.model import forward
+    pmf = np.full(10, 0.1)                                   # 15..24 uniform
+    ud_over_only = h.offer(platform="underdog", oid="ud:1", line=20.5, sides=OVER_ONLY)   # Under suspended right now
+    fc, _ = forward.build_forecast(ud_over_only, "offer:underdog:ud:1:r1:ab", h.T0, "sm-1", None, pmf, 15, 19.5,
+                                ("offer:underdog:ud:1:r1:ab",), (), None, None)
+    assert fc.p_over < fc.p_under and fc.chosen_side is None and fc.grade is None
+    two = h.offer(platform="underdog", oid="ud:2", line=19.5)
+    tie, _ = forward.build_forecast(two, "offer:underdog:ud:2:r1:ab", h.T0, "sm-1", None, pmf, 15, 19.5,
+                                 ("offer:underdog:ud:2:r1:ab",), (), None, None)
+    assert tie.p_over == tie.p_under and tie.chosen_side is None                # mean == line: no side
+    up, _ = forward.build_forecast(two, "offer:underdog:ud:2:r1:ab", h.T0, "sm-1", None, pmf, 15, 20.0,
+                                ("offer:underdog:ud:2:r1:ab",), (), None, None)
+    assert up.chosen_side == "over"                                              # mean above the line
+
+
+def test_capture_listing_names_the_lines_type_and_listed_sides():
+    from gradecore.capture import _listing
+    assert _listing(h.offer(sides=OVER_ONLY)) == {"platform": "prizepicks", "variant": "standard",
+                                                  "sides_offered": ["over"]}
+    assert _listing(h.offer())["sides_offered"] == ["over", "under"]
+
+
+def test_record_relabels_mvlean_only_from_the_effective_time(monkeypatch):
+    rows = [_rec("f1", 20.5, "2026-11-20T12:00:00Z", p=0.7, mean=24.0),
+            _rec("f2", 21.5, "2026-11-20T18:00:00Z", p=0.7, mean=24.0)]
+    reps = results_public.representative(rows)
+    monkeypatch.setenv("NBA_MVLEAN1_FROM", "2026-11-21T00:00:00Z")        # forecast before the rule went live
+    g = {x["grade"]: x["n"] for x in results_public.grades(reps, "nba")["rows"]}
+    assert g["A"] == 1 and g["Lean"] == 0

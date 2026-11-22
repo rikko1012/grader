@@ -643,7 +643,10 @@ class Grades:
         if not (r["status"] == "settled" and r["lean"] and not _contained(self.league, r.get("stat"))):
             return
         g = board_view.research_grade(r["p_over"] if r["lean"] == "over" else r["p_under"])
-        if g in ("A", "B", "C") and self.league == "nba" and grade_rules.mvlean_on(self.league)                 and grade_rules.mvlean_demotes(r["lean"], r["line"], r.get("mv_open")):
+        demote = (g in ("A", "B", "C") and self.league == "nba" and grade_rules.mvlean_on(self.league)
+                  and (r.get("forecast_at") or "") >= grade_rules.mvlean_from()
+                  and grade_rules.mvlean_demotes(r["lean"], r["line"], r.get("mv_open")))
+        if demote:
             g = "Lean"                                  # mvlean-1: the board showed this side as Lean (grade_rules)
         b = self.g.get(g)
         if b is None:

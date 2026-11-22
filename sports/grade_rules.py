@@ -4,7 +4,8 @@ workspace hub, slip pool, tracked picks) reads the result from the snapshot - no
 
 Rules and their switches (each one line to roll back: set the variable to 0 and rebuild the snapshot):
 
-  NBA_MVLEAN1 (default ON) - mvlean-1, the CONFIRMED audit rule F03_mvlean1 (frozen
+  NBA_MVLEAN1 (default ON; NBA_MVLEAN1_FROM = first forecast time the public record relabels, default
+      2026-11-22T00:00:00Z - set it to the deploy time) - mvlean-1, the CONFIRMED audit rule F03_mvlean1 (frozen
       logs/audit_1121/frozen/nba/F03_mvlean1.py, judged holdout/nba, verified verify/nba). For an NBA pick'em quote whose
       Scout side is known: mv = (+1 Over / -1 Under) x (line - open), where open = the line of the FIRST sm-1 forecast saved
       for the same (event, player, stat, platform) - across offer ids, exactly the audit's "first feed capture" (every
@@ -19,7 +20,7 @@ Rules and their switches (each one line to roll back: set the variable to 0 and 
       owner's 2026-11-06 rule (cap-2): shown "Over only" / "Under only", never forecast, graded, staked, slipped or put in
       the record. Before: the board lettered the UNLISTED side (live 2026-11-21: De'Aaron Fox 6.0 Under B, Stephon Castle
       7.0 Under B, Derrick White 5.0 Under C on Over-only lines). Also every quote whose Scout side is not offered on it
-      gets no letter (hold "side", defence in depth for any platform).
+      gets no letter (hold "side", PrizePicks quotes only - defence in depth for a line read on another line).
 
   SPORTS_GP_SIDE_FIX (default ON) - sports-gp-1 side choice (model/grade_policy.apply): (b) when the only offered side
       is one the model rates under 50% (an offer-forced side; audit hit 34.9%) there is no chosen side, no letter and no
@@ -89,6 +90,12 @@ def move_toward(side, line, open_line):
         return None
 
 
+def mvlean_from():
+    """The first forecast time mvlean-1 relabels in the public record (NBA_MVLEAN1_FROM, ISO UTC). Before it the board
+    showed the letter, so the record keeps it (the record shows what members were shown)."""
+    return os.environ.get("NBA_MVLEAN1_FROM", "2026-11-22T00:00:00Z").strip()
+
+
 def mvlean_demotes(side, line, open_line):
     """True when the frozen F03_mvlean1 rule shows this side as Lean (mv > 0.75)."""
     mv = move_toward(side, line, open_line)
@@ -133,8 +140,10 @@ def offered_sides(q):
 
 
 def side_hold(q, x):
-    """os-2: the hold for a quote whose Scout side is not offered on it, or None."""
-    if not pp_onesided_on() or not x or not x.get("ln"):
+    """os-2: the hold for a PrizePicks quote whose Scout side is not offered on it, or None. PrizePicks only: it has no
+    per-side suspension (its listed sides are the line's type), while an Underdog / sportsbook side that is suspended right
+    now never changes a stored two-sided line's grading (cap-2)."""
+    if not pp_onesided_on() or not x or not x.get("ln") or q.get("platform") != "prizepicks":
         return None
     on = offered_sides(q)
     if not on or x["ln"] in on:
