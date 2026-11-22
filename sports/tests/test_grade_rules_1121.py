@@ -337,6 +337,22 @@ def test_snapshot_build_applies_mvlean_end_to_end(tmp_path, moved_line, demoted,
     con.close()
 
 
+def test_compact_board_file_carries_the_featured_mark(tmp_path, monkeypatch):
+    """bp-1: the compact board.json quote (what the workspace record reads) carries x.bp = 1. The workspace half
+    (workspace_sports.record_of -> scout.featured) is tests/test_workspace_sports_featured_1121.py (sports never imports
+    workspace modules - test_sports_isolation)."""
+    monkeypatch.setenv("NBA_BEST_PROP", "1")
+    from sports import snapshots, store
+    con = store.connect()
+    r2, _ = _build_world(con, 19.5)
+    snapshots.build(con, "nba", now="2026-10-23T21:00:00Z", base=tmp_path, history=False, results=False)
+    board = json.loads((snapshots.snap_root(tmp_path) / "nba" / "board.json").read_text(encoding="utf-8"))
+    hit = [q for m in board["markets"] for q in m.get("q") or () if q.get("r") == r2]
+    assert hit, "quote not on the compact board"
+    assert (hit[0].get("x") or {}).get("bp") == 1 and (hit[0].get("x") or {}).get("gr") == "A"
+    con.close()
+
+
 def test_side_hold_leaves_a_suspended_underdog_side_alone():
     q = {"platform": "underdog", "sides": [{"side": "over", "offered": True}, {"side": "under", "offered": False}]}
     assert grade_rules.side_hold(q, {"ln": "under", "gr": "B"}) is None          # cap-2: suspension never regrades

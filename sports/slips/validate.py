@@ -167,7 +167,7 @@ def check(slip, pool, mode="load", now=None, offer_lookup=None, live_current=Non
             problems.append({"leg": i, "code": "side", "text": f"{lab}: Scout's side is now {cur['side_word']}"})
         elif cur["forecast_id"] != leg.get("forecast_id"):
             problems.append({"leg": i, "code": "forecast", "text": f"{lab}: the forecast was updated - reconfirm"})
-        current.append({k: cur.get(k) for k in builder.LEG_FIELDS} if cur else None)
+        current.append(builder.leg_view(cur) if cur else None)
     legs_now = [c for c in current if c is not None]
     entry = rules.entry_check(legs_now if len(legs_now) == len(legs_in) else
                               [dict(l, platform=l.get("platform")) for l in legs_in], platform, entry_type)
