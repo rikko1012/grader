@@ -4606,6 +4606,17 @@ def landing_next():
     return _LANDING["next"]
 
 
+def landing_v3_page():
+    """v3 on: the signed-out page built by landing_v3 (web/v3/landing.html, real board / record / review data from the shared
+    caches, one bytes object per build). Any failure there serves the previous v3 page (web/landing.html + the v3 overlay)."""
+    try:
+        import landing_v3
+        return landing_v3.page(sys.modules[__name__], landing_join_url())
+    except Exception:
+        landing_page()
+        return ui_v3.page(_LANDING["data"], "landing")
+
+
 def landing_route(path):
     """Paths whose signed-out visitor gets the landing page: the CS2 page always, /lol only when it is released
     (otherwise unchanged), /sports only when SPORTS_UI is set at all (otherwise the unknown-route answer, unchanged)."""
@@ -5029,8 +5040,7 @@ class Handler(BaseHTTPRequestHandler):
                                        **({"sports_transport": ws_.transport_status()} if ws_ and hasattr(ws_, "transport_status") else {})})
             if u.path in LANDING_PATHS and landing_route(u.path) and self.signed_out():     # signed-out visitors only
                 if self._v3_on():
-                    landing_page()
-                    return self.send_shared(("page", "landing", "v3"), 200, ui_v3.page(_LANDING["data"], "landing"), "text/html; charset=utf-8", keep=600)
+                    return self.send_shared(("page", "landing", "v3"), 200, landing_v3_page(), "text/html; charset=utf-8", keep=600)
                 return self.send_shared(("page", "landing", ui_next_default()), 200, landing_page(), "text/html; charset=utf-8", keep=600)
             if (u.path == "/sports" or u.path.startswith(("/sports/", "/api/sports/"))) and self._sports_on(u.path, q):
                 return self._sports_route(u, q)          # the ONE sports hook: flags off = this line does nothing
@@ -6550,8 +6560,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_shared(key, 200, body, ctype, keep=600)
             return True
         if u.path == ui_v3.PREVIEW + "/landing" and self._v3_on():       # the signed-out page in v3, for the owner to look at
-            landing_page()
-            self.send_shared(("page", "landing", "v3"), 200, ui_v3.page(_LANDING["data"], "landing"), "text/html; charset=utf-8", keep=600)
+            self.send_shared(("page", "landing", "v3"), 200, landing_v3_page(), "text/html; charset=utf-8", keep=600)
             return True
         if u.path == ui_v3.PREVIEW and ui_v3.preview_value(ADMIN_TOKEN) and self._v3_owner(q):
             secure = "; Secure" if self.headers.get("X-Forwarded-Proto", "").lower() == "https" else ""
