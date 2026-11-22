@@ -29,6 +29,7 @@ def _strip(f):
         f.pop(k, None)
     inp = json.loads(f.pop("inputs"))
     inp.pop("history_since", None)
+    (inp.get("data_version") or {}).pop("export_at", None)   # wall-clock export time, differs across runs
     return f, inp
 
 
