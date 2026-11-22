@@ -44,9 +44,11 @@ FRESH_MIN = 30                     # a board older than this is labelled "as of 
 SPORTS = ("cs2", "lol", "nba", "nfl")
 LABEL = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL", "soccer": "Soccer", "tennis": "Tennis"}
 LONG = {"cs2": "CS2", "lol": "League of Legends", "nba": "NBA", "nfl": "NFL", "soccer": "Soccer", "tennis": "Tennis"}
-# The apps and books whose lines were on the live member boards when checked (2026-11-22 17:5x UTC: CS2 board = Underdog, with the
-# PrizePicks feed up but empty; NBA / NFL boards = PrizePicks, Underdog, FanDuel, BetRivers, Unibet, Polymarket). Only sources seen on
-# a live board are named; no paid odds feed (owner 2026-11-09). Text only, no logos. Re-check against the boards before adding one.
+# The apps and books named on the page: sources whose lines were on the live member boards when checked (2026-11-22 17:5x UTC: CS2
+# board = Underdog, PrizePicks feed up but empty; NBA / NFL boards = PrizePicks, Underdog, FanDuel, BetRivers, Unibet (the AU feed),
+# Polymarket). Bovada rows were also on the NBA / NFL boards and are deliberately not named (never in the owner's approved list; the
+# landing's banned-word test keeps it off). Sleeper, Dabble, DraftKings and Kalshi had no rows, so they are not named. No paid odds feed
+# (owner 2026-11-09). Text only, no logos. Re-check against the boards before adding one.
 BOOKS = ("PrizePicks", "Underdog", "FanDuel", "BetRivers", "Unibet", "Polymarket")
 SHORT = {"underdog": "UD", "prizepicks": "PP"}
 # The "Move the line" widget: Scout's CS2 kills chance (grader.p_more with the live kills spread, chances capped either side) and the
@@ -617,7 +619,7 @@ def slip_card():
     head = (f'<div class="sl-h"><span class="sl-k">{n}-pick slip · {esc(book)}</span>'
             f'<p class="sl-all"><b>{p_all * 100:.1f}<i>%</i></b><span>chance all {n} hit</span></p>'
             f'<span class="mt big" style="--p:{p_all * 100:.1f}" aria-hidden="true"><i></i></span></div>')
-    cap = f"The latest {n}-pick slip built in Slip Studio when this sample was saved, shown as built on {_when(built)}."
+    cap = f"The latest {n}-pick slip built in Slip Studio when this sample was saved, shown as built (legs, lines, chances, grades)."
     return head + f'<ol class="sl-legs">{"".join(rows)}</ol>', cap
 
 
@@ -692,6 +694,7 @@ def build(srv, join_url, fetch=True):
         "SPORT_N": str(len(sp)),
         "REC_SPORTS": esc(_list(rec_names)) if rec_names else "",
         "UNREC": esc(_list(unrec)) if unrec else "",
+        "UNREC_SENT": esc(f"{_list(unrec)[:1].upper()}{_list(unrec)[1:]} {'are' if len(unrec) > 1 else 'is'} graded on the board but not on the public record yet.") if unrec else "",
         "BOOK_N": str(len(BOOKS)),
         "BOOK_CHIPS": "".join(f"<li>{b}</li>" for b in BOOKS),
         "BOOK_LIST": esc(_list(list(BOOKS))),

@@ -163,6 +163,10 @@ def test_ledger_and_proof_line_come_from_the_record_answers(srv, monkeypatch):
     t = text(build(srv))
     assert "Soccer Graded on the board Not on the public record yet" in t and "Tennis Graded on the board" in t
     assert "across CS2, LoL, NBA and NFL" in t and "League" not in t.split("FAQ")[1].split("League of Legends")[0]
+    assert "record yet. Soccer and tennis are graded on the board but not on the public record yet." in t or \
+        "anyone can read it without an account. Soccer and tennis are graded on the board but not on the public record yet." in t
+    monkeypatch.delenv("SCOUT_TENNIS_ENABLED")
+    assert "Soccer is graded on the board but not on the public record yet." in text(build(srv))
 
 
 def test_review_wall_escapes_and_features_by_rule(srv, monkeypatch):
@@ -195,6 +199,8 @@ def test_missing_inputs_drop_their_blocks_and_the_page_still_serves(srv, monkeyp
     s = build(srv).decode("utf-8")
     assert "/landing/board.webp" not in s and 'data-state="saved"' in s   # the saved board, dated, instead of live rows
     assert "as of Nov 22, 17:53 UTC" in s and 'data-at="2026-11-22T17:53:44+00:00"' in s and 'class="gate"' not in s
+    js = landing_v3.ASSETS["PAGE_JS"].read_text(encoding="utf-8")       # the browser keeps an old saved board relative, never a bare date
+    assert "'Saved board from '" in js and "' days old'" in js
     assert 'id="record"' not in s and 'id="reviews"' not in s and "decided picks" not in s and "member reviews" not in s
     assert "{{" not in s and "<!--if:" not in s
     assert s.count(f'href="{JOIN.replace("&", "&amp;")}"') >= 4 and s.count('href="/auth/login"') >= 3
@@ -430,7 +436,7 @@ def test_slip_tile_is_a_real_slip_in_v3_markup():
         p *= l["p"]
         assert f'{l["p"] * 100:.1f}<i>%</i>' in body and f'>{l["grade"]}</b>' in body
     assert f"<b>{p * 100:.1f}<i>%</i></b><span>chance all {len(doc['legs'])} hit</span>" in body
-    assert "Built" not in cap and "shown as built on Nov 20, 19:56 UTC" in cap and "<img" not in body
+    assert "shown as built" in cap and "Nov 20" not in cap and "<img" not in body       # no date older than the record
 
 
 def test_disclosure_text_is_at_least_13px():

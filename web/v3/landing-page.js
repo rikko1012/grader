@@ -32,7 +32,7 @@
       var now = Date.now(), min = (now - at) / 60000, lim = +term.getAttribute('data-fresh') || 30, live = !saved && min >= -2 && min <= lim;
       var d = new Date(at), day = Math.floor(now / 864e5) - Math.floor(at / 864e5), lead = saved ? 'Saved board from ' : 'Board from ';
       atEl.textContent = live ? (min < 1 ? 'checked just now' : 'checked ' + Math.floor(min) + ' min ago')
-        : day === 0 ? lead + 'today, ' + hm(d) : day === 1 ? lead + 'yesterday, ' + hm(d) : asOf;
+        : day === 0 ? lead + 'today, ' + hm(d) : day === 1 ? lead + 'yesterday, ' + hm(d) : day > 1 ? (saved ? 'Saved board, ' : 'Board, ') + day + ' days old' : asOf;
       if (!saved) term.setAttribute('data-state', live ? 'live' : 'dated');
       D.documentElement.classList.toggle('live', live);
     }
