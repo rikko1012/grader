@@ -182,3 +182,41 @@ def test_nba8_logs_are_point_in_time(tmp_path):
     lg, pos = forward.nba8_logs(hcon, "nba:player:espn:0", "2025-11-11T00:00:00Z")
     assert len(lg) == 5 and all(g["start"] < "2025-11-11T00:00:00Z" for g in lg) and pos == "F"
     assert set(lg[0]) == {"start", "min", "pts", "reb", "ast", "stl", "blk", "tov"}
+
+
+# ------------------------------------------------------------------------------------------- board build / rollback
+def _steals_board(con):
+    store.put(con, h.event())
+    rid = store.put(con, h.offer(oid="pp:stl", stat="steals", line=1.5, source_stat="Steals"))["record_id"]
+    store.put(con, h.forecast(line=1.5, stat="steals", offer_snapshot_ids=(rid,), model_version="nba8-1",
+                              artifact_version="nba8-1:69e5e27b376e5485", projection_mean=1.1, p_over=0.32,
+                              p_under=0.68, p_push=0.0, p_over_given_no_push=0.32, p_under_given_no_push=0.68,
+                              chosen_side="under"))
+    return rid
+
+
+def _board_quote(base, rid):
+    for part in ("board.json", "board_more.json"):
+        f = base / "nba" / part
+        if f.exists():
+            for m in json.loads(f.read_text()).get("markets") or []:
+                for q in m.get("q") or []:
+                    if q["r"] == rid:
+                        return m, q
+    return None, None
+
+
+def test_board_letters_a_passed_stat_and_the_flag_rolls_it_back(tmp_path, monkeypatch):
+    from sports import snapshots
+    monkeypatch.delenv("NBA_STATS8", raising=False)
+    with store.opened() as con:
+        rid = _steals_board(con)
+        snapshots.build(con, "nba", now="2026-10-23T21:00:00Z", base=tmp_path / "on", history=False, results=False)
+        monkeypatch.setenv("NBA_STATS8", "0")
+        snapshots.build(con, "nba", now="2026-10-23T21:00:00Z", base=tmp_path / "off", history=False, results=False)
+    m_on, q_on = _board_quote(tmp_path / "on", rid)
+    assert q_on is not None and q_on.get("f") and q_on["g"] == 1, q_on
+    assert (q_on.get("x") or {}).get("ln") == "under" and (q_on.get("x") or {}).get("gr") == "A", q_on
+    m_off, q_off = _board_quote(tmp_path / "off", rid)
+    assert q_off is not None and not q_off.get("f") and not q_off.get("g"), q_off
+    assert not (q_off.get("x") or {}).get("ln") and not (q_off.get("x") or {}).get("gr"), q_off

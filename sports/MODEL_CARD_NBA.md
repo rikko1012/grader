@@ -193,4 +193,9 @@ Only steals is gradable (capabilities.NBA_STATS8_PASSED); it is lettered like po
 nba8-1, raw chance - the sm-1 pc-1 / cal-mi-1 layers do not apply). Caveat: the steals hit rate comes from priced
 Underdog lines where nba8-1 takes the book's short-priced side 92-95% of the time (that favourite hit 63.6% DEV /
 67.5% TEST); at even-money lines (PrizePicks standard + Underdog 1.0x) steals went 168-169 DEV and 61-47 TEST.
-Rollback: NBA_STATS8=0 (cap-2 exactly as before; no nba8-1 forecast is written).
+Board side rule (lean_of: chance > 50% AND mean on that side, info-only re-read): steals TEST 211-104 (67.0%,
+[61.7, 72.3], 46 games, Over share 0.495), DEV 597-366 (62.0%). Sensitivity keeping offers withdrawn before tip
+(PREREG excluded them): steals TEST 337-194 (63.5%, [58.8, 68.1]) - still passes; the other 7 still fail. Not
+reproduced: the board's N4 rule (a lean the market already prices is dropped) and sanity holds - the lettered board
+subset is narrower than the scored rows.
+Rollback: NBA_STATS8=0 (cap-2 exactly as before; no nba8-1 forecast is written and a stored one is not attached).

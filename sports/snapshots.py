@@ -552,6 +552,12 @@ def _team_view(teams, tid):
     return {"team_id": tid, "abbr": t.abbr if t else None, "name": t.name if t else None}
 
 
+def _live_attached(fcs, stat):
+    """Drop nba8-1 forecasts whose stat is not a live NBA_STATS8 stat (flag off = rollback: nothing of nba8-1 shows)."""
+    live = capabilities.nba_stats8_markets()
+    return [x for x in fcs if x[0].model_version != capabilities.NBA_STATS8_VERSION or stat in live]
+
+
 def _choose(fcs):
     """Latest forecast per model, then by display preference."""
     pref = models_pref()
@@ -863,7 +869,8 @@ def build(con, league, now=None, base=None, history=True, results=True):
         v = offer_view(rid, o, m)
         # owner 2026-11-06: a one-sided line (Over only / Under only) is shown with no forecast - a forecast saved for
         # it before cap-2 is never attached, so it shows no Scout chance, grade, letter or stake
-        ch = None if capabilities.is_one_sided(o) else _choose(attached.get(rid, []))
+        # NBA_STATS8=0 (rollback): a stored nba8-1 forecast is no longer attached once its stat is not live
+        ch = None if capabilities.is_one_sided(o) else _choose(_live_attached(attached.get(rid, []), o.stat))
         if ch:
             fc, frid, frev = ch[0]
             v["forecast_id"] = fc.forecast_id
