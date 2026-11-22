@@ -98,7 +98,8 @@ stats; team context; patch; situational; market) was tested as one combined incr
   pool depth - on top of lol-1's role, form, team pace, opponent factor and Elo win chance.
 - **Live grade for kills and assists since 2026-11-09: lpf-1** - a full-history booster (93 pre-match features, artifact
   `lol/lpf1_model.json.gz`) started from the lol-1f projection above; it passed the owner's walk-forward hit-rate rule
-  (lol/EVALUATION.md "lpf-1 live path"). Rollback `LOL_LPF1=0` = lol-1f.
+  (lol/EVALUATION.md "lpf-1 live path"). Rollback `LOL_LPF1=0` = lol-1f (only while so-1 is off: with
+  `LOL_SCOPE_OFFSET=1` the rollback also needs `LOL_SCOPE_OFFSET=0`; so-1 is shadow / off by default).
 - **Deaths:** the same features are measured and shown at weight 0 (the combined model failed on Maps 1-3).
 - **Market team win odds:** saved with every forecast from 2026-10-19 (Polymarket match winner); judged forward.
 - **Still unavailable before props close:** the draft (champions, composition, counter-picks), side for games 2+, GD / XPD / CSD

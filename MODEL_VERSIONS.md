@@ -41,6 +41,8 @@
   separable. Evidence: lol/EVALUATION.md "lpf-1 live path" and cs2_scout_ops/logs/esports_hit_2026-11-09.md (walk-forward hit
   56.0 -> 59.5 [+3.45, -0.1..+7.1]; Overs 48.0 -> 52.8; Unders 60.3 -> 63.4; every line keeps a side; letters -7.8%).
 - **Rollback:** `LOL_LPF1=0` on the cs2-scout service (read each worker cycle; lol-1f records byte-identical to before).
+  If so-1 is ever turned on (`LOL_SCOPE_OFFSET=1`; default off / shadow since 2026-11-21), this rollback gives lol-1f+so-1,
+  so a full rollback to lol-1f needs `LOL_LPF1=0` AND `LOL_SCOPE_OFFSET=0`.
 - **Fallback:** no lpf-1 answer this cycle -> the saved lpf-1 forecast at the same line stands; otherwise the live lol-1f
   forecast (labelled lol-1f). Never an error, never a hidden line, failures never cached.
 - **Memory:** lpf-1 runs only in ONE short-lived child (`python -m lol.lpf1_live predict`, oom_score_adj 1000, ~366 MB for

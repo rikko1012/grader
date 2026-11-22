@@ -396,3 +396,12 @@ def test_panel_prints_the_block_with_the_record_numbers(env, tmp_path):
     assert not re.search(r"box-shadow|gradient|#[0-9a-fA-F]{3,8}\b|rgba?\(", plain) and set(re.findall(r"border-radius:\s*([^;]+);", css)) == {"2px"}
     for cls in set(re.findall(r'class="([^"]+)"', html)):
         assert all(c in css for c in cls.split()), cls
+
+
+def test_lol_card_shows_the_so1_offset_row():
+    """so-1 (LoL round 2): a lol-1f+so-1 forecast names its model and shows the map-count offset as its own row."""
+    rec = {"scout": {"side": "over", "model_version": "lol-1f+so-1"}}
+    out = gi_mod.lol({"member": {}, "gi": {"scope_offset": {"version": "so-1", "multiplier": 0.9048, "c": -0.1}}}, rec)
+    rows = [r for r in (out.get("factors") or []) if r and r.get("id") == "scope_offset"]
+    assert out["model"]["name"] == "lol-1f+so-1" and rows and rows[0]["label"] == "Map-count offset from settled lines"
+    assert rows[0]["value"] == "x0.90" and rows[0]["effect"] == -9.52

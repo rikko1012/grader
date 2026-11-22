@@ -979,3 +979,72 @@ the live lol-1f forecast, labelled lol-1f - never an error, never a hidden line,
 cycle). Only ONE child at a time (`lol/lpf1_client.py` thread lock + exclusive flock on `$TMPDIR/lpf1_child.lock`; a second
 caller gets no answers, never a second child); the child is started only by the worker's forecast cycle (every 10 min, and only
 when a line / the history changed), never per request and never by the web process.
+
+## Round 2 (2026-11-21, branch claude/lol-r2-1121) - pre-registered in research/lol_r2_1121/PREREG.md before any line-level number
+
+Data: audit_1121 group p1 (latest forecast >= 30 min before start), 18 UTC days 10-17..11-14, 43 series (42 Worlds 2026,
+1 EM). The audit holdout days 11-05..11-14 were development data here (their judge output was read first). One event:
+nothing below generalises beyond Worlds-style play without forward evidence. Primary universe = playable_current (shown side
+offered and line not one-sided, the member record's own population). Gates: (a) Holm p < 0.05 on the day sign-flip test or
+(b) days under 53% fall by >= 2 with pooled delta >= 0; volume >= 60%; Over share falls <= 5 pts. Holm family of 5.
+
+| test | base | playable_current W-L (hit) -> cand | pooled delta, day CI / series CI | raw p / Holm | bad days | Over share | result |
+|---|---|---|---|---|---|---|---|
+| T2a market win chance in lpf-1 | lpf-1 replay (13 days) | 526-399 (56.9) -> 539-393 (57.8) | +0.97 [-0.62, 2.29] / [-0.30, 2.24] | 0.344 / 0.344 | 5 -> 4 | 59.1 -> 58.7 | FAIL (effect) |
+| T2b market win chance in lol-1f strength factor | saved (18 days) | 583-479 (54.9) -> 592-467 (55.9) | +1.00 [-0.22, 2.40] / [-0.19, 2.22] | 0.055 / 0.164 | 9 -> 8 | 54.5 -> 53.0 | FAIL (effect) |
+| T4a stat x scope offset on lpf-1 | lpf-1 replay | 526-399 (56.9) -> 505-358 (58.5) | +1.66 [-0.59, 4.38] / [-1.53, 4.78] | 0.156 / 0.313 | 5 -> 4 | 59.1 -> 43.1 | FAIL (Under skew) |
+| T4b stat x scope offset on saved lambda | saved | 583-479 (54.9) -> 603-448 (57.4) | +2.47 [0.74, 4.51] / [0.54, 4.35] | 0.010 / 0.051 | 9 -> 6 | 54.5 -> 52.0 | PASS (gate b only) |
+| T1b best playable line per player-market | saved | all 583-479 (54.9) vs best 240-163 (59.6) | +4.65 [1.14, 9.44] / [0.66, 8.79] | 0.014 / 0.058 | 9 -> 5 | 54.5 -> 52.9 | FAIL (volume 0.379; a marker cannot meet a 60% volume gate as written) |
+
+T4b letters universes show no gain (letters +0.48, playable letters +0.84, bad days 8 -> 8). Post-registration checks of T4b
+(not in the Holm family): settlement-time pool +2.16 [0.39, 3.92] series, 9 -> 6; event-scoped pool V1 +2.43 [0.61, 4.25],
+9 -> 7; the shipped form V2 (event-scoped, lol-1f rows only, pool settled before the forecast) 583-479 -> 592-453 (56.7),
++1.75 [0.33, 3.46] day / [0.10, 3.45] series, 9 -> 7 bad days, Over share 54.5 -> 50.8, volume 0.984. The live
+`so1_offsets` on the Nov 5 copy reproduces the study's 11-05 offsets exactly (research/lol_r2_1121/so1_live_check.py).
+
+**so-1 (behind `LOL_SCOPE_OFFSET`, default OFF = shadow since the 2026-11-21 round-2 review; `LOL_SCOPE_OFFSET=1` turns it
+on):** lol/center/forecast.py. Why off: the event-scoped form was chosen after registration, on days that include the read audit
+holdout; 42 of 43 series are one event, so the 'never carry one event into the next' rule has no cross-event evidence; letters
+show no gain and playable-letters Over share falls 52.0 -> 46.2 (past the 5-point balance limit). Next step: register the
+exact-page form forward on fresh events. Applies ONLY
+when the shown forecast is lol-1f (LOL_LPF1=0, or a new line with no lpf-1 answer); lpf-1 forecasts are never touched (T4a
+failed). Per (event, stat, scope): c = log(sum actual / sum lol-1f projection) over the event's settled player-markets (first
+line per player-market, latest pre-match forecast, latest graded settlement), >= 30 player-markets else 0; event = tournament
+page EXACTLY (see the event fix below). The pool reads the projection before any offset (so-1 rows: inputs.scope_offset.lambda_before; lpf-1
+rows: inputs.lpf1.lambda_lol1f). Forecasts carry model_version `lol-1f+so-1` and inputs.scope_offset; the card shows "Map-count
+offset from settled lines". A read failure keeps the last good offsets; with none, a line whose last saved forecast is so-1 at
+the same line keeps it. Tests: lol/tests/test_so1_scope_offset.py.
+**so-1 event fix (2026-11-21, round-2 review blocker):** so1_event() used to drop the last '/' segment of the tournament page,
+which merged seasons and splits into one event ('Legends Premier League/Season 4' + '/Season 5'; 'LPL/2026 Season/Split 1..3'
+-> 'LPL/2026 Season'), so a new season started with the previous season's offset. Event is now the exact page; lolesports-only
+`LE:<league>` pages (a league, not an event) get no offset. Exact identity also splits Worlds 'Main Event' from 'Play-In'.
+Study helper fixed the same way (r2_t4b_scoped.py event_of). Re-run, post-registration information only, NOT a pass (same
+contaminated days): V2 (shipped form) playable 583-479 (54.9) -> 591-453 (56.6), +1.71 [0.40, 3.20] day / [0.14, 3.35]
+series, bad days 9 -> 6, Over share 54.5 -> 50.3; all graded +0.73 [-0.65, 2.10] series; letters -0.50; playable letters
++0.00 with Over share 52.0 -> 45.8. V1 +2.12 [0.20, 4.07] series, 9 -> 6. The live so1_offsets on the Nov 5 copy matches the
+re-run study's 11-05 cells (Worlds Main Event kills/assists Maps 1-3: 20 player-markets each, no offset; before the fix Main
+Event + Play-In pooled to 40 and gave one). Evidence: postreg/t4b_scoped_exactpage.json, postreg/so1_live_check_exactpage.json
+(the pre-fix files are kept). Tests: test_event_is_the_exact_tournament_page, test_a_previous_season_page_never_gives_a_new_
+season_an_offset, test_lolesports_league_pages_never_pool, test_forecast_path_with_real_offsets_uses_only_the_exact_page.
+**Rollback note (lpf-1 + so-1):** while so-1 is on, `LOL_LPF1=0` alone gives lol-1f+so-1, NOT the known lol-1f grades. A full
+rollback to lol-1f needs `LOL_LPF1=0` AND `LOL_SCOPE_OFFSET=0` (the default, or unset).
+**Relation to ep-1 / ep-2 / ep-3 (A8, A15, A16, all FAILED).** Those were one event-pace multiplier per event (all scopes
+alike, shrunk by K), judged by the NB log-score rule (i); ep-2 / ep-3 failed (i) with chosen-side hit +2.5 / +0.9 pts. so-1
+is a separate multiplier per stat x scope cell (it carries the Maps 1-3 vs Map 1 / Maps 1-2 offset the audit found: kills
+Maps 1-3 +1.06 residual vs Map 1 -0.23), unshrunk, and it was judged under the owner's 2026-11-09 rule (hit rate at real
+offered lines, volume, balance; log loss is information only) plus the bad-day gate. It is the same family of idea, and
+its pass is thin: the shipped form's bad-day drop (9 -> 7) is exactly the gate's minimum; on the 13 original days the gain
+is mostly rows moving to an unoffered side (W 500 -> 498, L 398 -> 374), the added wins are on the 5 development days (83-81
+-> 94-79); on the fixed all-graded set it is +0.73 (series CI -0.69, 2.12), bad days 7 -> 5; playable-letters Over share
+52.0 -> 46.2 (primary 54.5 -> 50.8). With the default (off) it is never computed; on, it is dormant at first (a new event starts at no offset) and lol-1f is only the fallback.
+
+**rp-1 (shipped behind `LOL_RECORD_PLAYABLE`, default on, rollback =0):** the slip band table (workspace_api._lol_settled) also
+leaves out one-sided lines, as the member record (lol/center/learning.dashboard in_record) already did: 1,216 -> 1,068 a15 rows,
+52.6% -> 54.9%; removed 148 rows, 54-94 (36.5%), 141 of them assists Over-only. Not a grade change.
+
+Track 3 (assists over-projected when the team loses): info only - one playable assists row in 18 days, so no hit-rate test at
+playable lines is possible. Residual (actual - projection) by series result, outcome columns: saved lambda won +2.79 / lost
+-3.68 (195 pm each); lpf-1 replay won +1.74 / lost -3.37.
+Region-aware Elo was not tested this round. Strength diagnostic (series favourite accuracy): Elo 53.5% (n 86), Polymarket 64.5%
+(n 62), lpf-1 win model 63.2% (n 76); on the 52 with all three, 50.0 / 61.5 / 61.5.
+Evidence: C:/Users/tikic/cs2_scout_ops/logs/audit_1121/round2/lol/ (r2_results.json, r2_t4b_timing.json, postreg/).
