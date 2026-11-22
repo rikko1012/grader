@@ -191,7 +191,7 @@ def pool_view(req):
     q = _args(req)
     league, platform = _ctx(q)
     p = _pool(league, platform)
-    legs = [{k: l.get(k) for k in MEMBER_LEG_FIELDS} for l in p["legs"]]
+    legs = [builder.leg_view(l, MEMBER_LEG_FIELDS) for l in p["legs"]]
     return 200, {"league": league, "platform": platform, "snapshot_at": p["snapshot_at"], "snapshot_id": p["snapshot_id"],
                  "policy_version": p["policy_version"], "offers": p["offers"], "eligible": len(legs), "legs": legs,
                  "research_legs": sum(1 for l in legs if l.get("research_only")),

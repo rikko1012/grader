@@ -569,8 +569,6 @@ def record_of(lg, doc, m, q, view):
                      "over": _side_prices(q, 0), "under": _side_prices(q, 1), "moved_from": None, "moved_at": None},
            "scout": {"side": lean, "read_rev": read_rev(lean, sc, held, grade), "p_side": side_p, "p_over": sc["po"] if sc else None, "p_under": sc["pu"] if sc else None, "p_push": sc["pp"] if sc else None,
                      "projection": sc.get("mu") if sc else None, "range80": sc.get("iv") if sc else None, "grade": grade, "units": 0 if grade else None, "stake_reason": "Stakes remain 0." if grade else None,
-                     # bp-1 (NBA_BEST_PROP, display only): Sports marked this quote the player's featured best prop
-                     "featured": bool(signal.get("bp")) and grade in ("A", "B", "C"),
                      "hold": hold, "model_version": sc.get("model") if sc else None, "forecast_at": sc.get("at") if sc else None,
                      "validation": {"kind": "research", "label": "Scout grade" if grade else (one or HOLD_LABEL),
                                     "detail": "Scout grade. Stakes remain 0." if grade else reason}},
@@ -578,6 +576,10 @@ def record_of(lg, doc, m, q, view):
                        **(_board_columns(v, line, opp) if workspace_h2h.board_enabled() else {})},
            "market_chance": {"p_over": mkc["po"], "p_under": mkc["pu"], "sources": mkc.get("n")} if mkc else None,
            "state": {"kind": "ok", "reason": None}}
+    if signal.get("bp") and grade in ("A", "B", "C"):
+        # bp-1 (NBA_BEST_PROP, display only): Sports marked this quote the player's featured best prop. The key is absent
+        # otherwise, so with the flag off the record is main's exactly.
+        rec["scout"]["featured"] = True
     x = {"r": q.get("r"), "p": p, "l": line, "o": q.get("o"), "m": q.get("m"), "g": q.get("g"), "ud": q.get("ud"), "fid": sc.get("fid") if sc else None, "po": sc["po"] if sc else None,
          "pu": sc["pu"] if sc else None, "pp": sc["pp"] if sc else None, "mu": sc.get("mu") if sc else None, "model": sc.get("model") if sc else None, "at": sc.get("at") if sc else None,
          "lean": lean, "start": ev.get("start_utc"), "started": bool(ev.get("started") or ev.get("locked")), "e": m.get("e"), "pid": m.get("pid"), "name": m.get("n") or "", "team": team, "st": m.get("st"),

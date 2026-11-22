@@ -384,11 +384,20 @@ def _slip_id(platform, entry_type, legs):
 LEG_FIELDS = ("leg_id", "platform", "league", "offer_id", "record_id", "forecast_id", "model_version", "event_id",
               "event_ref", "player_id", "player", "team", "stat", "stat_label", "scope", "line", "side", "side_word",
               "variant", "multiplier", "start_utc", "last_seen_at", "source_time_unknown", "p_win", "p_loss", "p_push",
-              "grade", "stake_units", "research_only", "prop_keys", "research_grade", "featured")
+              "grade", "stake_units", "research_only", "prop_keys", "research_grade")
+
+
+def leg_view(l, fields=LEG_FIELDS):
+    """A leg as the member sees it. bp-1 (NBA_BEST_PROP, display only): "featured": True only on a featured leg - the
+    key is absent otherwise, so with the flag off every slip / pool leg is main's exactly."""
+    d = {k: l.get(k) for k in fields}
+    if l.get("featured"):
+        d["featured"] = True
+    return d
 
 
 def slip_view(platform, entry_type, legs):
-    ls = [{k: l.get(k) for k in LEG_FIELDS} for l in legs]
+    ls = [leg_view(l) for l in legs]
     return {"slip_id": _slip_id(platform, entry_type, legs), "platform": platform, "entry_type": entry_type,
             "size": len(legs), "legs": ls, "joint": joint.joint(legs), "payout": rules.schedule(platform, entry_type, legs),
             "expected_return": joint.published_return(platform, entry_type, legs),

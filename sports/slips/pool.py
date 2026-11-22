@@ -106,7 +106,10 @@ class Leg:
         return {k: getattr(self, k) for k in LEG_FIELDS}
 
     def __reduce__(self):
-        return _leg_from_values, (tuple(getattr(self, k) for k in LEG_FIELDS),)
+        vals = tuple(getattr(self, k) for k in LEG_FIELDS)
+        if vals[-1] is None:                # bp-1 off / not featured: main's exact value tuple (no "featured" slot)
+            vals = vals[:-1]
+        return _leg_from_values, (vals,)
 
     def __repr__(self):
         return f"Leg({self.leg_id})"
@@ -419,5 +422,5 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
            # mvlean-1 / os-2 (grade_rules): the board's own letter on this quote; bp-1: the board's featured best prop
            "research_grade": grade_rules.letter_for(o.league, rid, side, board_view.research_grade(p_win, o.league, o.stat))
            if board_view.lean_of(po, pu, f.projection_mean, float(o.line)) == side else None,
-           "featured": grade_rules.featured(o.league, rid, side)}
+           "featured": grade_rules.featured(o.league, rid, side) or None}     # True, else None (absent - see leg_view)
     return None, leg

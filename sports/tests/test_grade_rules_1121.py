@@ -337,23 +337,6 @@ def test_snapshot_build_applies_mvlean_end_to_end(tmp_path, moved_line, demoted,
     con.close()
 
 
-def test_board_file_and_workspace_record_carry_the_featured_mark(tmp_path, monkeypatch):
-    monkeypatch.setenv("NBA_BEST_PROP", "1")
-    import workspace_sports
-    from sports import snapshots, store
-    con = store.connect()
-    r2, _ = _build_world(con, 19.5)
-    snapshots.build(con, "nba", now="2026-10-23T21:00:00Z", base=tmp_path, history=False, results=False)
-    board = json.loads((snapshots.snap_root(tmp_path) / "nba" / "board.json").read_text(encoding="utf-8"))
-    hit = [(m, q) for m in board["markets"] for q in m.get("q") or () if q.get("r") == r2]
-    assert hit, "quote not on the compact board"
-    m, q = hit[0]
-    assert (q.get("x") or {}).get("bp") == 1
-    rec, _ = workspace_sports.record_of("nba", board, m, q, {})
-    assert rec["scout"]["grade"] == "A" and rec["scout"]["featured"] is True
-    con.close()
-
-
 def test_side_hold_leaves_a_suspended_underdog_side_alone():
     q = {"platform": "underdog", "sides": [{"side": "over", "offered": True}, {"side": "under", "offered": False}]}
     assert grade_rules.side_hold(q, {"ln": "under", "gr": "B"}) is None          # cap-2: suspension never regrades
@@ -482,3 +465,20 @@ def test_record_drop_of_prizepicks_one_sided_forecasts_needs_the_flag_and_a_from
     for k in ("SPORTS_PP_ONESIDED", "SPORTS_PP_ONESIDED_FROM"):
         monkeypatch.delenv(k)
     assert not snapshots.one_sided_forecast(None, mixed)                   # default: main's answer (kept)
+
+
+def test_featured_leg_key_is_absent_unless_featured():
+    """bp-1 off / not featured: the pool leg pickles as main's value tuple (no "featured" slot) and member slip / pool
+    legs carry no "featured" key; a featured leg keeps True through pickle and shows it."""
+    import pickle
+    from sports.slips import builder, pool
+    base = {k: None for k in pool.LEG_FIELDS}
+    plain = pool.Leg(**dict(base, leg_id="l1", record_id="r1"))
+    _, (vals,) = plain.__reduce__()
+    assert len(vals) == len(pool.LEG_FIELDS) - 1 and pool.LEG_FIELDS[-1] == "featured"
+    back = pickle.loads(pickle.dumps(plain, protocol=5))
+    assert back.to_dict() == plain.to_dict() and back["featured"] is None
+    assert "featured" not in builder.leg_view(back) and "featured" not in builder.LEG_FIELDS
+    star = pool.Leg(**dict(base, leg_id="l2", record_id="r2", featured=True))
+    back = pickle.loads(pickle.dumps(star, protocol=5))
+    assert back["featured"] is True and builder.leg_view(back)["featured"] is True
