@@ -506,7 +506,8 @@ def series_of(srv, sport, s, base, budget=None):
         return (ser or None), x
     if sport == "lol":
         import workspace_lol
-        return (workspace_lol.series_values(((s or {}).get("series") or {}).get(x.get("pid")), x.get("stat"), x.get("scope")) or None), x
+        return (workspace_lol.series_values(((s or {}).get("series") or {}).get(x.get("pid")), x.get("stat"), x.get("scope"),
+                                            workspace_lol._bo((x.get("member") or {}).get("best_of"))) or None), x
     if sport in ("nba", "nfl"):
         return sports_series(srv, sport, x, budget), x
     return None, x

@@ -176,7 +176,7 @@ def test_landing_v3_book_tap_shows_that_lines_chance(browser, lbase):
         row.locator("button.bk", has_text="13.5").click()
         assert row.locator(".pv").text_content().startswith("52.2")
         assert row.locator("button.bk", has_text="13.5").get_attribute("aria-pressed") == "true"
-        assert row.locator(".gr b").text_content() == "–"
+        assert row.locator(".gr b").text_content() == "Lean Over"            # sweep L3: under the B- cut it reads Lean, never a dash
         row.locator("button.bk", has_text="12.5").click()
         assert row.locator(".pv").text_content().startswith("58.3") and row.locator(".gr b").text_content() == "B-"
         assert not page.errors, page.errors
@@ -204,9 +204,11 @@ def test_landing_v3_sign_in_error_is_text(browser, lbase):
     ctx = browser.new_context(viewport=PHONE)
     page = ctx.new_page()
     try:
-        page.goto(lbase + "/?signin_error=%3Cb%3ENope%3C%2Fb%3E")
+        page.goto(lbase + "/?signin_error=%3Cb%3ENope%3C%2Fb%3E")         # sweep L8: URL text is never shown, only the page's own words
         err = page.locator("#signin-error")
-        assert err.is_visible() and err.text_content() == "<b>Nope</b>" and err.locator("b").count() == 0
+        assert err.is_visible() and err.text_content() == "Sign-in did not complete - please try again" and err.locator("b").count() == 0
+        page.goto(lbase + "/?signin_error=expired")
+        assert err.is_visible() and err.text_content() == "Sign-in expired - please try again"
     finally:
         ctx.close()
 
@@ -465,6 +467,123 @@ def test_landing_v3_phone_bar_is_trial_first_and_never_covers_content(browser, l
             box = page.locator(sel).bounding_box()
             assert box["y"] + box["height"] <= top + 0.5, (sel, box, top)
         assert "21 and over" in page.locator(".foot .rg").text_content()
+        assert not page.errors, page.errors
+    finally:
+        ctx.close()
+
+
+# ---------------------------------------------------------------------------------------------- sweep 2026-11-23 (landing)
+def _with_board(monkeypatch, b):
+    monkeypatch.setattr(workspace_api, "_SNAP", dict(workspace_api._SNAP, body=json.dumps(b).encode()))
+    landing_v3.reset()
+
+
+def test_landing_v3_move_the_line_keeps_the_boards_number_at_the_real_line(browser, lbase, monkeypatch):
+    """sweep L1: the formula gives 56.9 at the real line 31.5 (projection 32.98) but the board says 57.0 B-: the page keeps 57.0 B- on load
+    and whenever the slider comes back to 31.5; any other line is the formula's."""
+    b = board()
+    b["records"][0]["scout"].update(side="over", p_side=0.57, grade="B-", projection=32.98)
+    b["records"][0]["offer"]["line"] = 31.5
+    _with_board(monkeypatch, b)
+    warm(lbase, 0)
+    ctx, page = open_page(browser, lbase, DESK, "dark")
+    try:
+        assert page.locator("#gw-p").text_content() == "57.0" and page.locator("#gw-g").text_content() == "B-"
+        slider = page.locator("#gw-line")
+        slider.focus()
+        page.keyboard.press("ArrowRight")
+        assert page.locator("#gw-lv").text_content() == "32.0"
+        assert page.locator("#gw-p").text_content() == f"{landing_v3.kills_chance(32.0, 32.98) * 100:.1f}"
+        page.keyboard.press("ArrowLeft")
+        assert page.locator("#gw-p").text_content() == "57.0" and page.locator("#gw-g").text_content() == "B-"
+        assert "57.0 percent, grade B-" in slider.get_attribute("aria-valuetext")
+        assert page.locator("#gw-ladder li.on").get_attribute("data-g") == "B-"
+        assert not page.errors, page.errors
+    finally:
+        ctx.close()
+
+
+def test_landing_v3_tier_link_only_for_a_letter_on_the_record(browser, lbase, monkeypatch):
+    """sweep L2: the read's 'See the X tier' link shows for a letter the record has a tier for (57%+: A+ .. B), never for B- or Lean."""
+    b = board()
+    pp = next(r for r in b["records"] if r["offer"]["platform"] == "prizepicks")
+    pp["scout"].update(p_side=0.575, grade="B")                              # Gap: UD 12.5 is B- (lead), PP 13.5 is B
+    _with_board(monkeypatch, b)
+    warm(lbase, 0)
+    ctx, page = open_page(browser, lbase, DESK, "dark")
+    try:
+        row = page.locator(".tr", has=page.locator(".who b", has_text="Gap"))
+        row.locator("button.who").click()
+        rec = row.locator(".dt-rec")
+        assert not rec.is_visible()                                           # B- lead: no tier link
+        row.locator("button.bk", has_text="13.5").click()
+        assert rec.is_visible() and rec.locator('[data-k="g"]').text_content() == "B"
+        row.locator("button.bk", has_text="12.5").click()
+        assert not rec.is_visible()
+        assert not page.errors, page.errors
+    finally:
+        ctx.close()
+
+
+def test_landing_v3_a_tap_during_the_count_in_keeps_its_own_chance(browser, lbase):
+    """sweep L4: the hero chances count in once (motion on). A line tapped while the count-in runs keeps its own chance when it ends; the
+    count-in never puts the lead line's number back. Frames are queued and run by hand, so the tap lands mid count-in every time."""
+    warm(lbase, 0)
+    ctx = browser.new_context(viewport=DESK, reduced_motion="no-preference")
+    ctx.route("https://fonts.*/**", lambda r: r.abort())
+    ctx.add_init_script("window.__raf=[];window.requestAnimationFrame=function(f){window.__raf.push(f);return window.__raf.length;};")
+    page = ctx.new_page()
+    page.errors = []
+    page.on("pageerror", lambda e: page.errors.append(str(e)))
+    try:
+        page.goto(lbase + "/", wait_until="load")
+        page.wait_for_function("document.documentElement.classList.contains('motion') && window.__raf.length > 0")   # count-in started
+        row = page.locator(".tr", has=page.locator(".who b", has_text="Gap"))
+        row.locator("button.bk", has_text="13.5").click()                    # mid count-in
+        page.evaluate("(()=>{for(let i=0;i<5;i++){const q=window.__raf.splice(0);q.forEach(f=>f(performance.now()+400*(i+1)));}})()")
+        assert row.locator(".pv").text_content().startswith("52.2"), row.locator(".pv").text_content()
+        assert row.locator(".mt").evaluate("e=>e.style.getPropertyValue('--p')") == "52.2"
+        mover = page.locator(".tr", has=page.locator(".who b", has_text="Mover"))
+        assert mover.locator(".pv").text_content().startswith("64.0")        # an untapped row ends on its own lead value
+        assert not page.errors, page.errors
+    finally:
+        ctx.close()
+
+
+def _tie_rows():
+    """HLTV map rows (hltv_maps row shape) whose two most played pool maps pool to exactly 14.625 kills per map: Mirage 647 kills in 50
+    maps, Dust 2 757 in 46 (the live dav1g case), plus Inferno and Ancient to fill the module."""
+    from datetime import date, timedelta as td
+    today = date.today()
+    out, i = [], 0
+    for name, n, total in (("Mirage", 50, 647), ("Dust 2", 46, 757), ("Inferno", 12, 170), ("Ancient", 10, 150)):
+        base, extra = divmod(total, n)
+        for j in range(n):
+            k = base + (1 if j < extra else 0)
+            out.append((name, (today - td(days=2 + (i * 3) % 340)).isoformat(), 9000 + i, k, 12, k // 2, 13, 8, 1.0, 75.0, 70.0))
+            i += 1
+    out.sort(key=lambda r: r[1], reverse=True)
+    return out
+
+
+def test_landing_v3_two_maps_reads_the_same_on_load_and_after_reselecting(browser, lbase, monkeypatch):
+    """sweep L6: (647 + 757) / 96 = 14.625 exactly. The server prints 14.62; choosing other maps and then the same two again must read
+    14.62 again (the page shows the server's string for each pair), never 14.63."""
+    import hltv_maps
+    rows = {"Mover": _tie_rows()}
+    hltv_off(monkeypatch, lambda nick, team, since: (77005, rows[nick]) if nick in rows else (None, []))
+    monkeypatch.setattr(hltv_maps, "pool_for", lambda mid=None: (list(hltv_maps.ACTIVE_DUTY), "constant"))
+    _with_board(monkeypatch, gw_board())
+    warm(lbase, 0)
+    ctx, page = open_page(browser, lbase, DESK, "dark")
+    try:
+        assert page.locator("#pool-names").text_content() == "Mirage + Dust 2"
+        first = (page.locator("#pool-v").text_content(), page.locator("#pool-d").text_content())
+        assert first[0] == "14.62"
+        for m in ("Inferno", "Mirage", "Dust 2"):                            # away and back to the same two maps
+            page.locator("button.map", has_text=m).click()
+        assert page.locator("#pool-names").text_content() == "Mirage + Dust 2"
+        assert (page.locator("#pool-v").text_content(), page.locator("#pool-d").text_content()) == first
         assert not page.errors, page.errors
     finally:
         ctx.close()

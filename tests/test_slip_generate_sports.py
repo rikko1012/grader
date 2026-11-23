@@ -97,3 +97,33 @@ def test_lol_band_table_leaves_out_one_sided_lines_rp1(env, monkeypatch):
     lol.con.execute("UPDATE lol_forecasts SET sides = ?", ('{"higher": {"status": "active"}, "lower": {"status": "active"}}',))
     lol.con.commit()
     assert len(workspace_api._lol_settled(server)) == 1
+
+
+def test_advice_rates_an_nba_leg_the_way_auto_build_ranks_it(env, monkeypatch):
+    """sweep SR-2: Auto-build puts NBA / NFL letters in its pool whenever the sport is ticked (owner 2026-11-12), so the slip adder rates an
+    NBA leg on a mixed PrizePicks slip the same way: in the pool, with its rank and band line, and never a lower-ranked CS2 swap."""
+    from tests.workspace_fixture import leg_of
+    monkeypatch.setattr(server.Handler, "_sports_owner", lambda self: True)
+    st, gen_doc = gen(env, sports="cs2,nba", slips=8)
+    assert st == 200, gen_doc
+    pool = {(l["book"], l["row_id"], l["side"]): l for s in gen_doc["slips"] for l in s["legs"]}
+    nba = next((l for l in pool.values() if l["sport"] == "nba" and l["book"] == "prizepicks"), None)
+    cs2 = next((l for l in pool.values() if l["sport"] == "cs2" and l["book"] == "prizepicks"), None)
+    assert nba and cs2, gen_doc
+    boards = {}
+    for lg in ("nba", "cs2"):
+        st, b = call(env, "GET", API + f"board?sport={lg}", user="u1")
+        boards.update({(r["offer"]["platform"], r["offer"]["offer_id"]): r for r in b["records"]})
+
+    def leg(l):
+        r = boards[(l["book"], l["row_id"])]
+        return dict(leg_of(r, side=l["side"]), sport=l["sport"], stat=r["market"]["stat"], period=r["market"]["period"],
+                    player_key=r["player"]["key"], player=r["player"]["name"], team=r["player"]["team"], event=r["event"]["id"])
+    body = {"legs": [leg(nba), leg(cs2)], "entry_types": {"prizepicks": "power"}}
+    st, adv = call(env, "POST", API + "slip-advice", body, user="u1")
+    assert st == 200, adv
+    a = adv["legs"][0]
+    assert a["in_pool"] is True and a.get("rank") == nba["rank"], a
+    assert a.get("band") == nba["record"], (a, nba)
+    rep = a.get("replacement")
+    assert rep is None or rep["rank"] < nba["rank"], rep                   # a swap is only ever a better-ranked leg

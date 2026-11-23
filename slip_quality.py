@@ -64,6 +64,7 @@ MIN_PICKS, MAX_PICKS, MAX_SLIPS = 2, 6, 12
 POOL_CAP = 60
 MIXED_RESERVE = 8          # mix=mixed: each sport keeps at least its best 8 legs in the search pool (SR-1)
 NODE_LIMIT = 20000
+RETRY_NODES = NODE_LIMIT        # "No repeat props" batch that came up short: the extra search for a larger batch, in all
 REUSE_PENALTY = 0.35                                # log-chance per earlier use of the same prop or player (repeats allowed)
 REPLACE_GAIN = 0.02                                 # a replacement is suggested when it ranks this much higher
 STAT_WORD = {"hs": "HS", "kills": "Kills", "assists": "Assists", "deaths": "Deaths"}
@@ -532,10 +533,11 @@ def payout(platform, entry_type, legs):
     return None if m is None else {"multiple": m, "entry_type": entry_type or "standard", "source": rules.UD_PAYOUTS, "page_date": rules.UD_PAYOUT_PAGE}
 
 
-def why_line(legs, pool_size, first, reused):
+def why_line(legs, pool_size, first, reused, spread=False):
     matches = len({(l["sport"], l["event"]) for l in legs})
     ranks = ", ".join(str(l["rank"]) for l in sorted(legs, key=lambda l: l["rank"]))
-    head = "Best all-hit chance on the board" if first else "Best all-hit chance left" + ("" if reused else " with unused props")
+    head = ("Best all-hit chance that leaves room for more slips without repeated props" if spread
+            else "Best all-hit chance on the board" if first else "Best all-hit chance left" + ("" if reused else " with unused props"))
     one = "one leg each" if matches == len(legs) else "same-match legs"
     research = sum(1 for l in legs if l["research"] and not l.get("band"))
     tail = f"; {research} NBA/NFL {'leg' if research == 1 else 'legs'} ranked by Scout chance (no settled record yet)" if research else ""
@@ -555,26 +557,54 @@ def build(legs, opts):
     # the "of N" in why_line counts the pool the ranks come from: pool() ranks every leg of the platform, before the member's line
     # rule drops goblins / demons here (counting cands gave "legs rank 4, 5, 6 of 5" when goblins were left out)
     ranked_n = sum(1 for l in legs if l["book"] == platform)
-    used_prop, used_player, taken, slips, nodes, exact = {}, {}, set(), [], 0, True
 
-    def uses(l):
-        return 0 if no_repeat else used_prop.get(l["prop"], 0) + used_player.get((l["sport"], l["pkey"]), 0)
+    def batch(banned=None, budget=None):
+        """One slip at a time, best first (each slip exact). banned: one slip (its key set) that may not be chosen; budget: stop once
+        this many nodes are used. -> ([(legs, reused)], nodes, exact)."""
+        used_prop, used_player, taken, got_all, nn_all, ex_all = {}, {}, ({banned} if banned else set()), [], 0, True
 
-    for k in range(count):
-        free = scope_choice([l for l in cands if not (no_repeat and l["prop"] in used_prop)])[0]
-        got, nn, ex = _best_slip(free, size, platform, et, same_match, mix, uses, taken, cap)
-        nodes += nn
-        exact = exact and ex
-        if not got:
-            break
-        reused = any(used_prop.get(l["prop"]) or used_player.get((l["sport"], l["pkey"])) for l in got)
-        taken.add(frozenset(l["key"] for l in got))
-        for l in got:
-            used_prop[l["prop"]] = used_prop.get(l["prop"], 0) + 1
-            used_player[(l["sport"], l["pkey"])] = used_player.get((l["sport"], l["pkey"]), 0) + 1
+        def uses(l):
+            return 0 if no_repeat else used_prop.get(l["prop"], 0) + used_player.get((l["sport"], l["pkey"]), 0)
+
+        for _k in range(count):
+            if budget is not None and nn_all >= budget:
+                ex_all = False
+                break
+            free = scope_choice([l for l in cands if not (no_repeat and l["prop"] in used_prop)])[0]
+            got, nn, ex = _best_slip(free, size, platform, et, same_match, mix, uses, taken, cap)
+            nn_all += nn
+            ex_all = ex_all and ex
+            if not got:
+                break
+            reused = any(used_prop.get(l["prop"]) or used_player.get((l["sport"], l["pkey"])) for l in got)
+            taken.add(frozenset(l["key"] for l in got))
+            for l in got:
+                used_prop[l["prop"]] = used_prop.get(l["prop"], 0) + 1
+                used_player[(l["sport"], l["pkey"])] = used_player.get((l["sport"], l["pkey"]), 0) + 1
+            got_all.append((got, reused))
+        return got_all, nn_all, ex_all
+
+    chosen, nodes, exact = batch()
+    spread = False
+    if no_repeat and 0 < len(chosen) < count:
+        # "No repeat props" built greedily can stop short: the best first slip may use the only legs that let later slips fit (B+C
+        # first leaves A1+A2, one match). Try again with each chosen slip ruled out in turn, under one shared extra node budget
+        # (RETRY_NODES, 700-concurrent safe), and keep a batch only when it is strictly larger; otherwise the first batch stands as is.
+        left = RETRY_NODES
+        for got, _r in list(chosen):
+            if left <= 0 or len(chosen) >= count:
+                break
+            alt, nn, _ex = batch(banned=frozenset(l["key"] for l in got), budget=left)
+            nodes += nn
+            left -= nn
+            if len(alt) > len(chosen):
+                chosen, spread = alt, True
+    slips = []
+    for k, (got, reused) in enumerate(chosen):
         got = sorted(got, key=lambda l: l["rank"])
         slips.append({"platform": platform, "entry_type": et, "legs": got, "all_hit": all_hit(got), "payout": payout(platform, et, got),
-                      "same_match": len({(l["sport"], l["event"]) for l in got}) < len(got), "why": why_line(got, ranked_n, k == 0, reused)})
+                      "same_match": len({(l["sport"], l["event"]) for l in got}) < len(got),
+                      "why": why_line(got, ranked_n, k == 0, reused, spread=spread and k == 0)})
     shortage = None
     if len(slips) < count:
         label = rules.LABEL.get(platform, platform)
@@ -596,7 +626,7 @@ def build(legs, opts):
             shortage = (f"Mixed sports needs legs from 2 sports; the eligible legs on {label} are all one sport right now."
                         if len(by_sport) < 2 else f"No valid mixed-sport slip could be formed from the eligible legs on {label}.")
         elif no_repeat:
-            shortage = "No props were repeated: the unused eligible legs could not form more valid slips."
+            shortage = "No props were repeated: Scout's search found no more valid slips among the unused eligible legs."
         else:
             shortage = "Every other valid combination of the eligible legs is already in this batch."
     return {"slips": slips, "shortage": shortage, "search": {"nodes": nodes, "exact": exact, "node_limit": NODE_LIMIT, "pool_cap": POOL_CAP}}

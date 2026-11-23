@@ -328,14 +328,16 @@ class Lol:
         self.con.commit()
 
     def seed_history(self):
-        """Twelve finished best-of-threes for the first player: game 1 and game 2 kills 5 and 6, so Maps 1-2 is 11 every time, and one forfeited series the rule leaves out."""
+        """Twelve finished best-of-threes that went to three games for the first player: kills 5, 6 and 0, so Maps 1-2 and Maps 1-3 are
+        both 11 every time, and one forfeited series the rule leaves out. (The board's lines are Maps 1-3 on best-of-fives: a 2-0
+        best-of-three is a 2-game total there and is not counted - sweep lol-1 - so every past series here played all three games.)"""
         pid = self.rows[0]["link"]["pid"]
         self.con.execute("INSERT INTO entities(eid, kind, label, created_at) VALUES('lol:team:9', 'team', 'Old Rivals', '2026-01-01')")
         t = datetime.now(timezone.utc) - timedelta(days=3)
         for i in range(12):
             sid = f"lol:series:h{i}"
             self.con.execute("INSERT INTO c_series(sid, best_of, status, ff, scheduled_utc) VALUES(?,3,'complete',?,?)", (sid, 1 if i == 0 else 0, iso(t)))
-            for n, kills in ((1, 5), (2, 6)):
+            for n, kills in ((1, 5), (2, 6), (3, 0)):
                 gid = f"g{i}-{n}"
                 self.con.execute("INSERT INTO c_games(gid, sid, game_n, remake, ff) VALUES(?,?,?,0,0)", (gid, sid, n))
                 self.con.execute("INSERT INTO c_player_games(gid, pid, sid, game_n, start_utc, kills, deaths, assists, cs, opp_tid) VALUES(?,?,?,?,?,?,1,4,300,'lol:team:9')", (gid, pid, sid, n, iso(t - timedelta(days=i)), kills))

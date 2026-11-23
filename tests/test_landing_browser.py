@@ -132,7 +132,9 @@ def test_a_sign_in_error_shows_as_text(browser, base):
     page = ctx.new_page()
     page.goto(base + "/?signin_error=" + "<b>Whop%20said%20no</b>")
     el = page.locator("#signin-error")
-    assert el.is_visible() and el.text_content() == "<b>Whop said no</b>"
+    assert el.is_visible() and el.text_content() == "Sign-in did not complete - please try again"     # sweep L8: never URL text
+    page.goto(base + "/?signin_error=no_account")
+    assert el.is_visible() and el.text_content() == "Whop didn't return your account - please try again"
     ctx.close()
 
 

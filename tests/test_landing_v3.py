@@ -192,6 +192,28 @@ def test_an_old_board_is_dated_never_checked(srv, monkeypatch):
     assert 'data-state="dated"' in s
 
 
+def test_a_kept_board_never_shows_a_match_that_has_locked(srv, monkeypatch):
+    """sweep F2: a kept older live board (a failed rebuild keeps the last good copy) with a lettered row whose match locked after the
+    board's time but before now: the terminal, the minis and the by-hand chips leave it out, and with no row left the page falls back
+    to the dated saved board."""
+    now = datetime.now(timezone.utc)
+    at = now - timedelta(hours=3)
+    b = {"board_at": iso(at), "records": [rec("Qstarted", "kills", 31.5, "underdog", .611, "B", now - timedelta(hours=1), moved=30.5),
+                                          rec("Qstarted", "kills", 32.5, "prizepicks", .58, "B-", now - timedelta(hours=1))]}
+    assert landing_v3.terminal(b)[2] == 1                                 # the saved-board path (never through open_only) keeps its rows
+    live = landing_v3.open_only(b)                                        # build() reads the live board through open_only
+    assert landing_v3.terminal(live)[2] == 0
+    assert landing_v3.minis(live) == {} and "Qstarted" not in "".join(landing_v3.hand_minis(live))
+    assert landing_v3.grade_seed(live) is None
+    seed(srv, monkeypatch, b)
+    s = build(srv).decode("utf-8")
+    assert "Qstarted" not in s and 'data-state="saved"' in s
+    b["records"].append(rec("Qlater", "kills", 30.5, "underdog", .62, "B", now + timedelta(hours=2)))   # one row still to come
+    workspace_api._SNAP["body"] = json.dumps(b).encode()
+    s = build(srv).decode("utf-8")
+    assert "Qstarted" not in s and "Qlater" in s and 'data-state="dated"' in s
+
+
 def test_ledger_and_proof_line_come_from_the_record_answers(srv, monkeypatch):
     seed(srv, monkeypatch, board())
     t = text(build(srv))
@@ -1126,3 +1148,106 @@ def test_trimmed_review_keeps_its_ellipsis_on_the_last_word(srv, monkeypatch):
     seed(srv, monkeypatch, board())
     s = build(srv).decode("utf-8")
     assert "prop.\u00a0…</blockquote>" in s and "prop. …" not in s
+
+
+# ------------------------------------------------------------------------------------------------- sweep 2026-11-23 (landing)
+def test_move_the_line_hands_the_board_s_own_number_for_the_real_line(srv, monkeypatch):
+    """sweep L1: the widget's real line prints the board's p_side and letter (data-gw "board"), never the formula's (which may differ by up to
+    0.3 points): the saved board's seed is 57.0 B- while the formula gives 56.9."""
+    b = board()
+    lam, line = 32.98, 31.5
+    p = landing_v3.kills_chance(line, lam)                               # 0.56932: 56.9 by the formula
+    b["records"][0]["scout"].update(side="over", p_side=0.57, grade="B-", projection=lam)
+    b["records"][0]["offer"]["line"] = line
+    seed(srv, monkeypatch, b)
+    s = build(srv).decode("utf-8")
+    assert abs(p - 0.57) <= 0.003 and f"{p * 100:.1f}" == "56.9"
+    cfg = json.loads(html.unescape(re.search(r'data-gw="([^"]+)"', s).group(1)))
+    assert cfg["board"] == {"p": "57.0", "g": "B-", "side": "Over"} and cfg["line"] == 31.5
+    assert 'id="gw-p">57.0<' in s and 'id="gw-g">B-<' in s and '<li data-g="B-" class=on>' in s
+
+
+def test_the_tier_link_shows_only_for_a_letter_the_record_has(srv, monkeypatch):
+    """sweep L2: the public record counts 57%+ (results_view.RULE), so its tiers are A+ .. B; a B- (or Lean) read links to no tier. The
+    lead row's link is hidden for B-, and every line carries data-rec for the page script."""
+    import results_view
+    assert [g for g in ("A+", "A", "A-", "B+", "B", "B-", "Lean Over", "") if landing_v3.on_record(g)] == ["A+", "A", "A-", "B+", "B"]
+    assert results_view.RULE == 0.57
+    seed(srv, monkeypatch, board())
+    s = build(srv).decode("utf-8")
+    rows = {re.search(r'class="who"[^>]*><b>([^<]+)<i', r).group(1): r for r in re.findall(r'<li class="tr[^"]*".*?</li>', s, re.S)}
+    assert '<p class="dt-rec" hidden><a href="/record#cs2">See the <b data-k="g">B-</b> tier' in rows["Gap"]   # B- lead: no tier link
+    assert 'data-g="B-" data-rec=""' in rows["Gap"] and 'data-g="" data-rec=""' in rows["Gap"]
+    assert '<p class="dt-rec"><a href="/record#cs2">See the <b data-k="g">B</b> tier' in rows["Zeta"] and 'data-g="B" data-rec="1"' in rows["Zeta"]
+
+
+def test_a_line_without_a_letter_reads_lean_never_a_dash(srv, monkeypatch):
+    """sweep L3: a line under the B- cut reads 'Lean Over' / 'Lean Under' (the member board's and the widget's words), never '–'."""
+    assert landing_v3._grade_text(None, "Under") == "Lean Under" and landing_v3._grade_text("B", "Over") == "B"
+    seed(srv, monkeypatch, board())
+    s = build(srv).decode("utf-8")
+    assert '<div class="gr"><b class="">–</b>' not in s and 'data-k="g">–<' not in s
+
+
+def test_every_in_page_link_has_its_section(srv, monkeypatch):
+    """sweep L5: a section left out (no record, no reviews, no board) takes its header link with it: every href="#x" has an id="x"."""
+    def check(s):
+        ids = set(re.findall(r'\sid="([^"]+)"', s))
+        missing = sorted({h for h in re.findall(r'href="#([^"]+)"', s)} - ids)
+        assert not missing, missing
+    seed(srv, monkeypatch, board(), rv=None, recs=False)                 # no record, no reviews (the first build after a restart)
+    s = build(srv).decode("utf-8")
+    check(s)
+    assert 'href="#record"' not in s and 'href="#terminal"' in s           # (the Prop Grader header has no Reviews link)
+    seed(srv, monkeypatch, board())                                       # everything in: every link back
+    s = build(srv).decode("utf-8")
+    check(s)
+    assert 'href="#record"' in s and 'href="#terminal"' in s
+    monkeypatch.setattr(landing_v3, "fallback_board", lambda: None)       # no board at all: no Board link either
+    workspace_api._SNAP["body"] = None
+    s = build(srv).decode("utf-8")
+    check(s)
+    assert 'href="#terminal"' not in s
+
+
+def test_two_maps_pool_prints_one_string_per_pair(srv, monkeypatch, maps_loader):
+    """sweep L6: each pair's pooled kills and delta are printed by the server once (data-pairs); the page script shows those strings, so
+    a tie such as (647 + 757) / 96 = 14.625 reads 14.62 on load and after the same two maps are chosen again (never 14.63)."""
+    tie = [("nuke", 647, 50), ("ancient", 757, 46)]
+    assert landing_v3.pace_text(tie, 29.5) == ("14.62", "\u22120.12", "dn")
+    seed(srv, monkeypatch, pm_board())
+    pool = pool_html(landing_v3.build(srv, JOIN, fetch=True))
+    pairs = json.loads(html.unescape(re.search(r'data-pairs="([^"]+)"', pool).group(1)))
+    tot = map_totals(MOVER_MAPS)
+    names = re.findall(r'<span class="mn">([^<]+)</span>', pool)
+    idx = [int(x) for x in re.findall(r'data-i="(\d+)"', pool)]
+    assert idx == list(range(len(names))) and len(pairs) == len(names) * (len(names) - 1) // 2
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            mi, mj = (names[i], *tot[names[i]]), (names[j], *tot[names[j]])
+            assert pairs[f"{i}-{j}"] == list(landing_v3.pace_text([mi, mj], 32.5))
+    assert f'<b id="pool-v">{pairs["0-1"][0]}</b>' in pool and f'>{pairs["0-1"][1]}</i>' in pool
+
+
+def test_a_failed_sign_in_sends_a_fixed_code_never_its_text(srv, monkeypatch):
+    """sweep L8: /auth/callback redirects with ?signin_error=<code> (whop_auth.error_code), never the message text, and the landing script
+    only maps codes to its own words (an unknown code gets the generic line), so a crafted link cannot put text on the page."""
+    msgs = {"Sign-in expired - please try again": "expired",
+            "Whop sign-in failed at the token step (400: invalid_grant)": "whop",
+            "Whop sign-in failed at the userinfo step (Timeout) - please try again": "whop",
+            "Whop didn't return your account - please try again": "no_account", "anything else": "failed", None: "failed"}
+    for m, code in msgs.items():
+        assert whop_auth.error_code(m) == code and code in whop_auth.SIGNIN_ERROR_CODES
+    seed(srv, monkeypatch, board())
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+    httpd.daemon_threads = True
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        for m, code in list(msgs.items())[:4]:
+            monkeypatch.setattr(whop_auth, "finish_login", lambda c, s, p, _m=m: (None, _m))
+            st, h, _b = get(httpd.server_address[1], "/auth/callback?code=x&state=y")
+            assert st == 302 and h["location"] == "/?signin_error=" + code, (m, h.get("location"))
+    finally:
+        httpd.shutdown()
+    js = (landing_v3.ROOT / "web" / "v3" / "landing-page.js").read_text(encoding="utf-8")
+    assert "el.textContent = e;" not in js and "SIGNIN_ERRORS" in js

@@ -333,3 +333,41 @@ def test_no_saved_l10_while_the_doc_loads_or_after_it_failed(browser, env, monke
         assert not p.errors, p.errors
     finally:
         c.close()
+
+
+@pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
+def test_board_row_l10_is_the_hltv_count_the_card_shows(browser, env, monkeypatch, size):  # noqa: F811
+    """sweep cs2m-1: the board's saved L10 (BO3.gg + HLTV, here 7 Over of 10) is not reproduced by HLTV (3 of 10). The v3 row's L10 is the
+    shared pass's HLTV count (/hits l10), the same series the card counts and the row's L5 / L20 come from - never the saved one."""
+    import tests.test_v3_hltv_only_browser as me
+    b = json.loads(BOARD)
+    for x in b["records"]:
+        if x["offer"]["offer_id"] == "pp:17255714":
+            x["history"]["l10"] = {"over": 7, "under": 3, "push": 0, "n": 10}           # the saved tally HLTV does not reproduce
+    monkeypatch.setattr(me, "BOARD", json.dumps(b))
+    ser, line = KILLS["history"]["series"], KILLS["record"]["offer"]["line"]
+    tal = lambda n: {"over": sum(g["value"] > line for g in ser[:n]), "under": sum(g["value"] < line for g in ser[:n]),
+                     "push": sum(g["value"] == line for g in ser[:n]), "n": len(ser[:n])}
+    hits = {"rows": {"prizepicks|pp:17255714": {"line": line, "l5": tal(5), "l10": tal(10), "l20": tal(20)}}, "complete": True}
+    assert tal(10)["over"] == 3
+    c, p = None, None
+    real_context = me.context
+
+    def ctx_with_hits(*a, **k):
+        cx = real_context(*a, **k)
+        cx.route("**/api/upgrade/hits*", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(hits)))
+        return cx
+    monkeypatch.setattr(me, "context", ctx_with_hits)
+    try:
+        c, p = open_line(browser, env, monkeypatch, size, {"pp:17255714": KILLS, "pp:17255719": HS})
+        row = p.locator("#hub-rows tr[data-record]", has_text="Kills").first
+        p.wait_for_function("(() => { const e = [...document.querySelectorAll('#hub-rows tr[data-record]')].find(r => /Kills/.test(r.textContent));"
+                            " const c = e && e.querySelector('.h-s-l10 .h-hit'); return c && !c.classList.contains('h-hit-wait'); })()", timeout=20000)
+        cell = row.locator(".h-s-l10 .h-hit")
+        label = cell.get_attribute("aria-label") or ""
+        assert "3 Over of the last 10" in label and "7 Over" not in label, label
+        assert "2 Over of the last 5" in (row.locator(".h-s-l5 .h-hit").get_attribute("aria-label") or "")
+        assert not p.errors, p.errors
+    finally:
+        if c:
+            c.close()

@@ -1148,7 +1148,10 @@ function showGate(state) {
        <div class="perk"><b>Prop Board</b><span>Every Underdog and PrizePicks CS2 line graded ahead of time, best first – or compare both platforms' lines side by side.</span></div></div>
      <div class="small muted" style="margin-top:8px">Projections from HLTV match data (BO3.gg as backup) – recent form, LAN or online, the opponent; lines from Underdog and PrizePicks.</div>`;
   $("#f").style.display = "none"; $("#out").innerHTML = ""; g.hidden = false;
-  const err = new URLSearchParams(location.search).get("signin_error");
+  const errCode = new URLSearchParams(location.search).get("signin_error");    // a fixed code (whop_auth.error_code): our own words only
+  const ERR = {expired: "Sign-in expired - please try again", whop: "Whop sign-in did not complete - please try again",
+               no_account: "Whop didn't return your account - please try again"};
+  const err = errCode ? (Object.prototype.hasOwnProperty.call(ERR, errCode) ? ERR[errCode] : "Sign-in did not complete - please try again") : "";
   g.innerHTML = state.signed_in
     ? `<h3 style="margin:0 0 8px">Your Whop account doesn't have access yet</h3>
        <div class="small muted" style="margin-bottom:14px">The grader is for paid members only.</div>

@@ -287,7 +287,7 @@ export function mount(C) {
     const what=n=>w==='h2h'?`of the last ${n} ${n===1?'meeting':'meetings'} with ${opp}`:w==='season'?`of ${n} ${t?.season?t.season+' ':''}season ${n===1?'result':'results'}`:`of the last ${n} at this line`;
     if(!t||!t.n) {
       // the shared CS2 pass has not reached this row yet: a quiet placeholder that fills in when it arrives
-      if(w!=='l10'&&C.hitsPending(r)) return `<span class="h-hit h-hit-wait" role="img" aria-label="${label} loading"></span>`;
+      if((w!=='l10'||C.hltvL10?.(r))&&C.hitsPending(r)) return `<span class="h-hit h-hit-wait" role="img" aria-label="${label} loading"></span>`;
       const none=w==='h2h'?`No past meetings with ${opp} at this line`:w==='season'?'No completed results this season at this line':'No completed results at this line';
       return `<span class="h-hit empty" title="${esc(none)}" aria-label="${label}: ${esc(none)}">—</span>`;
     }

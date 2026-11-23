@@ -68,6 +68,14 @@ def text(fc, row):
     return f"{head}\n{ctx}{', '.join(x for x in (who, when) if x)} ({book}).\n{FOOTER}"
 
 
+def _letters_of_saved(p):
+    """The letters a saved chance can carry. p_pick is saved rounded to 3 decimals (grader.py: p_more/p_less = round(pm, 3)) while the
+    letter came from the unrounded chance (gd-1), so a chance just under a cut (0.5696 -> B-) is saved as the cut (0.570, which alone
+    reads B). Any unrounded chance in [p - 0.0005, p + 0.0005) can be behind the saved value: its letters are the two ends'."""
+    p = float(p or 0)
+    return {grader.grade_from_p(p), grader.grade_from_p(p - 0.0005)}
+
+
 def drafts(board_rows, book, db_path, now=None, min_grade="B-"):
     """{"drafts": [...], "skipped": [...]} for one platform's current board rows. Read-only on the pick log."""
     now = now or datetime.now(timezone.utc)
@@ -105,7 +113,7 @@ def drafts(board_rows, book, db_path, now=None, min_grade="B-"):
                 skipped.append({"line": label, "why": f"the board shows {r.get('grade')} but the latest saved forecast says "
                                                      f"{f['grade']} - wait for the regrade to be logged"})
                 continue
-            if grader.grade_from_p(f["p_pick"] or 0) != f["grade"]:
+            if f["grade"] not in _letters_of_saved(f["p_pick"]):
                 skipped.append({"line": label, "why": f"the saved grade {f['grade']} is not the letter its {f['p_pick']:.1%} "
                                                      f"model estimate earns ({grader.grade_from_p(f['p_pick'] or 0)})"})
                 continue

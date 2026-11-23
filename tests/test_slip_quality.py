@@ -327,6 +327,26 @@ def test_no_repeat_props_across_the_batch_including_other_lines_and_sides():
     assert b["shortage"].startswith("No props were repeated")
 
 
+def test_no_repeat_finds_the_larger_batch_a_greedy_first_slip_would_block():
+    """sweep SR-3: B .70 and C .69 (one match each) and two legs of match A. Greedy takes {B, C} first and A1 + A2 cannot share a slip on
+    PrizePicks, so it stopped at 1; {B, A1} + {C, A2} is a valid 2-slip batch with no prop repeated, and is what the builder returns."""
+    recs = [rec("B", "eB", .70), rec("C", "eC", .69), rec("A1", "eA", .60), rec("A2", "eA", .59)]
+    b = build(recs, size=2, count=2, no_repeat=True)
+    sigs = [{l["player"] for l in s["legs"]} for s in b["slips"]]
+    assert sigs == [{"B", "A1"}, {"C", "A2"}] and b["shortage"] is None
+    props = [l["prop"] for s in b["slips"] for l in s["legs"]]
+    assert len(props) == len(set(props))
+    for s in b["slips"]:
+        assert not sq.problems(s["legs"], "prizepicks", "power")
+    assert b["slips"][0]["why"].startswith("Best all-hit chance that leaves room for more slips")
+    assert b["search"]["nodes"] <= sq.NODE_LIMIT * 2 + sq.RETRY_NODES + 10
+    one = build(recs, size=2, count=1, no_repeat=True)                   # a batch that is not short is the plain best-first one
+    assert [{l["player"] for l in s["legs"]} for s in one["slips"]] == [{"B", "C"}]
+    assert one["slips"][0]["why"].startswith("Best all-hit chance on the board")
+    three = build(recs, size=2, count=3, no_repeat=True)                 # 4 legs make 2 slips at most: the larger batch, then the note
+    assert len(three["slips"]) == 2 and three["shortage"].startswith("No props were repeated")
+
+
 def test_repeats_allowed_spread_and_never_twice_the_same_slip():
     recs = [rec(f"p{i}", f"e{i}", .7 - i / 100) for i in range(5)]
     b = build(recs, size=2, count=6)
