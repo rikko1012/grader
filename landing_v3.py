@@ -938,7 +938,7 @@ def build(srv, join_url, fetch=True):
     out = _template()
     # optional blocks: <!--if:NAME--> ... <!--/if:NAME--> kept only when NAME has content
     for name, on in (("TERM", nrows > 0), ("NOTERM", nrows == 0), ("SAVED", saved), ("MORE", more > 0), ("NOMORE", more <= 0), ("HANDBE", bool(hb)), ("LEDGER", bool(cells)),
-                     ("REVIEWS", bool(nrv)), ("TOTAL", bool(total)), ("RVN", bool(nrv)), ("GW", bool(gw)), ("POOL", bool(pm)), ("EV", tools[1]),
+                     ("REVIEWS", bool(nrv)), ("NOREVIEWS", not nrv), ("TOTAL", bool(total)), ("RVN", bool(nrv)), ("GW", bool(gw)), ("POOL", bool(pm)), ("EV", tools[1]),
                      ("ARB", tools[0]), ("GAP", "GAP" in mi), ("NOGAP", "GAP" not in mi), ("MOVE", "MOVE" in mi), ("BE", "BE" in mi), ("BASE", bool(base)),
                      ("SLIP", bool(slip)), ("UNREC", bool(unrec and rec_names)), ("RVREST", nrv - nfeat > 0)):
         out = re.sub(rf"<!--if:{name}-->(.*?)<!--/if:{name}-->", (lambda m: m.group(1)) if on else "", out, flags=re.S)

@@ -842,6 +842,7 @@ def test_members_section_has_the_attributed_six_man_story_and_real_reviews_only(
     monkeypatch.setattr(reviews, "page_on", lambda: False)                              # no reviews: the story stays, attributed
     sec = re.search(r'(?s)<section class="proofwall sec" id="members".*?</section>', build(srv).decode("utf-8")).group(0)
     assert '<figure class="rv">' not in sec and "Shared by Prop Grader on X" in sec and 'id="reviews"' not in sec
+    assert "in their words" not in sec and "From the members." in sec                 # no member quotes: never "in their words"
 
 
 def test_faq_answers_the_free_day_bankroll_and_apps_questions(srv, monkeypatch):
