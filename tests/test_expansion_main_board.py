@@ -275,3 +275,23 @@ def test_zero_game_lettered_line_renders_row_and_drawer(ctx, env, expansion, siz
     text = p.locator('#hub-detail').inner_text()
     assert 'NaN' not in text and 'undefined' not in text
     no_h_scroll(p)
+
+
+@pytest.mark.parametrize('sport', adapter.SPORTS)
+def test_card_forecast_sample_unit_matches_the_board_record(expansion, sport):
+    """sweep 2026-11-23 ST-3: the tennis card said 'N completed games' while the board record says 'N completed matches'
+    (the sample counts matches). Soccer keeps its exact wording."""
+    import hashlib
+    import server
+    adapter.reset()
+    doc = expansion[sport]; offer = doc['offers'][0]; facts = doc['research'][adapter._key(offer)]
+    doc['forecasts'] = {forecast_key(offer): forecast_fixture(offer, facts)}
+    snap = adapter.snapshot(server, sport)
+    rid = 'e-' + hashlib.sha256(offer['offer_id'].encode()).hexdigest()[:24]
+    r = next(x for x in json.loads(snap['body'])['records'] if x['offer']['offer_id'] == rid)
+    unit = 'matches' if sport == 'tennis' else 'games'
+    assert f'20 completed {unit}' in r['scout']['validation']['detail']
+    st, card = adapter.line_doc(server, sport, 'prizepicks', rid)
+    rows = {x['label']: x['value'] for x in card['context']['rows'] if x['group'] == 'Used in forecast'}
+    assert st == 200 and rows['Forecast sample'] == f'20 completed {unit}'
+    assert rows['Prediction method'] == ('Match-to-match' if sport == 'tennis' else 'Game-to-game') + ' variation and historical scoring rate'

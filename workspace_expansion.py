@@ -249,8 +249,10 @@ def line_doc(srv, sport, book, rid):
                       'p_side': item['scout']['p_side'], 'grade': item['scout']['grade']})
     if x.get('forecast'):
         f=x['forecast']
-        context.extend([{'label':'Forecast sample','value':f"{f['sample']} completed games",'group':'Used in forecast'},
-                        {'label':'Prediction method','value':'Game-to-game variation and historical scoring rate','group':'Used in forecast'}])
+        # the board record's own unit (tennis counts matches; sweep 2026-11-23 ST-3: the card said "games" for tennis)
+        tennis = r['sport'] == 'tennis'
+        context.extend([{'label':'Forecast sample','value':f"{f['sample']} completed {'matches' if tennis else 'games'}",'group':'Used in forecast'},
+                        {'label':'Prediction method','value':('Match-to-match' if tennis else 'Game-to-game')+' variation and historical scoring rate','group':'Used in forecast'}])
         context.extend({'label':'Surface' if k=='surface' else 'Match format',
                         'value':v if k=='surface' else f'Best of {v} sets','group':'Used in forecast'}
                        for k,v in f.get('context_used',{}).items())
