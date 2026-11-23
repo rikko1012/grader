@@ -463,6 +463,14 @@ def phone(shown):
                   and (r.get("offer") or {}).get("line") is not None), None)
     if other:
         why.append((f'{(other.get("offer") or {}).get("platform_label") or ""} line', _num((other.get("offer") or {}).get("line"))))
+    # the member card's verdict for this row, last (critic round 5): the record's own stake when it carries one, and the member board's
+    # "Below break-even" chip rule (web/upgrade-hub.js belowBreakEven: the chance on its side under the line's parity break-even)
+    u, ps, b = sc.get("units"), sc.get("p_side"), par.get("be")
+    below = isinstance(ps, (int, float)) and isinstance(b, (int, float)) and 0 < b < 1 and ps < b
+    has_u = isinstance(u, (int, float)) and not isinstance(u, bool)
+    if has_u or below:
+        val = " · ".join(([f"{float(u):g}U"] if has_u else []) + (["below break-even"] if below else []))
+        why.append(("Stake" if has_u else "Verdict", val[0].upper() + val[1:]))
     g = sc.get("grade") or ""
     prop = f"{side} {line} {mk.get('stat_label') or ''} · {mk.get('period_label') or ''}"
     sr = (f"Example prop card: {pl.get('name')}, {prop.replace(' · ', ', ')} on {app}, model estimate {p}% at the {line} line, grade "
@@ -546,8 +554,7 @@ def slip_cards(real):
                      f'<small>{prop}{" · " + per if per else ""}</small></span>'
                      f'<span class="sv mo">{LOCK}</span>')
     cls = lambda i: "sc" if i == 0 else "sc ph"          # noqa: E731
-    added = '<span class="sad"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>Added to slip</span>'
-    board = "".join(f'<div class="sbx" data-i="{i}"><div class="{cls(i)}">{c}</div>{added}</div>' for i, c in enumerate(cards))
+    board = "".join(f'<div class="sbx" data-i="{i}"><div class="{cls(i)}">{c}</div></div>' for i, c in enumerate(cards))
     slots = "".join(f'<div class="slot" data-i="{i}"><div class="{cls(i)}">{c}</div></div>' for i, c in enumerate(cards))
     return board, slots
 
@@ -909,8 +916,8 @@ def build(srv, join_url, fetch=True):
         "OWNER_POST": esc(OWNER_POST), "OWNER_POST_BY": esc(OWNER_POST_BY),
         "PF_CLS": " pf-solo" if ncols == 1 else " pf-2" if ncols == 2 else "",
         "OWNER_STORY": esc(OWNER_STORY).replace("6 man", "6&nbsp;man"), "OWNER_STORY_BY": esc(OWNER_STORY_BY),
-        "STORY_CLS": "" if nrv else " solo",
         "SPORT_SUB": esc(_sport_sub(sp)),
+        "SPORT_PILL": esc(" · ".join(LABEL[s] for s in sp)),       # the hero pill (brief 2): "CS2 · LoL · NBA · NFL · Soccer · Tennis"
         "SPORT_LONG": esc(_list([LONG[s] if s in ("cs2", "lol", "nba", "nfl") else LONG[s].lower() for s in sp])),
         # the frame's sidebar: the long name, and the short one the 1024-1279 layout shows (a nav label never truncates)
         "SPORT_NAV": "".join(f'<li{" class=on" if s == "cs2" else ""}><span class="lg">{LONG[s]}</span><span class="sh">{LABEL[s]}</span></li>'
@@ -927,6 +934,9 @@ def build(srv, join_url, fetch=True):
         "LEDGER_TOTAL": tot_s, "LEDGER_N": str(total), "LEDGER_W": str(len(tot_s)),
         "REC_SRC": esc(f"{re.sub(r'^https://', '', base)}/record") if base else "the public record",
         "RV_HEAD": head, "RV_CARDS": cards, "RV_N": str(nrv),
+        # the one rating line beside the Members H2 (brief 8); the story card carries the 6-man post only (critic round 5)
+        "RV_LINE": (f'<span aria-hidden="true"><span class="star">★</span>&nbsp;{avg:.1f} ·&nbsp;</span><span class="sr-only">Rated {avg:.1f} out of 5 from </span>'
+                    f'{nrv} reviews, all published' if avg is not None else f"{nrv} reviews, all published"),
         "RQS_CLS": f" n{cards.count('<li>')}",
         "RV_BIG": (f'<span class="star" aria-hidden="true">★</span>&nbsp;{avg:.1f}' if avg is not None else str(nrv)),
         "RV_BIG_SR": esc(f"{avg:.1f} out of 5" if avg is not None else str(nrv)),

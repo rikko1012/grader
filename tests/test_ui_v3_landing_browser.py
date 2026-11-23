@@ -151,12 +151,10 @@ def test_landing_v3_first_screen_passes_the_five_second_test(browser, lbase, siz
             assert inside(".br:not(.br-h)") and inside(".br:not(.br-h) .gb")          # the first graded row, letter and all
             assert page.locator(".phone").is_visible() and page.locator(".side").is_visible()
         else:
-            # critic round 4: phones see real board rows (a compact frame, no sidebar) above the phone, not one prop
-            assert page.locator(".browser").is_visible() and not page.locator(".side").is_visible() and page.locator(".phone").is_visible()
-            assert inside(".br:not(.br-h)") and inside(".br:not(.br-h) .gb") and inside(".url")
-            assert page.evaluate("[...document.querySelectorAll('.br:not(.br-h) .b-ln, .br:not(.br-h) .b-pk, .br:not(.br-h) .b-p b')]"
-                                 ".every(e => e.scrollWidth <= e.clientWidth + 1)")      # lines, pick and estimate never cut
-            assert page.evaluate("getComputedStyle(document.querySelector('.url')).fontFamily").startswith('"Geist Mono"')
+            # brief 3 + rulebook 5.6 (critic round 5): phones show the phone frame only, its Why list complete, nothing cut
+            assert not page.locator(".browser").is_visible() and page.locator(".phone").is_visible()
+            assert page.locator(".ph-why li").count() == page.evaluate("[...document.querySelectorAll('.ph-why li')].filter(e => e.offsetParent).length")
+            assert page.evaluate("[...document.querySelectorAll('.ph-why b, .ph-who, .ph-prop')].every(e => e.scrollWidth <= e.clientWidth + 1)")
         assert page.locator(".hero a.btn").count() == 1                                # one call to action in the hero
         assert page.locator(".hero-proof").count() == 0 and page.locator(".hero a").count() == 1   # brief 3.2: nothing else in the hero
         small = page.evaluate("""() => [...document.querySelectorAll('a,button')].filter(e => e.offsetParent && !e.closest('.dock')
@@ -178,7 +176,7 @@ def test_landing_v3_product_pictures_are_view_only(browser, lbase):
     try:
         bad = page.evaluate("""() => { const foc = 'a[href],button,input,select,textarea,[tabindex]';
             return [...document.querySelectorAll('[aria-hidden="true"],[role="img"]')].flatMap(n => [...n.querySelectorAll(foc)]).length
-              + [...document.querySelectorAll('.browser *,.phone *,.panel *,.ss-fig *')].filter(e => getComputedStyle(e).cursor === 'pointer').length }""")
+              + [...document.querySelectorAll('.browser *,.phone *,.panel *,.ss-board *,.ss-pic *')].filter(e => getComputedStyle(e).cursor === 'pointer').length }""")
         assert bad == 0
         before = page.content()
         page.locator(".br:not(.br-h)").first.click()
@@ -187,7 +185,7 @@ def test_landing_v3_product_pictures_are_view_only(browser, lbase):
         tabbed = []
         for _ in range(40):
             page.keyboard.press("Tab")
-            tabbed.append(page.evaluate("document.activeElement.closest('.browser,.phone,.panel,.ss-fig') ? 'frame' : document.activeElement.tagName"))
+            tabbed.append(page.evaluate("document.activeElement.closest('.browser,.phone,.panel,.ss-board,.ss-pic') ? 'frame' : document.activeElement.tagName"))
         assert "frame" not in tabbed
     finally:
         ctx.close()
@@ -198,11 +196,12 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
     ctx, page = open_page(browser, lbase, PHONE, "dark", motion="reduce")
     try:
         assert not page.evaluate("document.documentElement.classList.contains('motion')")
-        assert page.locator("#ss-st").text_content() == "Slip ready" and page.locator("#ss-cta").count() == 0   # no stage CTA (D15)
+        assert page.locator("#ss-st").text_content() == "Slip ready"
+        assert page.locator("#ss .ss-go").is_visible() and page.locator("#ss .ss-go").get_attribute("href") == JOIN   # brief 6b: the slip CTA
         assert page.locator(".ss-board").is_visible()                                  # phones: a 2x2 strip of mini cards above the slip
-        assert page.evaluate("[...document.querySelectorAll('.sbx>.sc')].every(e => getComputedStyle(e).opacity === '0')")   # end frame:
-        assert page.evaluate("[...document.querySelectorAll('.sad')].every(e => getComputedStyle(e).opacity === '0')")      # one line, not
-        assert page.locator(".ss-done").is_visible() and page.locator(".ss-done").text_content() == "All 4 legs are in the slip"   # 4 copies
+        # end frame: every source card stays in its box, dimmed to 30% by a 70% veil (brief 6b; the text keeps full contrast)
+        assert page.evaluate("[...document.querySelectorAll('.sbx')].every(e => getComputedStyle(e, '::after').opacity === '0.7' && getComputedStyle(e.firstElementChild).opacity === '1')")
+        assert page.locator(".sad, .ss-done").count() == 0
         assert page.evaluate("[...document.querySelectorAll('.rv')].every(e => getComputedStyle(e).opacity === '1')")
         assert page.evaluate("[...document.querySelectorAll('.slot .sc')].every(e => getComputedStyle(e).opacity === '1')")
     finally:
@@ -214,9 +213,10 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
         assert page.locator("#ss .slot.on").count() == 0 and page.locator("#ss .slot .sc").first.evaluate("e => getComputedStyle(e).opacity") == "1"
         page.locator("#ss").scroll_into_view_if_needed()
         page.wait_for_function("document.getElementById('ss-st').textContent.startsWith('Building')", timeout=4000)
+        assert page.evaluate("getComputedStyle(document.querySelector('.ss-go')).visibility") == "hidden"   # fades in only at Slip ready
         page.wait_for_function("document.getElementById('ss').classList.contains('ready')", timeout=8000)
         page.wait_for_timeout(600)
-        assert page.locator("#ss .slot.on").count() == 4 and page.locator("#ss a").count() == 0
+        assert page.locator("#ss .slot.on").count() == 4 and page.locator("#ss a").count() == 1 and page.locator("#ss .ss-go").is_visible()
         page.wait_for_timeout(3000)
         assert page.locator("#ss-st").text_content() == "Slip ready"                  # holds: no loop
         page.evaluate("window.scrollTo(0, 0)")
@@ -232,13 +232,13 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
     ctx, page = open_page(browser, lbase, PHONE, "dark", motion="no-preference")
     try:
         page.evaluate("document.querySelector('#ss').scrollIntoView({block:'center'})")
-        page.wait_for_function("document.getElementById('ss-st').textContent === 'Building 2 of 4'", timeout=4000)
+        page.wait_for_function("document.getElementById('ss-st').textContent === 'Building \u00b7 2 of 4'", timeout=4000)
         page.wait_for_function("document.getElementById('ss').classList.contains('ready')", timeout=6000)   # mini cards fly down
         assert page.locator("#ss .slot.on").count() == 4 and page.evaluate("[...document.querySelectorAll('.ghost')].length") == 0
-        assert page.locator("#ss .sbx.gone").count() == 4                            # each flown card left its 'Added to slip' outline
-        page.wait_for_timeout(400)                                                    # ... and "Slip ready" folds them into one line
-        assert page.evaluate("getComputedStyle(document.querySelector('.ss-done')).opacity") == "1"
-        assert page.evaluate("[...document.querySelectorAll('.sad')].every(e => getComputedStyle(e).opacity === '0')")
+        assert page.locator("#ss .sbx.gone").count() == 4                            # each flown card stays, dimmed (brief 6b)
+        page.wait_for_timeout(600)
+        assert page.evaluate("[...document.querySelectorAll('.sbx')].every(e => getComputedStyle(e, '::after').opacity === '0.7')")
+        assert page.evaluate("getComputedStyle(document.querySelector('.ss-go')).opacity") == "1"
         assert not page.errors, page.errors
     finally:
         ctx.close()
@@ -251,12 +251,12 @@ def test_landing_v3_inside_text_shows_with_motion_and_no_map_panel(browser, lbas
         ctx, page = open_page(browser, lbase, size, "dark", motion="no-preference")
         try:
             assert page.locator(".kbars").count() == 0
-            for sel in (".irow.flip .itxt", ".irow:not(.flip) .itxt"):
+            for sel in (".icol.solo .itxt", ".icol:not(.solo) .itxt"):
                 page.locator(sel).scroll_into_view_if_needed()
                 page.wait_for_timeout(900)
                 assert page.evaluate(f"getComputedStyle(document.querySelector('{sel}')).opacity") == "1", sel
-            box = page.locator(".irow.flip .itxt").bounding_box()
-            assert box["x"] < size["width"] / 2                                      # un-flipped to the left when it stands alone
+            box = page.locator(".icol.solo .itxt").bounding_box()
+            assert box["x"] < size["width"] / 2                                      # the text-only column starts on the left
         finally:
             ctx.close()
 
@@ -320,7 +320,7 @@ def test_landing_v3_phone_bar_never_covers_content(browser, lbase):
         assert not page.locator(".btn-nav").is_visible()                              # one Try on screen: the header pill steps aside
         si = page.locator(".nav-cta .tl").bounding_box()                              # and Sign in sits flush right (no hole)
         assert abs(si["x"] + si["width"] - (PHONE["width"] - 20)) <= 1, si
-        for sel in (".ss-cta", "#plan", "#final"):
+        for sel in (".ss-go", "#plan", "#final"):                         # phones: the slip panel CTA is the Slip Try (round 5)
             page.locator(sel).scroll_into_view_if_needed()
             page.evaluate(f"document.querySelector('{sel}').scrollIntoView({{block:'center'}})")
             page.wait_for_timeout(400)

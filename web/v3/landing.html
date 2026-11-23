@@ -44,7 +44,7 @@
 <main id="main">
 <section class="hero" aria-labelledby="hero-title">
   <div class="wrap hero-in">
-    <p class="hero-for">For {{SPORT_SUB}}</p>
+    <p class="hero-for">{{SPORT_PILL}}</p>
     <h1 id="hero-title">Grade every prop before you <span class="ac nw">lock it in.</span></h1>
     <p class="lead">Every <span translate="no">PrizePicks</span> and <span translate="no">Underdog</span> line gets a letter grade and a model estimate, with the reason in plain English.</p>
     <a class="btn btn-lg" id="hero-cta" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a>
@@ -133,8 +133,9 @@
     <div class="hd">
       <h2 id="inside-title">What members see when they log in.</h2>
     </div>
+    <div class="ipair">
     <!--if:GAP-->
-    <div class="irow">
+    <div class="icol">
       <div class="itxt"><h3>When the apps disagree, you see it first.</h3><p>Every prop shows the <span translate="no">PrizePicks</span> and <span translate="no">Underdog</span> line side by side. Each line is graded on its own, so half a point shows up as a different chance.</p></div>
       <div class="ipanel rv">
         <div class="panel" aria-hidden="true">
@@ -151,7 +152,7 @@
       </div>
     </div>
     <!--/if:GAP-->
-    <div class="irow flip{{POOL_ROW}}">
+    <div class="icol{{POOL_ROW}}">
       <div class="itxt"><h3>Built for CS2, not bolted on.</h3><p><span translate="no">HLTV</span> veto history, each player’s map pool, roles and stand-ins all feed the CS2 card. League of Legends has its own model.</p></div>
       <!--if:POOL--><div class="ipanel rv">
         <div class="panel" aria-hidden="true">
@@ -160,6 +161,7 @@
         </div>
         <p class="sr-only">{{POOL_SR}}</p>
       </div><!--/if:POOL-->
+    </div>
     </div>
   </div>
 </section>
@@ -170,6 +172,7 @@
   <div class="wrap">
     <p class="eb">Why Prop Grader</p>
     <h2 id="why-title">One row instead of six apps.</h2>
+    <p class="cmp-key" aria-hidden="true"><span>By hand</span><svg viewBox="0 0 16 16"><path d="M3 8h10M9.5 4.5L13 8l-3.5 3.5"/></svg><span class="ac">With <span translate="no">Prop Grader</span></span></p>
     <table class="cmp">
       <thead><tr><th scope="col">The job</th><th scope="col">By hand</th><th scope="col" class="ac">With <span translate="no">Prop Grader</span></th></tr></thead>
       <tbody>
@@ -197,15 +200,18 @@
     </div>
     <div class="slip-stage">
       <div class="stage" id="ss">
-        <div class="ss-fig" role="img" aria-label="Example animation: four graded props from different sports move from the board into a 4-pick slip.">
-          <div class="ss-col ss-board">
+        <div class="ss-fig">
+          <div class="ss-col ss-board" aria-hidden="true">
             <p class="ss-h"><b>Graded board</b><span class="tag">Example</span></p>
-            <div class="ss-list">{{SS_CARDS}}<p class="ss-done"><svg viewBox="0 0 16 16"><path d="M3 8.5l3.2 3L13 4.5"/></svg>All 4 legs are in the slip</p></div>
+            <div class="ss-list">{{SS_CARDS}}</div>
           </div>
           <div class="ss-col ss-slip" id="ss-slip">
+            <div class="ss-pic" role="img" aria-label="Example animation: four graded props from different sports move from the board into a 4-pick slip; the chance that all legs hit is members only.">
             <p class="ss-h"><b>Slip Studio · 4-pick</b><span class="st" id="ss-st">Slip ready</span></p>
             <div class="ss-list">{{SS_SLOTS}}</div>
             <div class="ss-all"><svg class="lk" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg><span>All legs hit vs break-even</span><span class="bl">00.0% vs 00.0%</span></div>
+            </div>
+            <a class="btn ss-go" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a>
           </div>
         </div>
       </div>
@@ -238,10 +244,9 @@
 
 <section class="sec members" id="members" aria-labelledby="rv-title">
   <div class="wrap">
-    <h2 id="rv-title">Members, in their words.</h2>
-    <div class="story{{STORY_CLS}}">
+    <div class="mem-hd"><h2 id="rv-title">Members, in their words.</h2><!--if:REVIEWS--><p class="rv-line"><a href="/reviews">{{RV_LINE}}</a></p><!--/if:REVIEWS--></div>
+    <div class="story">
       <div class="st-q"><p class="st-t">{{OWNER_STORY}}</p><p class="st-by">{{OWNER_STORY_BY}}</p></div>
-      <!--if:REVIEWS--><p class="st-r"><a href="/reviews"><b>{{RV_BIG}}</b><span>{{RV_HEAD}}</span></a></p><!--/if:REVIEWS-->
     </div>
     <!--if:RVCARDS--><ul class="rqs{{RQS_CLS}}">{{RV_CARDS}}</ul><!--/if:RVCARDS-->
   </div>
@@ -264,8 +269,7 @@
         <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>Player pages and the public record</li>
       </ul>
     </div>
-    <p class="wk"><a href="{{WEEKLY_URL}}">Weekly plan</a>: {{PRICE_W}}/week</p>
-    <p class="wk2">Secure checkout on Whop.</p>
+    <p class="wk">Prefer weekly? <a href="{{WEEKLY_URL}}">{{PRICE_W}}/week</a> · Secure checkout on Whop</p>
   </div>
 </section>
 

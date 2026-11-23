@@ -3,8 +3,8 @@
    - the fixed message for a failed sign-in code (/?signin_error=<code>), never text from the URL;
    - one-time reveals on the Inside panels (+ their text, 80 ms later, and the kills bars) and the record table;
    - count-up on two proof numbers (+46U and the decided count; the review score never ticks);
-   - the Slip Studio timeline: plays once at 35% on screen (cards fly from the board into the slip, FLIP + WAAPI, transform/opacity
-     only; each flown card leaves a dashed "Added to slip" outline in its board box; on phones the board is a 2x2 strip of mini cards
+   - the Slip Studio timeline (pill "Building…", "Building · 1 of 4" ... "Slip ready"): plays once at 35% on screen (cards fly from the board into the slip, FLIP + WAAPI, transform/opacity
+     only; each flown card stays in its board box dimmed to 30% (brief 6b); the slip CTA fades in after "Slip ready"; on phones the board is a 2x2 strip of mini cards
      above the slip and the same flight runs down into the slots), holds "Slip ready", re-arms only after the stage has fully left
      the screen. Off screen the stage always shows its final frame (a full-page capture or a no-data build never shows an empty
      slip); a hidden tab jumps it to the final frame;
@@ -46,7 +46,7 @@
       if (!e.isIntersecting) return;
       o.unobserve(e.target);
       e.target.classList.add('in');
-      var row = e.target.closest('.irow');
+      var row = e.target.closest('.icol');
       if (row) row.classList.add('in');
     });
   });
@@ -89,13 +89,13 @@
       st.classList.add('run'); st.classList.remove('ready');
       boxes.forEach(function (b) { b.classList.remove('gone'); });
       slots.forEach(function (s) { s.classList.remove('on'); });
-      pill.textContent = 'Building 0 of 4';
+      pill.textContent = 'Building\u2026';
       state = 'idle';
     }
     function land(i) {
       var s = slots[i];
       s.classList.add('on');
-      pill.textContent = 'Building ' + (i + 1) + ' of 4';
+      pill.textContent = 'Building \u00b7 ' + (i + 1) + ' of 4';
       var sc = $('.sc', s);
       if (sc) sc.animate([{ transform: 'scale(.95)' }, { transform: 'scale(1)' }], { duration: 240, easing: 'cubic-bezier(.2,.8,.2,1)' });
     }
@@ -103,7 +103,7 @@
       var s = slots[i];
       if (!s) return;
       s.classList.add('on');
-      pill.textContent = 'Building ' + (i + 1) + ' of 4';
+      pill.textContent = 'Building \u00b7 ' + (i + 1) + ' of 4';
       var sc = $('.sc', s);
       if (sc) sc.animate([{ transform: 'translateY(-16px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: DROP, easing: 'cubic-bezier(.2,.8,.2,1)' });
     }
@@ -224,7 +224,7 @@
       D.body.classList.toggle('dock-on', show);
     }
     io([hero], { threshold: 0 }, function (e) { past = !e.isIntersecting && e.boundingClientRect.top < 0; set(); });
-    var cover = $$('.ss-cta, #plan, #final');
+    var cover = $$('.ss-cta, .ss-go, #plan, #final');
     cover.forEach(function (el, i) { el.setAttribute('data-dock', i); });
     io(cover, { threshold: 0 }, function (e) { over[e.target.getAttribute('data-dock')] = e.isIntersecting; set(); });
     function focusCheck() {
