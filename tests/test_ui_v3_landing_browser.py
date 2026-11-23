@@ -352,7 +352,7 @@ def test_landing_v3_two_maps_pool_and_move_the_line(browser, lbase, monkeypatch)
             d = pooled('Dust 2', 'Inferno') - 32.5 / 2
             assert page.locator("#pool-d").text_content() == ("+" if d >= 0 else "−") + f"{abs(d):.2f}"
             p0 = page.locator("#gw-p").text_content()
-            assert p0 == f"{landing_v3.kills_chance(30.5, 32.4) * 100:.1f}"           # at the real line: the board's number
+            assert p0 == landing_v3._pct(round(landing_v3.kills_chance(30.5, 32.4), 4))   # at the real line: the board's own rounded number
             slider = page.locator("#gw-line")
             slider.focus()
             for _ in range(8):
@@ -365,6 +365,30 @@ def test_landing_v3_two_maps_pool_and_move_the_line(browser, lbase, monkeypatch)
             assert not page.errors, page.errors
         finally:
             ctx.close()
+
+
+def test_landing_v3_move_the_line_prints_the_boards_rounded_number_at_the_real_line(browser, lbase, monkeypatch):
+    """Defect Nov 23: the board row said 0.59 (59.0%) and the widget printed the formula's 58.9 after load. At the real line it now
+    prints the board's own number, on load and after dragging away and back."""
+    b = board()
+    p = landing_v3.kills_chance(30.5, 32.4)
+    b["records"][0]["scout"].update(p_side=round(p, 2), projection=32.4)
+    monkeypatch.setattr(workspace_api, "_SNAP", dict(workspace_api._SNAP, body=json.dumps(b).encode()))
+    landing_v3.reset()
+    warm(lbase, 0)
+    ctx, page = open_page(browser, lbase, PHONE, "dark")
+    try:
+        assert page.locator("#gw-p").text_content() == "59.0" and page.locator("#gw-g").text_content() == "B"
+        slider = page.locator("#gw-line")
+        slider.focus()
+        page.keyboard.press("ArrowRight")
+        assert page.locator("#gw-p").text_content() != "59.0"
+        page.keyboard.press("ArrowLeft")
+        assert page.locator("#gw-lv").text_content() == "30.5" and page.locator("#gw-p").text_content() == "59.0"
+        assert "59.0 percent" in slider.get_attribute("aria-valuetext")
+        assert not page.errors, page.errors
+    finally:
+        ctx.close()
 
 
 @pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])

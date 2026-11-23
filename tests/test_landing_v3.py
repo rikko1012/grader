@@ -67,6 +67,21 @@ def board(at=None):
     ]}
 
 
+def old_board(at):
+    """board(at) read long ago, its rows (Past aside) for matches that have not started yet: the live board keeps rows only while
+    their match is still ahead of now."""
+    b = board(at)
+    shift = datetime.now(timezone.utc) - at
+    for r in b["records"]:
+        if r["player"]["name"] != "Past":
+            r["event"]["start_utc"] = r["event"]["lock_utc"] = iso(_ts(r["event"]["lock_utc"]) + shift)
+    return b
+
+
+def _ts(v):
+    return datetime.fromisoformat(v.replace("Z", "+00:00"))
+
+
 def record_doc(sp, w, l, p):
     return {"sport": sp, "as_of": "2026-11-22T15:17:18+00:00", "rule": f"The {sp} rule. Second sentence.",
             "totals": {"wins": w, "losses": l, "pushes": p, "picks": w + l + p, "matches": 40, "match_word": "matches"},
@@ -171,7 +186,7 @@ def test_terminal_rows_follow_the_stated_rule_with_real_values(srv, monkeypatch)
 
 def test_an_old_board_is_dated_never_checked(srv, monkeypatch):
     at = datetime(2026, 11, 19, 16, 20, tzinfo=timezone.utc)
-    seed(srv, monkeypatch, board(at))
+    seed(srv, monkeypatch, old_board(at))
     s = build(srv).decode("utf-8")
     assert "as of Nov 19, 16:20 UTC" in s and "checked" not in text(s.encode()).split("CS2 board")[1][:80]
     assert 'data-state="dated"' in s
@@ -265,14 +280,14 @@ def test_template_text_has_no_banned_words_or_static_numbers():
 
 def test_an_idle_page_is_rebuilt_before_it_is_served(srv, monkeypatch):
     """No visitors for STALE_S: the next request gets a page rebuilt from cached bodies, never the old one (old rows, old as-of)."""
-    seed(srv, monkeypatch, board(datetime(2026, 11, 19, 16, 20, tzinfo=timezone.utc)))
+    seed(srv, monkeypatch, old_board(datetime(2026, 11, 19, 16, 20, tzinfo=timezone.utc)))
     a = landing_v3.page(srv, JOIN)
     assert b"as of Nov 19, 16:20 UTC" in a
     for _ in range(100):                                                # the first visit's background build
         if not landing_v3._BUILDER["busy"]:
             break
         time.sleep(0.05)
-    workspace_api._SNAP["body"] = json.dumps(board(datetime(2026, 11, 22, 9, 5, tzinfo=timezone.utc))).encode()
+    workspace_api._SNAP["body"] = json.dumps(old_board(datetime(2026, 11, 22, 9, 5, tzinfo=timezone.utc))).encode()
     landing_v3._STATE["made"] = landing_v3._STATE["built"] = time.time() - landing_v3.STALE_S - 1
     b = landing_v3.page(srv, JOIN)
     assert b"as of Nov 22, 09:05 UTC" in b and b"Nov 19, 16:20" not in b
@@ -975,7 +990,8 @@ def test_app_list_is_read_live_and_keeps_pick_apps_apart_from_comparison_books(s
     proof = html.unescape(text(re.search(r'(?s)<ul class="proof".*?</ul>', s).group(0).encode()))
     assert ("PrizePicks + Underdog Lines graded at each app's own number" in proof and "FanDuel" not in proof
             and "Polymarket" not in proof and not re.search(r"\d+ apps", proof))                                        # pick'em apps by name, no merged count
-    assert "One row instead of 2 apps." in t and "apps and books" not in t
+    assert "One row instead of 5 apps." in t and "apps and books" not in t              # every source the chips and the cell name
+    assert "PrizePicks and Underdog lines on one row, with sportsbook and prediction-market lines beside them for comparison on NBA" in t
     assert ("The boards carry lines from PrizePicks and Underdog, the pick'em apps Slip Studio builds slips for, and each line is "
             "graded at the number that app lists. The NBA boards also show lines from FanDuel, Unibet and the Polymarket market beside them for "
             "comparison. Slips cover PrizePicks and Underdog only.") in t
@@ -1029,3 +1045,84 @@ def test_terminal_rule_sentence_keeps_two_app_wording_when_the_board_has_two_app
     seed(srv, monkeypatch, board())
     term = text(re.search(r'(?s)<div class="term-foot">.*?</div>\s*</div>', build(srv).decode("utf-8")).group(0).encode())
     assert "Rows picked by one rule: lettered props, two-app line gaps first, then moved lines, then the soonest." in term
+
+
+def test_an_old_live_board_never_shows_a_match_that_has_started(srv, monkeypatch):
+    """Defect Nov 23: a board read hours ago kept rows whose match locked after the board's time but before now (the hero's top row,
+    the "Move the line" seed). The live board is cut at now for the hero, the tool tiles, the by-hand example and the widget seed."""
+    now = datetime.now(timezone.utc)
+    at = now - timedelta(hours=12)
+    lam = 32.4
+    p = landing_v3.kills_chance(30.5, lam)
+    gone = rec("Started", "kills", 30.5, "underdog", round(p, 4), "B", now - timedelta(minutes=20), proj=lam)
+    gone2 = rec("Started", "kills", 31.5, "prizepicks", .55, None, now - timedelta(minutes=20))       # a line gap, started
+    live = [rec("Later", "kills", 30.5, "underdog", round(p, 4), "B", now + timedelta(hours=3), proj=lam),
+            rec("Soon", "headshots", 12.5, "underdog", .583, "B-", now + timedelta(hours=1), moved=11.5)]
+    b = {"board_at": iso(at), "records": [gone, gone2] + live}
+    seed(srv, monkeypatch, b)
+    s = build(srv).decode("utf-8")
+    assert "Started" not in s                                               # not in the hero, the widget, the tiles or the by-hand row
+    assert "projection for Later is <b>32.4</b>" in s and s.count('<li class="tr') == 2
+    assert landing_v3.open_only(b, now)["records"] == live and b["records"][0] is gone      # a copy: the cached board is untouched
+    b2 = {"board_at": iso(at), "records": [gone, gone2]}                    # every live row started: the saved sample, dated
+    workspace_api._SNAP["body"] = json.dumps(b2).encode()
+    s2 = build(srv).decode("utf-8")
+    assert "Started" not in s2 and 'data-state="saved"' in s2
+
+
+def test_by_hand_headline_counts_every_source_its_chips_and_cell_name(srv, monkeypatch):
+    import workspace_sports
+    s0 = datetime.now(timezone.utc) + timedelta(hours=3)
+    rows = [nba_rec("Lead", "underdog", 24.5, .61, "B", s0), nba_rec("Lead", "prizepicks", 25.5, .58, "B", s0)]
+    workspace_sports._SNAP["nba"] = sports_snap("nba", rows, counts={"fanduel": 40, "draftkings": 9, "betmgm": 7, "polymarket": 12})
+    seed(srv, monkeypatch, board())
+    s = build(srv).decode("utf-8")
+    hand = re.search(r'(?s)<section class="hand sec".*?</section>', s).group(0)
+    chips = re.findall(r'<li(?: class="cmp")?>([^<]+)</li>', re.search(r'(?s)<ul class="chips books".*?</ul>', hand).group(0))
+    n = int(re.search(r"One row instead of (\d+) apps\.", hand).group(1))
+    assert n == len(chips) == 2 + len([c for c in chips if c not in ("PrizePicks", "Underdog")])
+    cell = html.unescape(text(re.search(r'<span role="cell" class="bh">[^<]+</span>', hand).group(0).encode()))
+    m = re.search(r"Open (.+) and write the numbers down", cell).group(1)
+    parts = re.split(r", | and ", m)
+    count = sum(int(x.split()[0]) if x.split()[0].isdigit() else 1 for x in parts)
+    assert count == n, (m, n)
+
+
+def test_line_gaps_tile_reuses_the_real_gap_from_the_by_hand_row(srv, monkeypatch):
+    """When the CS2 sample has no line gap, the Line gaps tile shows the by-hand row's real NBA gap, never the demo chip; with no
+    real gap anywhere it keeps the demo."""
+    import workspace_sports
+    b = board()
+    b["records"] = [r for r in b["records"] if r["offer"]["platform"] == "underdog"]
+    s0 = datetime.now(timezone.utc) + timedelta(hours=3)
+    workspace_sports._SNAP["nba"] = sports_snap("nba", [nba_rec("Lead", "underdog", 24.5, .61, "B", s0),
+                                                        nba_rec("Lead", "prizepicks", 25.5, .58, "B", s0)])
+    seed(srv, monkeypatch, b)
+    landing_v3.build(srv, JOIN, fetch=True)                                   # the builder finds and caches the NBA row
+    s = build(srv).decode("utf-8")
+    tile = re.search(r'(?s)<article class="tile t-gap.*?</article>', s).group(0)
+    assert 'class="mini gap"' in tile and "mini demo" not in tile and "NBA · Lead · Points · Full game" in tile
+    workspace_sports._SNAP["nba"] = sports_snap("nba", [nba_rec("Lead", "underdog", 24.5, .61, "B", s0),
+                                                        nba_rec("Lead", "prizepicks", 24.5, .58, "B", s0)])   # same line: no gap
+    landing_v3.reset()
+    landing_v3.build(srv, JOIN, fetch=True)
+    tile = re.search(r'(?s)<article class="tile t-gap.*?</article>', build(srv).decode("utf-8")).group(0)
+    assert "mini demo" in tile
+
+
+def test_move_the_line_carries_the_boards_own_number_for_the_real_line(srv, monkeypatch):
+    """The board row says 0.59 (59.0%); the formula gives 58.9. The widget is given the board's rounded chance, side and grade to
+    print at the real line, so "it prints the board's own number" holds to the last digit."""
+    b = board()
+    p = landing_v3.kills_chance(30.5, 32.4)
+    b["records"][0]["scout"].update(side="over", p_side=round(p, 2), grade="B", projection=32.4)
+    seed(srv, monkeypatch, b)
+    s = build(srv).decode("utf-8")
+    cfg = json.loads(html.unescape(re.search(r'data-gw="([^"]+)"', s).group(1)))
+    assert cfg["board"] == {"p": "59.0", "side": "Over", "g": "B"} and 'id="gw-p">59.0<' in s
+
+
+def test_trimmed_review_keeps_its_ellipsis_on_the_last_word(srv, monkeypatch):
+    seed(srv, monkeypatch, board())
+    s = build(srv).decode("utf-8")
+    assert "prop.\u00a0…</blockquote>" in s and "prop. …" not in s

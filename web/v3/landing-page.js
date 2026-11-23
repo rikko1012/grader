@@ -150,7 +150,9 @@
         lad = $$('#gw-ladder li');
     function fill() { L.style.setProperty('--p', ((L.value - L.min) / (L.max - L.min) * 100) + '%'); }
     function draw() {
-      var line = parseFloat(L.value), r = chance(line), lx = x(line), txt = 'Line ' + line.toFixed(1), w = txt.length * 7;
+      var line = parseFloat(L.value), r = chance(line), lx = x(line), txt = 'Line ' + line.toFixed(1), w = txt.length * 7, bd = cfg.board;
+      var pTxt = (r.ch * 100).toFixed(1);
+      if (bd && Math.abs(line - cfg.line) < 1e-9) { r.side = bd.side; r.g = bd.g; pTxt = bd.p; }   /* the board's own number at the real line */
       gU.setAttribute('d', area(X0, r.dn)); gO.setAttribute('d', area(r.up, X1));
       gU.setAttribute('class', 'c-u' + (r.side === 'Under' ? ' on' : '')); gO.setAttribute('class', 'c-o' + (r.side === 'Over' ? ' on' : ''));
       mk.setAttribute('x1', lx); mk.setAttribute('x2', lx);
@@ -159,10 +161,10 @@
       pjt.setAttribute('x', right ? x(lam) + 6 : x(lam) - 6); pjt.setAttribute('text-anchor', right ? 'start' : 'end');
       lv.textContent = line.toFixed(1);
       sE.textContent = r.side + ' ' + line.toFixed(1) + ' kills';
-      pE.textContent = (r.ch * 100).toFixed(1);
+      pE.textContent = pTxt;
       gE.textContent = r.g; gE.className = 'gw-g ' + gcls(r.g);
       lad.forEach(function (li) { li.classList.toggle('on', li.getAttribute('data-g') === r.g); });
-      L.setAttribute('aria-valuetext', 'Line ' + line.toFixed(1) + ', ' + r.side + ' ' + (r.ch * 100).toFixed(1) + ' percent, ' + (r.g === 'Lean' ? 'Lean ' + r.side : 'grade ' + r.g));
+      L.setAttribute('aria-valuetext', 'Line ' + line.toFixed(1) + ', ' + r.side + ' ' + pTxt + ' percent, ' + (r.g === 'Lean' ? 'Lean ' + r.side : 'grade ' + r.g));
       fill();
     }
     L.addEventListener('input', draw);

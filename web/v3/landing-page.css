@@ -277,7 +277,7 @@ h2{font:600 clamp(30px,6.4vw,46px)/1.05 var(--sc-font);letter-spacing:var(--sc-t
 .lede{font-size:17px;color:var(--sc-muted);max-width:640px}
 .lede b{color:var(--sc-text);font-weight:600}
 .fine{margin-top:16px;font-size:14px;color:var(--sc-muted);line-height:1.5}
-.fine a{color:var(--sc-link);font-weight:600;display:inline-flex;align-items:center;gap:4px;min-height:44px;vertical-align:middle}
+.fine a{color:var(--sc-link);font-weight:600;display:inline-flex;align-items:center;gap:4px;min-height:44px;margin:-12px 0;vertical-align:middle}
 .cta-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;margin-top:22px}
 @media (max-width:599px){.cta-row .btn{flex:1 1 100%}}
 @media (min-width:1000px){.sec{padding:72px 0}.sec-head{margin-bottom:30px}}

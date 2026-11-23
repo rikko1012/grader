@@ -251,6 +251,22 @@ def _parse(name, body):
 
 # --------------------------------------------------------------------------------------------------------------- the terminal
 
+def open_only(board, now=None):
+    """The live board with only the rows whose match has not started (lock after now): a shallow copy, records filtered. The hero
+    rows, the tool tiles, the by-hand example and the "Move the line" seed all read this, so a board that is hours old never shows a
+    line nobody can play any more. The saved board (FALLBACK) is never passed through here: it is shown dated, as a saved sample."""
+    if not board:
+        return board
+    now = now or datetime.now(timezone.utc)
+    keep = []
+    for r in board.get("records") or []:
+        ev = r.get("event") or {}
+        t = _ts(ev.get("lock_utc") or ev.get("start_utc"))
+        if t is not None and (t if t.tzinfo else t.replace(tzinfo=timezone.utc)) > now:
+            keep.append(r)
+    return dict(board, records=keep)
+
+
 def _rows(board, n=6):
     """Terminal rows by the stated rule: graded standard CS2 props with a lock after the board's own time, one row per
     player/stat/maps market (every app's line on it). Line gaps and moved lines first, then the soonest. Returns (rows, board time,
@@ -355,7 +371,8 @@ def minis(board):
 
 
 def hand_minis(board, pair=None):
-    """The by-hand table's real UI: (gap example, meter, gap row text). One example for the "Spot a gap" and "Price the entry" rows:
+    """The by-hand table's real UI: (gap example, meter, gap row text, the example again only when its lines differ - the Line gaps
+    tile reuses it when the CS2 sample has no gap of its own). One example for the "Spot a gap" and "Price the entry" rows:
     the first terminal row with two apps' lines; when the CS2 sample has none, `pair` (sports_pair: a real NBA / NFL row both pick'em
     apps list, labelled with its sport). The Line gap chip shows on it only when its lines differ. Meter: the example's lead row's
     chance against its break-even when it has both, else the first terminal row's; always captioned with its own sport and player."""
@@ -383,9 +400,9 @@ def hand_minis(board, pair=None):
         ui = _span_cells(rs) + ('<em class="chip gap">Line gap</em>' if gap else "") + _who(rs[0], sport)
         txt = ("Flagged on the row when the apps differ, each line graded on its own" if gap else
                "Same line on both apps here; when they differ the row says Line gap, each line graded on its own")
-        return ui, bar, txt
+        return ui, bar, txt, (ui if gap else "")
     return ('<em class="chip gap">Line gap</em>', bar,
-            "Flagged on the row when two apps list different lines, each line graded on its own")
+            "Flagged on the row when two apps list different lines, each line graded on its own", "")
 
 
 def _who(r, sport=None):
@@ -782,7 +799,7 @@ def wall(doc):
         cards.append(
             f'<figure class="rv"><div class="st" aria-label="{stars} of 5 stars">{"★" * stars}<span>{"★" * (5 - stars)}</span></div>'
             f'{"<h3>" + esc(title) + "</h3>" if title else ""}'
-            f'<blockquote>{esc(quote)}{" …" if cut else ""}</blockquote>'
+            f'<blockquote>{esc(quote)}{chr(160) + "…" if cut else ""}</blockquote>'
             f'<figcaption><b>{esc(r.get("name"))}</b><small>Paying member · {esc(_day(r.get("created")) + (", " + str(d.year) if d else ""))}{" · edited" if r.get("edited") else ""}</small>'
             f'<a href="/reviews">On the reviews page <span aria-hidden="true">→</span></a></figcaption></figure>')
     avg = s.get("average")
@@ -920,8 +937,9 @@ def _cmp(sb, mk):
 
 def app_fills(picks, books, book_lgs):
     """The page's app wording from apps_seen: the proof tile, the by-hand headline / chips / row, step 1, the FAQ answer. Pick'em apps
-    (slips), sportsbooks and prediction markets (MARKETS) are never counted as one kind: the tile leads with the pick'em apps by name
-    and the headline counts pick'em apps only. Nothing seen: no count and no "and more" (the tile is left out)."""
+    (slips), sportsbooks and prediction markets (MARKETS) are never merged in the tile or the FAQ: the tile leads with the pick'em apps
+    by name. The by-hand headline counts every source its own chips and "By hand" cell name (pick'em apps, sportsbooks, markets), so
+    the headline, the chips and the row agree. Nothing seen: no count and no "and more" (the tile is left out)."""
     sb = [b for b in books if b not in MARKETS]
     mk = [b for b in books if b in MARKETS]
     lgs = _list(book_lgs) if book_lgs else "sports"
@@ -948,10 +966,13 @@ def app_fills(picks, books, book_lgs):
         faq = "Every row names the app whose line it is and when that line was seen, and each line is graded at that app's own number."
         hand_open = "Open each app and write the numbers down"
         step1 = "Every app's line on one row, for every sport on the board."
-    n = len(picks)
-    row1 = ("Both apps' lines on one row, for every sport on the board" if n == 2 else
-            f"{_list(picks)} lines on one row, for every sport on the board" if n > 2 else
-            "The app's line on one row, for every sport on the board" if n == 1 else "Every app's line on one row")
+    n = len(picks) + len(sb) + len(mk)               # every source named in the chips and in the by-hand cell, so the three agree
+    np_ = len(picks)
+    row1 = ("Both apps' lines on one row, for every sport on the board" if np_ == 2 else
+            f"{_list(picks)} lines on one row, for every sport on the board" if np_ > 2 else
+            "The app's line on one row, for every sport on the board" if np_ == 1 else "Every app's line on one row")
+    if picks and books:
+        row1 = f"{_list(picks)} lines on one row, with {kinds} lines beside them for comparison on {lgs}"
     return {
         "APP_TILE": tile,
         "HAND_H": esc(f"One row instead of {n} apps." if n > 1 else "One row for every line."),
@@ -1041,7 +1062,11 @@ def _widget(seed, saved_at):
     lo, hi = max(0.5, math.floor(lam * 0.5) + 0.5), math.floor(lam * 1.5) + 0.5
     cuts = [[c, g] for c, g in CUTS if c <= KILLS_CAP]      # kills are capped at 78% either side: no A+ on kills (grader p_cap_kills)
     g = sc.get("grade") or ""
-    data = {"proj": round(lam, 2), "line": line, "spread": KILLS_SPREAD, "cap": KILLS_CAP, "cuts": cuts}
+    side = "Over" if sc.get("side") == "over" else "Under"
+    # at the real line the widget prints the board's own rounded chance, side and grade (never the formula's re-computation, which
+    # grade_seed only holds to within 0.3 points)
+    data = {"proj": round(lam, 2), "line": line, "spread": KILLS_SPREAD, "cap": KILLS_CAP, "cuts": cuts,
+            "board": {"p": _pct(sc.get("p_side")), "side": side, "g": g or "Lean"}}
     return {
         "GW_DATA": esc(json.dumps(data, separators=(",", ":"))),
         "GW_WHO": esc(pl.get("name")), "GW_PROJ": f"{lam:.1f}", "GW_LINE": esc(_num(line)), "GW_MIN": _num(lo), "GW_MAX": _num(hi),
@@ -1084,7 +1109,7 @@ def build(srv, join_url, fetch=True):
     checkout every primary button opens (server.landing_trial_url)."""
     inp = _inputs(srv, fetch)
     sp = sports_on()
-    board, saved = inp["board"], False
+    board, saved = open_only(inp["board"]), False       # live rows only while their match has not started (never a stale line)
     rows, meta, nrows, ntotal = terminal(board) if board else ("", "", 0, 0)
     if not nrows:                                     # nothing to show live: the saved board, dated, through the same code
         board = fallback_board()
@@ -1101,7 +1126,9 @@ def build(srv, join_url, fetch=True):
     slip, slip_cap = slip_card()
     if fetch and BOARD_READ:
         _warm_sports(srv, sp)
-    hp, hb, hrow = hand_minis(board if nrows else None, sports_pair(sp, compute=fetch))
+    hp, hb, hrow, hgap = hand_minis(board if nrows else None, sports_pair(sp, compute=fetch))
+    if hgap and "GAP" not in mi:
+        mi["GAP"] = hgap                              # the Line gaps tile shows the same real gap as the by-hand row, never the demo chip
     apps = app_fills(*apps_seen(inp["board"], sp))
     plats = {(r.get("offer") or {}).get("platform") for rs, _g, _m in (_rows(board, n=HERO_ROWS)[0] if nrows else []) for r in rs}
     term_rule = ("lettered props, two-app line gaps first, then moved lines, then the soonest" if len(plats) > 1 or
