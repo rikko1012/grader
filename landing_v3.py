@@ -9,8 +9,8 @@ The page is VIEW-ONLY (owner access rule: visitors get no usable product for fre
 the member app, tagged EXAMPLE: no row that opens, no app toggle, no slider, no buildable slip, no calculator. Every number on it comes
 from a body the server already keeps for its own public routes - never typed into the template:
 - the browser frame: up to HERO_ROWS rows of the CS2 board snapshot members read (workspace_api.snapshot, the shared 5 s board),
-  chosen by a stated rule (frame_pick: markets graded B or better whose model estimate clears their own entry's break-even, highest
-  grade then highest estimate, never padded), each app's line, the pick, the model estimate and the grade. Fewer than FRAME_MIN
+  chosen by a stated rule (frame_pick: markets graded B or better whose model estimate clears their own entry's break-even, picked
+  in the neutral rule order, shown highest grade first, never padded), each app's line, the pick, the model estimate and the grade. Fewer than FRAME_MIN
   live qualifiers: the saved board (FALLBACK, dated), through the same code;
 - the phone frame: the first shown row's own card lines (match, player, side + line, the chance at the line on its app, the grade,
   the projection, the last 10 at this line, the break-even for the entry, the other app's line); a value the row lacks is left out,
@@ -86,8 +86,8 @@ OWNER_STORY = "A member ran his first ever 6 man with Grader and cashed."
 OWNER_STORY_BY = "Shared by Prop Grader on X. One member, one night: a result, not a promise."
 # The Slip Studio stage's other sports: no public sample rows exist for them, so they are labelled placeholders (owner brief 6b) and
 # their estimate and grade are glyphs under a blur - never digits, never a made-up name or stat.
-PLACEHOLDERS = (("nba", "NBA guard", "Over 24.5 Points", ""), ("lol", "LoL mid laner", "Over 7.5 Kills", "Maps 1-2"),
-                ("tennis", "Tennis player", "Over 21.5 Total games", ""))
+PLACEHOLDERS = (("nba", "NBA guard", "Over 24.5 Points", ""), ("lol", "LoL mid", "Over 7.5 Kills", "Maps 1-2"),
+                ("tennis", "Tennis", "Over 21.5 Total games", ""))
 
 _STATE = {"page": None, "built": 0.0, "key": None, "board": (None, None), "last": {}}
 _LOCK = threading.RLock()
@@ -319,9 +319,11 @@ def _rows(board, n=6):
 
 # The frame's rows (critic round 1: the showcase pick must clear its own break-even): a market qualifies when its lettered lead is
 # graded B or better (the cyan tiers) AND its model estimate is above the break-even of that row's own entry (parity.be; a row
-# without a break-even never qualifies - the frame prints the two side by side). Ranked grade tier first, then the model estimate,
-# then the soonest; one row per player; at most HERO_ROWS. Fewer qualifiers = fewer rows, never padded with B- or sub-break-even
-# rows. A live board with fewer than FRAME_MIN qualifiers is replaced by the saved board (dated) when that shows more.
+# without a break-even never qualifies - the frame prints the two side by side). WHICH qualifiers show stays the neutral rule order
+# (_groups: line gaps, moved lines, the soonest; one row per player; at most HERO_ROWS) - never the board's best-graded props, or the
+# free page would be a top-picks feed (owner access rule). Only the DISPLAY order of those rows is grade tier, then estimate.
+# Fewer qualifiers = fewer rows, never padded with B- or sub-break-even rows. A live board with fewer than FRAME_MIN qualifiers is
+# replaced by the saved board (dated) when that shows more.
 TIER = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4}
 FRAME_MIN = 2
 
@@ -336,19 +338,17 @@ def _clears(rs):
 
 
 def frame_pick(board, n=HERO_ROWS):
-    """[(rows, gap, moved)] for the browser frame, by the rule above (highest grade first)."""
-    q = [x for x in _groups(board) if _clears(x[2])]
-    q.sort(key=lambda x: (TIER[(x[2][0].get("scout") or {}).get("grade")], -float((x[2][0].get("scout") or {}).get("p_side")), x[1]))
+    """[(rows, gap, moved)] for the browser frame by the rule above: chosen in rule order, shown highest grade first."""
     seen, pick = set(), []
-    for _pri, _lock, rs, gap, moved in q:
+    for _pri, _lock, rs, gap, moved in _groups(board):
         who = (rs[0].get("player") or {}).get("key")
-        if who in seen:
+        if who in seen or not _clears(rs):
             continue
         seen.add(who)
         pick.append((rs, gap, moved))
         if len(pick) == n:
             break
-    return pick
+    return sorted(pick, key=lambda x: (TIER[(x[0][0].get("scout") or {}).get("grade")], -float((x[0][0].get("scout") or {}).get("p_side"))))
 
 
 def _l10(r):
@@ -857,12 +857,12 @@ def build(srv, join_url, fetch=True):
     sp = sports_on()
     live = open_only(inp["board"])                    # live rows only while their match has not started (never a stale line)
     live_rows, _at, live_n = _rows(live, n=10 ** 6) if live else ([], None, 0)
-    board, pick, graded_n = live, (frame_pick(live) if live else []), live_n
+    board, pick, saved = live, (frame_pick(live) if live else []), False
     if len(pick) < FRAME_MIN:                         # too few qualifying live rows: the saved board (dated), through the same code
         fb = fallback_board()
         fpick = frame_pick(fb) if fb else []
         if len(fpick) > len(pick):
-            board, pick, graded_n = fb, fpick, _rows(fb, n=10 ** 6)[2]
+            board, pick, saved = fb, fpick, True
     rows, total, asof = ledger(inp["record"])
     head, cards, nrv, avg = wall(inp["reviews"])
     shown = pick                                      # frame_pick already ranks: highest grade, then highest estimate
@@ -880,7 +880,7 @@ def build(srv, join_url, fetch=True):
     # the phone's first screen carries the proof (critic round 1): one link to /record with the live count and the live score
     hproof = " ".join(f'<span class="hp">{x}</span>' for x in ((f"{tot_s} decided picks on the public record." if total else ""),
                                                               (f"{rv_short}." if rv_short else "")) if x)
-    more_n = graded_n - len(shown) if pick else 0
+    more_n = live_n - len(shown) if (pick and not saved) else 0      # the saved file is not a board: no count under it
     units_s = f"+{OWNER_UNITS}U"
     fill = {
         "TRIAL_URL": esc(join_url),
@@ -894,7 +894,7 @@ def build(srv, join_url, fetch=True):
         "SPORT_NAV": "".join(f'<li{" class=on" if s == "cs2" else ""}>{LONG[s]}</li>' for s in sp),
         "FRAME_ROWS": frame_rows(shown), "FRAME_SR": frame_sr(shown),
         "FRAME_FEEDS": esc(feeds_label(board)) if pick else "",
-        "FRAME_MORE": esc(f"{len(shown)} of {graded_n:,} graded props shown: graded B or better and above the entry’s break-even") if more_n > 0 else "",
+        "FRAME_MORE": esc(f"Showing {len(shown)} of {live_n:,} graded props on the board.") if more_n > 0 else "",
         "HERO_PROOF": hproof,
         "FINAL_SUB": esc(f"{live_n:,} CS2 {'prop is' if live_n == 1 else 'props are'} graded on the board right now.") if live_rows else "",
         **steps,

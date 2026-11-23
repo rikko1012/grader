@@ -219,7 +219,7 @@ def test_frame_rows_clear_their_break_even_and_rank_by_grade(srv, monkeypatch):
     rows = re.findall(r'<div class="br"><span class="b-who"><b>([^<]+)</b>', s)
     assert rows == ["Mover", "Zeta"]                                      # B+ before B; Gap (B-) is never padded in
     assert "NoLetter" not in s.split('class="bt"')[1].split("</div></div></div>")[0] and ">Past<" not in s
-    assert '<p class="bfoot">2 of 3 graded props shown: graded B or better and above the entry’s break-even</p>' in s
+    assert '<p class="bfoot">Showing 2 of 3 graded props on the board.</p>' in s
     mover = re.search(r'(?s)<div class="br"><span class="b-who"><b>Mover</b>.*?</div>', s).group(0)
     assert "<b>64.0%</b>" in mover and 'scaleX(0.640)' in mover
     assert '<span class="b-pk">Under</span>' in mover and '<i class="gb gc">B+</i>' in mover
@@ -254,6 +254,21 @@ def test_too_few_live_qualifiers_show_the_dated_saved_board_but_inside_stays_liv
     assert "public sample board, Nov 22, 2026." in s and ">Mover<" not in s.split('class="bt"')[1].split("</div></div></div>")[0]
     assert "Gap · Headshots · Maps 1-2" in s                              # the gap panel still reads the live board
     assert "2 CS2 props are graded on the board right now." in s          # the live count, not the saved board's
+    assert 'class="bfoot"' not in s                                       # the saved file is not a board: no count under it
+
+
+def test_frame_picks_in_rule_order_never_the_boards_best_grades(srv, monkeypatch):
+    """Owner access rule: the free page is not a top-picks feed. Qualifiers are chosen in the neutral rule order (gaps, moved, the
+    soonest) and only then shown best grade first, so a later A+ never jumps into the frame over four sooner qualifiers."""
+    b = board()
+    s0 = datetime.now(timezone.utc) + timedelta(minutes=30)
+    b["records"] += [rec(f"Soon{i}", "kills", 20.5, "underdog", .600, "B", s0 + timedelta(minutes=i)) for i in range(3)]
+    b["records"].append(rec("Late", "kills", 20.5, "underdog", .800, "A+", datetime.now(timezone.utc) + timedelta(hours=9)))
+    seed(srv, monkeypatch, b)
+    s = build(srv).decode("utf-8")
+    rows = re.findall(r'<div class="br"><span class="b-who"><b>([^<]+)</b>', s)
+    assert "Late" not in rows and rows[0] == "Mover" and len(rows) == 4    # Mover (moved) leads by rule and by grade; then the soonest B
+
 
 def test_lines_print_as_the_member_board_prints_them(srv, monkeypatch):
     b = board()
@@ -268,7 +283,8 @@ def test_phone_reads_the_first_row_and_hides_missing_values(srv, monkeypatch):
     seed(srv, monkeypatch, board())
     ph = block(build(srv).decode("utf-8"), '<div class="phone"', '<p class="cap hero-cap">')
     assert "<p class=\"ph-who\">Mover</p>" in ph and '<p class="ph-prop">Under 32.5 Kills · Maps 1-2</p>' in ph
-    assert '<b>64.0%</b><i class="gb gc">B+</i>' in ph and "Model estimate at the 32.5 line on Underdog" in ph and "exactly" not in ph
+    assert '<p class="ph-m">Underdog · Alpha vs Beta</p>' in ph
+    assert '<b>64.0%</b><i class="gb gc">B+</i>' in ph and "Model estimate at the 32.5 line</p>" in ph and "exactly" not in ph
     why = re.findall(r"<li><span>([^<]+)</span><b>([^<]+)</b></li>", ph)
     assert why == [("Last 10 at this line", "4 / 10 Under"), ("Break-even, standard 2-pick", "53.4%")]   # no projection, no other app
     assert "Projection" not in ph and ">0<" not in ph and "0.0 vs" not in ph
@@ -309,7 +325,7 @@ def test_slip_stage_has_one_real_row_and_placeholders_with_no_real_numbers(srv, 
     cards = re.findall(r'<div class="sc(?: ph)?" data-i="\d">(.*?)</div>', stage)
     assert len(cards) == 4 and "<b>Mover</b>" in cards[0] and "<b>64.0%</b>" in cards[0]     # the highest real estimate
     assert stage.count('<div class="sc ph" data-i=') == 3 and "ss-cta" not in s and 'id="ss-cta"' not in s
-    for c, who in zip(cards[1:], ("NBA guard", "LoL mid laner", "Tennis player")):
+    for c, who in zip(cards[1:], ("NBA guard", "LoL mid", "Tennis")):
         assert f'<b>{who}<em class="phl">placeholder</em></b>' in c and '<span class="sv bl"><b>00.0%</b><i class="gb gg">B</i></span>' in c and 'class="mt"' not in c
     assert stage.count('class="slot"') == 4 and '<span class="bl">00.0% vs 00.0%</span>' in stage
     blurred = re.findall(r'<span class="(?:sv )?bl">(.*?)</span>', stage)

@@ -23,9 +23,9 @@
 <meta name="twitter:description" content="A letter grade and a model estimate at the exact line your app shows, with the reason. Every call saved before the game and scored in public. Try it free for 1 day.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap"></noscript>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap"></noscript>
 <script>(function(){var r=document.documentElement;r.className+=' js';if(window.matchMedia&&!matchMedia('(prefers-reduced-motion: reduce)').matches)r.className+=' motion';})();</script>
 <style>
 {{PAGE_CSS}}
@@ -83,13 +83,13 @@
           <span class="island"></span>
           <p class="ph-st"><b>9:41</b><span class="sg"><svg viewBox="0 0 16 12"><rect x="1" y="8" width="2.5" height="3" rx=".5"/><rect x="5" y="6" width="2.5" height="5" rx=".5"/><rect x="9" y="3.5" width="2.5" height="7.5" rx=".5"/><rect x="13" y="1" width="2.5" height="10" rx=".5"/></svg><svg viewBox="0 0 16 12" class="o"><path d="M1.5 4.6a9.6 9.6 0 0113 0M3.8 7a6.2 6.2 0 018.4 0M6.1 9.3a2.9 2.9 0 013.8 0"/></svg><svg viewBox="0 0 26 12" class="bat"><rect x=".75" y=".75" width="21.5" height="10.5" rx="3" class="o"/><rect x="2.5" y="2.5" width="16" height="7" rx="1.5"/><path d="M24 4.2v3.6" class="o"/></svg></span></p>
           <p class="ph-back"><span><svg viewBox="0 0 16 16"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg>Board</span><span class="tag">Example</span></p>
-          <p class="ph-m">{{PH_MATCH}} · CS2</p>
+          <p class="ph-m">{{PH_APP}} · {{PH_MATCH}}</p>
           <p class="ph-who">{{PH_WHO}}</p>
           <p class="ph-prop">{{PH_PROP}}</p>
           <div class="ph-est">
             <p class="ph-pr"><b>{{PH_P}}%</b><i class="gb {{PH_GCLS}}">{{PH_G}}</i></p>
             {{PH_METER}}
-            <p class="ph-at">Model estimate at the {{PH_LINE}} line on {{PH_APP}}</p>
+            <p class="ph-at">Model estimate at the {{PH_LINE}} line</p>
           </div>
           <p class="ph-k">Why</p>
           <ul class="ph-why">{{PH_WHY}}</ul>
