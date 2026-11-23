@@ -14,11 +14,12 @@ def team_key(name):
     return re.sub(r"[^a-z0-9]", "", str(name or "").lower())
 
 
-def _meetings(series, opponent, mids=None, oids=None, core=None):
+def _meetings(series, opponent, mids=None, oids=None, core=None, ids=None, team_id=None):
     """[(series row, core meeting or None)] newest first: the exact-opponent meetings (team name, as before), plus - CS2 with an HLTV
     roster core (h2h_core, hc-1) - every series in which 3+ of tonight's opponent's current players were on the side he faced, under
     any team name (org switches, his own earlier teams). mids / oids run parallel to series: the HLTV match id of each and the HLTV
-    team id he played against."""
+    team id he played against. ids / team_id (NBA / NFL, sweep 2026-11-23): ids runs parallel to series with each game's
+    opponent team id; a meeting is then the exact team id, as the sports board counts it, never the name."""
     want = team_key(opponent)
     tags = None
     if core:
@@ -28,20 +29,24 @@ def _meetings(series, opponent, mids=None, oids=None, core=None):
     for i, s in enumerate(series or []):
         if not isinstance(s.get("value"), (int, float)):
             continue
+        if team_id is not None:
+            if ids is not None and i < len(ids) and ids[i] == team_id:
+                out.append((s, None))
+            continue
         t = tags[i] if tags and i < len(tags) else None
         if t or (want and team_key(s.get("opponent")) == want):
             out.append((s, t))
     return out
 
 
-def h2h(series, opponent, line, limit=LIMIT, mids=None, oids=None, core=None):
+def h2h(series, opponent, line, limit=LIMIT, mids=None, oids=None, core=None, ids=None, team_id=None):
     """{opponent, n, over, under, push, avg, series} over the newest `limit` meetings, or None without an opponent or a line.
     With a roster core (CS2, h2h_core): roster meetings count too, and each meeting says how it counts: "via" "roster" (3+ of
     tonight's players faced, "faced" names them, "opponent" is the team name then) or "org" (the same team, fewer of tonight's
     players); "core" lists tonight's five."""
     if not team_key(opponent) or not isinstance(line, (int, float)):
         return None
-    rows = _meetings(series, opponent, mids, oids, core)[:limit]
+    rows = _meetings(series, opponent, mids, oids, core, ids, team_id)[:limit]
     vals = [s["value"] for s, _ in rows]
     out = {"opponent": opponent, "n": len(rows), "over": sum(v > line for v in vals), "under": sum(v < line for v in vals),
            "push": sum(v == line for v in vals), "avg": round(sum(vals) / len(vals), 1) if vals else None,

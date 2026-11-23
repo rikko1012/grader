@@ -522,6 +522,8 @@ def record_of(lg, doc, m, q, view):
     team = team_code(lg, m.get("tm")) or ""
     tid = m.get("tid")
     opp = away if tid and tid == (ev.get("home") or {}).get("team_id") else home if tid and tid == (ev.get("away") or {}).get("team_id") else ""
+    # tonight's opponent team id: the card's H2H matches on it, as the board's (board_view.h2h_season_lines) does
+    oid = (ev.get("away") or {}).get("team_id") if tid and tid == (ev.get("home") or {}).get("team_id") else (ev.get("home") or {}).get("team_id") if tid and tid == (ev.get("away") or {}).get("team_id") else None
     # the player's own team as the event names it (ESPN's abbreviation): the board's team logo (audit 2026-11-05), display only
     # raw ESPN abbreviation (GS, UTAH...), not the display code: ESPN's logo files are named by it
     tabbr = _team(ev.get("home")) if tid and tid == (ev.get("home") or {}).get("team_id") else _team(ev.get("away")) if tid and tid == (ev.get("away") or {}).get("team_id") else ""
@@ -586,7 +588,7 @@ def record_of(lg, doc, m, q, view):
          "pu": sc["pu"] if sc else None, "pp": sc["pp"] if sc else None, "mu": sc.get("mu") if sc else None, "model": sc.get("model") if sc else None, "at": sc.get("at") if sc else None,
          "lean": lean, "start": ev.get("start_utc"), "started": bool(ev.get("started") or ev.get("locked")), "e": m.get("e"), "pid": m.get("pid"), "name": m.get("n") or "", "team": team, "st": m.get("st"),
          "scope": scope, "rev": rec["offer"]["revision"], "read_rev": rec["scout"]["read_rev"], "rid": rid, "pkey": pkey, "variant":q.get('v'),
-         "line_type": rec["market"]["line_type"]}
+         "line_type": rec["market"]["line_type"], "oid": oid}
     # "Behind the grade" (card_grade_inputs.py; server side only, never in the board body): the forecast a line read came from, the
     # hold's own version tag (av-1 / cap-3 ...), the calibration and grade policy the quote names
     for k, v in (("lf", (q.get("lr") or {}).get("f") if sc and not sc.get("fid") else None), ("hv", signal.get("v") if signal.get("b") else None),
@@ -1049,7 +1051,7 @@ def trim(doc, league=None):
     of each market, and each of the player's forecasts with its distribution ladder - values as served, nothing recomputed."""
     if "games" in doc:
         lg = {"basketball": "nba", "football": "nfl"}.get(doc.get("family"))      # B8: one team code
-        return {"games": [{"start_utc": g.get("start_utc"), "opponent": _team(g.get("opponent"), lg), "home": g.get("home"), "played": g.get("participation") == "played", "values": g.get("values") or {},
+        return {"games": [{"start_utc": g.get("start_utc"), "opponent": _team(g.get("opponent"), lg), "opp_id": (g.get("opponent") or {}).get("team_id"), "home": g.get("home"), "played": g.get("participation") == "played", "values": g.get("values") or {},
                            "season": g.get("season"), "season_type": g.get("season_type"),
                            "parts": {k: v for k, v in (g.get("parts") or {}).items() if k in OPP_PARTS and v is not None}} for g in (doc.get("games") or [])[:SPLIT_GAMES]]}
     f = doc.get("factors") or {}
@@ -1075,6 +1077,21 @@ def series_of(hist, stat):
         if g.get("played") and v is not None:
             out.append({"date": str(g.get("start_utc") or "")[:10], "opponent": g.get("opponent") or "", "value": v})
     return out
+
+
+def card_h2h(hist, stat, opponent, oid, line):
+    """The card's H2H block over EVERY saved game (the player file holds the board build's newest games, snapshots.MAX_GAMES),
+    not the 30-game research window: the board's H2H cell (sports/board_view.h2h_season_lines) counts the newest 10 meetings of
+    all of them, matched on the opponent's team id. Same games, same key, same limit -> the same over / under / n (sweep
+    2026-11-23 nbanfl-1: the card cut at 30 games and disagreed on most NBA rows). Without team ids: the exact team code."""
+    rows = []
+    for g in (hist or {}).get("games") or []:
+        v = (g.get("values") or {}).get(stat)
+        if g.get("played") and v is not None:
+            rows.append({"date": str(g.get("start_utc") or "")[:10], "opponent": g.get("opponent") or "", "value": v, "opp_id": g.get("opp_id")})
+    if oid and any(r["opp_id"] for r in rows):
+        return workspace_h2h.h2h(rows, opponent, line, ids=[r["opp_id"] for r in rows], team_id=oid)
+    return workspace_h2h.h2h(rows, opponent, line)
 
 
 ENGINE_GROUP = "Matchup numbers (not part of Scout's forecast)"
@@ -1149,7 +1166,7 @@ def line_doc(srv, lg, book, rid):
         if fg:
             hist_out["full_game"] = fg[:10]
     doc = {"record": rec, "forecast": forecast, "history": hist_out, "books": books, "market_books": {"same": same, "other": other},
-                 "h2h": workspace_h2h.h2h(series, rec["player"]["opponent"], x["l"]) if series else None,
+                 "h2h": card_h2h(hist, x["st"], rec["player"]["opponent"], x.get("oid"), x["l"]) if series else None,
                  "context": context_of(x, player, lg), "sports_card": sports_card(x, hist, player, lg),
                  "market": {"available": True, "p_over": mk["p_over"], "p_under": mk["p_under"], "source": f"{mk['sources']} market sources at this line"} if mk else {"available": False, "reason": "No market price at this exact line."}}
     try:                                            # "Behind the grade": the record's numbers + this forecast's saved inputs (display only)
