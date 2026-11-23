@@ -36,8 +36,11 @@ def _decline(monkeypatch, offer_id, reason):
 
 
 def _clock(monkeypatch, times):
-    seq = iter(times)
-    monkeypatch.setattr(fc.time, 'monotonic', lambda: next(seq))
+    seq = list(times)
+
+    def tick():                               # the listed readings in order, then the last one forever
+        return seq.pop(0) if len(seq) > 1 else seq[0]
+    monkeypatch.setattr(fc.time, 'monotonic', tick)
 
 
 def test_cut_run_never_republishes_an_offer_it_reached_and_declined(tmp_path, monkeypatch):
@@ -87,10 +90,13 @@ def test_run_not_cut_is_unchanged(tmp_path, monkeypatch):
     assert 'budget' not in out['pending'] and 'carried' not in out['pending'] and 'carry_declined' not in out['pending']
 
 
-def test_declined_offer_is_not_brought_back_by_the_off_board_carry(tmp_path, monkeypatch):
-    """carry_off_board (ST-2) only carries keys that are off the board; a reached offer is on it."""
+def test_cut_run_declined_for_storage_full_is_not_carried_either(tmp_path, monkeypatch):
+    """Any decline reason counts; the ST-2 off-board carry never brings a reached (on-board) offer back."""
     a, k, l_ = _three(tmp_path, monkeypatch)
+    before = _saved(tmp_path)
     _decline(monkeypatch, 'K', 'storage_full')
-    _clock(monkeypatch, [0, 0, 0, 0])          # never cut
-    fc.publish('soccer', '2026-11-17T23:01:00Z', budget_s=5)
-    assert fc.offer_key(k) not in _saved(tmp_path)
+    _clock(monkeypatch, [0, 0, 0, 100])        # cut after K
+    out = fc.publish('soccer', '2026-11-17T23:01:00Z', budget_s=5)
+    pub = _saved(tmp_path)
+    assert fc.offer_key(k) not in pub and pub[fc.offer_key(l_)] == before[fc.offer_key(l_)]
+    assert out['pending']['carry_declined'] == 1 and 'carried_off_board' not in out['pending']
