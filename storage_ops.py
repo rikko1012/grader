@@ -428,9 +428,13 @@ def reconcile():
             return False
 
     # an inode number alone is not identity: Linux reuses a freed inode number for the next file created, so a live file
-    # replaced outside a cut can carry the marker inode. Ours always still starts with the last cut's kept tail.
-    if ino == marker and (not (want and tb) or _starts_with_kept_tail()):
+    # replaced outside a cut can carry the marker inode (or the old one). Ours always still starts with the last cut's kept
+    # tail; an entry without tail fields (every cut writes them) is never trusted on its inode - it falls to the refusal.
+    if ino == marker and _starts_with_kept_tail():
         return applied
+    # crash between the manifest line and the swap: the live file still starts with exactly the archived range (sha256).
+    # Decided on content: even when a reused inode number lands here, a file that holds the exact archived bytes [0,N)
+    # makes "the cut never took effect" true - voiding loses nothing (those bytes are in the live file).
     if ino == last.get("old_inode") and not rebinds and _prefix_is(last.get("archived_bytes"), last.get("sha256")):
         _append_manifest({"seq": max(e["seq"] for e in entries) + 1, "kind": "void", "voids": last["seq"],
                           "reason": "swap never happened (its bytes are still in the live file)", "at": _now_iso()})

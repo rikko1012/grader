@@ -263,24 +263,15 @@ def test_a_replaced_live_file_is_refused(data):
     n = blob.index(b"\n", len(blob) // 2) + 1
     assert trim(p, n, dry_run=False)[0] == 200
     p.unlink()
-    p.write_bytes(lines(400))                              # neither the cut's old nor new file
-    blob2 = p.read_bytes()
+    p.write_bytes(lines(400, start=1000))                  # neither the cut's old nor new file (distinct content: on Linux the
+    blob2 = p.read_bytes()                                 # new file may reuse the old OR the new inode number)
     st, out = trim(p, blob2.index(b"\n", 5000) + 1, dry_run=False)
     assert st == 409 and "neither" in out["error"] and p.read_bytes() == blob2
 
 
-
-def test_a_replaced_live_file_with_the_marker_inode_is_refused(data, monkeypatch):
-    """Linux reuses a freed inode number: a replacement file can carry the last cut's new_inode. Forced here so the
-    test also fails on Windows without the content check."""
-    blob = lines(400)
-    p = write_live(data, blob)
-    n = blob.index(b"\n", len(blob) // 2) + 1
-    assert trim(p, n, dry_run=False)[0] == 200
-    marker = so.applied_entries()[-1]["new_inode"]
-    p.unlink()
-    p.write_bytes(lines(400))
-    blob2 = p.read_bytes()
+def _fake_inode(monkeypatch, p, ino):
+    """Linux reuses a freed inode number for the next file created: make os.stat(p) report `ino` (forced, so the
+    collision tests also fail on Windows without the content checks). fstat of an open handle is left real."""
     real_stat = os.stat
 
     class _St:
@@ -288,13 +279,67 @@ def test_a_replaced_live_file_with_the_marker_inode_is_refused(data, monkeypatch
             self._st = st
 
         def __getattr__(self, k):
-            return marker if k == "st_ino" else getattr(self._st, k)
+            return ino if k == "st_ino" else getattr(self._st, k)
 
     monkeypatch.setattr(so.os, "stat", lambda q, *a, **k: _St(real_stat(q, *a, **k)) if str(q) == str(p) else real_stat(q, *a, **k))
+
+
+def _replaced_after_a_trim(data, content):
+    blob = lines(400)
+    p = write_live(data, blob)
+    n = blob.index(b"\n", len(blob) // 2) + 1
+    assert trim(p, n, dry_run=False)[0] == 200
+    last = so.applied_entries()[-1]
+    p.unlink()
+    p.write_bytes(content)
+    return p, blob, n, last
+
+
+@pytest.mark.parametrize("which", ["new_inode", "old_inode"])
+def test_a_replaced_live_file_carrying_a_reused_inode_number_is_refused(data, monkeypatch, which):
+    """CI run 45162166211: a replacement can carry the last cut's new_inode (marker) or old_inode. Identity is content
+    (the kept tail / the archived prefix, sha256): reconcile, the trim (E3) and rotation all refuse, nothing changes."""
+    monkeypatch.setattr(so, "LIVE_MAX_MB", 0.0001)
+    monkeypatch.setattr(so, "ROT_KEEP_BYTES", 4000)
+    p, blob, n, last = _replaced_after_a_trim(data, lines(400, start=1000))
+    blob2 = p.read_bytes()
+    _fake_inode(monkeypatch, p, last[which])
     with pytest.raises(so.Refused) as e:
         so.reconcile()
     assert e.value.code == 409 and "neither" in e.value.body["error"]
-    assert p.read_bytes() == blob2
+    st, out = trim(p, blob2.index(b"\n", 5000) + 1, dry_run=False)
+    assert st == 409 and "neither" in out["error"]
+    r = so.rotate_once()
+    assert r["skip"] == "manifest" and "neither" in so.STATS["rotation_error"]["error"]
+    assert p.read_bytes() == blob2 and [e["kind"] for e in so.read_manifest()[0]] == ["manual_trim"]
+    assert not list((data / "comparison_archive").glob("comparison_seg_*"))
+
+
+def test_old_inode_with_the_exact_archived_bytes_is_voided_and_nothing_is_lost(data, monkeypatch):
+    """Decision (content, not inode): a live file on the old inode number that holds exactly the archived bytes [0,N)
+    (sha256) is the crash-before-swap state - the cut is voided because its bytes are in the live file. A later trim
+    of the same range re-verifies them by sha256; no byte leaves the file unverified."""
+    p, blob, n, last = _replaced_after_a_trim(data, lines(400))     # byte-identical to the pre-cut file
+    _fake_inode(monkeypatch, p, last["old_inode"])
+    assert so.reconcile() == [] and so.read_manifest()[0][-1]["kind"] == "void"
+    assert p.read_bytes() == blob
+
+
+def test_an_entry_without_tail_fields_is_never_trusted_on_its_inode(data):
+    blob = lines(400)
+    p = write_live(data, blob)
+    n = blob.index(b"\n", len(blob) // 2) + 1
+    assert trim(p, n, dry_run=False)[0] == 200
+    mp = so.manifest_path()
+    e = json.loads(mp.read_bytes())
+    assert e["new_inode"] == os.stat(p).st_ino
+    for k in ("tail_bytes", "tail_sha256"):
+        e.pop(k)
+    mp.write_bytes((json.dumps(e) + "\n").encode())
+    with pytest.raises(so.Refused) as r:
+        so.reconcile()
+    assert r.value.code == 409 and p.read_bytes() == blob[n:]
+
 
 # ---------------------------------------------------------------- rot-1
 
