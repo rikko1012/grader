@@ -495,7 +495,9 @@ HOLD_SHORT = {"cap": "Priced far from even", "gate": "Letters switched off", "ra
               "ratio_high": "Projection far above line", "l10_contra": "Last 10 games disagree", "floor": "Not enough player data",
               "certain": "Forecast out of range", "thin": "Fewer than 3 games", "stale": "No game in the last year",
               "small_low": "Projection far below line", "av_out": "Ruled out", "av_injured_reserve": "Injured reserve",
-              "av_suspended": "Suspended", "av_inactive": "Inactive"}
+              "av_suspended": "Suspended", "av_inactive": "Inactive",
+              # os-2 (grade_rules.side_hold): PrizePicks does not list Scout's side on this line (sweep 2026-11-23: was a bare "No grade")
+              "side": "Side not offered"}
 
 
 def no_forecast(nf, stat_label):
