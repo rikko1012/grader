@@ -996,10 +996,12 @@ footer.foot a:hover{color:#fff;background:#242d39}
 </main>
 <div class="dock" id="dock"><a class="btn primary" href="{{JOIN_URL}}">Join on Whop</a><a class="btn quiet" href="/auth/login">Sign in</a></div>
 <script>
-(function () {   // a failed sign-in comes back as /?signin_error=... (unchanged server flow): show it as text
+(function () {   // a failed sign-in comes back as /?signin_error=<code> (whop_auth.error_code): the page's own text for the code, never URL text
   try {
+    var M = { expired: "Sign-in expired - please try again", whop: "Whop sign-in did not complete - please try again",
+              no_account: "Whop didn't return your account - please try again" };
     var e = new URLSearchParams(location.search).get("signin_error");
-    if (e) { var el = document.getElementById("signin-error"); el.textContent = e; el.hidden = false; }
+    if (e) { var el = document.getElementById("signin-error"); el.textContent = Object.prototype.hasOwnProperty.call(M, e) ? M[e] : "Sign-in did not complete - please try again"; el.hidden = false; }
   } catch (_) {}
 })();
 (function () {
@@ -1103,7 +1105,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
      the proof card and the reviews line. The carousel leads with the newest 4-5 star reviews, then every other rating newest
      first; /reviews keeps its full list, every rating, unchanged. ---------- */
   var REVIEWS = !window.fetch || !window.Promise ? { then: function () {} } : getJSON("/api/reviews?sort=new&page=0");
-  function day(iso) { try { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch (_) { return ""; } }
+  function day(iso) { try { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }); } catch (_) { return ""; } }
 
   /* ---------- reviews carousel under the headline: one review at a time, crossfades every few seconds. Holds while hovered,
      keyboard-focused, touched, off screen or in a hidden tab; swipe on touch; a Pause / Play button (WCAG 2.2.2); reduced

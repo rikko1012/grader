@@ -357,6 +357,30 @@ def test_lol_series_values_follow_settlement():
     assert workspace_lol.series_values(series, "fantasy_points", "Map 1")[0]["value"] == round(3 * 3 + 2 * 2 - 1 + 0.02 * 100, 2)
 
 
+def test_lol_maps13_on_a_best_of_five_line_leaves_out_two_game_series():
+    """sweep lol-1: on a best-of-5 line games 1-3 are always played, so a past best-of-3 that ended 2-0 (a 2-game total) is not a
+    comparable result; a 3-0 best of five and a 2-1 best of three still count. A best-of-3 line keeps the 2-game rule."""
+    g = lambda k: {"kills": k, "deaths": 1, "assists": 2, "cs": 100}
+    series = [{"date": "2026-10-03", "opponent": "a", "best_of": 3, "games": {1: g(3), 2: g(4)}},                 # 2-0 bo3
+              {"date": "2026-10-02", "opponent": "b", "best_of": 5, "games": {1: g(1), 2: g(2), 3: g(3)}},       # 3-0 bo5
+              {"date": "2026-10-01", "opponent": "c", "best_of": 3, "games": {1: g(2), 2: g(2), 3: g(2)}}]       # 2-1 bo3
+    assert [v["value"] for v in workspace_lol.series_values(series, "kills", "Maps 1-3", 5)] == [6, 6]
+    assert [v["value"] for v in workspace_lol.series_values(series, "kills", "Maps 1-3", 3)] == [7, 6, 6]
+    assert [v["value"] for v in workspace_lol.series_values(series, "kills", "Maps 1-3")] == [7, 6, 6]       # unknown: as before
+    assert [v["value"] for v in workspace_lol.series_values(series, "kills", "Maps 1-2", 5)] == [7, 3, 4]    # Maps 1-2 unchanged
+
+
+def test_lol_record_tiers_are_in_letter_order(tmp_path):
+    """sweep SR-5: the LoL public record lists its tiers A+, A, A-, B+, B, B-, Lean Over, Lean Under (never text order A, A+, A-)."""
+    import types
+    names = ["A", "A+", "A-", "B", "B+", "B-", "Lean Over", "Lean Under"]
+    m = {f"grade {n}": {"n": 10, "side_wins": 6, "side_hit_rate": 0.6, "mean_displayed_p_side": 0.6, "series": 5} for n in names}
+    m["all"] = {"n": 80, "side_wins": 48, "side_hit_rate": 0.6, "mean_displayed_p_side": 0.6, "series": 40}
+    (tmp_path / "learning.json").write_text(json.dumps({"at": "2026-11-23T00:00:00Z", "offered_side": {"metrics": m}}), encoding="utf-8")
+    doc = workspace_lol.results(types.SimpleNamespace(LOL_CENTER=str(tmp_path)))
+    assert [g["name"] for g in doc["groups"]["chance"]] == ["A+", "A", "A-", "B+", "B", "B-", "Lean Over", "Lean Under"]
+
+
 # ---- research
 def test_nba_research_reads_history_books_context_and_market(env):
     r = recs(env, "nba")[("Karl Anders", "underdog")]
@@ -379,7 +403,7 @@ def test_a_player_file_missing_leaves_the_rest_standing(env):
 def test_lol_research_reads_past_series_role_and_win_chance(env):
     r = recs(env, "lol")[("Guigo", "underdog")]
     st, doc = get(env, f"line?sport=lol&book=underdog&id={r['offer']['offer_id']}")
-    assert st == 200 and len(doc["history"]["series"]) == 11 and doc["history"]["series"][0]["value"] == 11 and doc["history"]["series"][0]["opponent"] == "Old Rivals" and doc["history"]["series"][0]["values"] == [5, 6]
+    assert st == 200 and len(doc["history"]["series"]) == 11 and doc["history"]["series"][0]["value"] == 11 and doc["history"]["series"][0]["opponent"] == "Old Rivals" and doc["history"]["series"][0]["values"] == [5, 6, 0]
     ctx = {x["label"]: x["value"] for x in doc["context"]["rows"]}
     assert ctx["Role"] == r["player"]["role"] and ctx["Series length"] == "Best of 5" and doc["market"]["available"] is False
     assert sorted(b["platform"] for b in doc["books"]) == ["prizepicks", "underdog"]

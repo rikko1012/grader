@@ -5132,7 +5132,7 @@ class Handler(BaseHTTPRequestHandler):
                 value, msg = whop_auth.finish_login(q.get("code", ""), q.get("state", ""),
                                                      self.cookie(whop_auth.PKCE_COOKIE))
                 if not value:
-                    return self.redirect("/?signin_error=" + quote(msg))
+                    return self.redirect("/?signin_error=" + whop_auth.error_code(msg))     # a fixed code; the page has the words
                 back = reviews.NEXT_PAGES.get(self.cookie(reviews.NEXT_COOKIE) or "", "/")     # the allow-listed page, else /
                 return self.redirect(back, [f"{whop_auth.COOKIE}={value}; Max-Age={whop_auth.SESSION_DAYS * 86400}; "
                                             f"Path=/; HttpOnly; Secure; SameSite=Lax",
@@ -5441,10 +5441,22 @@ class Handler(BaseHTTPRequestHandler):
                 try:                                            # the grader's own record at real offered lines (P1)
                     import learning
                     pr_ = ((learning.dashboard().get("scorecard") or {}).get("product") or {})
-                    out["grader_record_at_real_lines"] = {"recommended": pr_.get("recommended"), "units": pr_.get("units"),
-                                                          "matches": pr_.get("matches")}
+                    # a P1 diagnostic population (every logged row), NOT the public record: labelled so, and its all-rows match count
+                    # named as such (the bare "matches" beside recommended.matches read as two counts of one thing)
+                    out["grader_record_at_real_lines"] = {
+                        "label": ("P1 diagnostic: every logged row, including BO3.gg-route rows hidden from members (rec-b1) and Map 1 "
+                                  "before its hold lifts. Not the public record; a post quotes public_record below."),
+                        "recommended": pr_.get("recommended"), "units": pr_.get("units"), "matches_all_rows": pr_.get("matches")}
                 except Exception:
                     out["grader_record_at_real_lines"] = None
+                try:                                            # the public record members see: /api/record's own shared answer
+                    import landing_v3                           # (same key and single flight; no extra build per request)
+                    st_, body_ = shared(landing_v3.record_key("cs2"), landing_v3._record_compute(sys.modules[__name__], "cs2"), ttl=300)
+                    t_ = (json.loads(body_).get("totals") or {}) if st_ == 200 else None
+                    out["public_record"] = ({k: t_.get(k) for k in ("wins", "losses", "pushes", "picks", "observed", "ci", "matches")}
+                                            if t_ else None)
+                except Exception:
+                    out["public_record"] = None
                 return self.send(200, out)
             if u.path == "/admin/fh1.json" and self.authed(q.get("token")):
                 # fh-1 shadow (perf_shadow): status + a bounded page of its records; replay=1 re-runs a page from saved inputs

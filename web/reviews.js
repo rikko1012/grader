@@ -17,7 +17,7 @@
   }
 
   function day(iso) {
-    try { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch (_) { return ""; }
+    try { return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }); } catch (_) { return ""; }
   }
 
   function stars(n, label) {

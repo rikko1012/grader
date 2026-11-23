@@ -176,3 +176,60 @@ def test_hs1_is_scored_from_fh1s_saved_projection_for_hs_maps12_only(tmp_path):
     s = {r["forecast_id"]: r for r in con.execute("SELECT * FROM shadow WHERE challenger_id = ?", (ch["id"],))}
     assert abs(s[1]["p_over_ch"] - L.hs1_p(14.0, 13.5, "hs", "12")) < 1e-9 and s[1]["p_over_base"] == 0.6
     assert s[2]["p_over_ch"] is None and "HS Maps 1-2" in json.loads(s[2]["note"])["reject"]
+
+
+def test_a_chance_just_under_a_cut_keeps_its_saved_letter(db):
+    """sweep SR-4: the grader saves p_pick rounded to 3 decimals but takes the letter from the unrounded chance (gd-1), so 0.5696 is saved
+    as 0.570 with B-. That draft is made (B- is a letter 0.570 can carry); a letter no unrounded chance near 0.570 earns is still skipped."""
+    import grader
+    assert grader.grade_from_p(0.5696) == "B-" and round(0.5696, 3) == 0.57 and grader.grade_from_p(0.57) == "B"
+    add(db, 21, "cutter", "kills", 27.5, "underdog", "More", 0.570, "B-", 0.5)
+    add(db, 22, "wronger", "kills", 26.5, "underdog", "More", 0.570, "A-", 1.0)
+    out = posts.drafts([row(21, "cutter", "kills", 27.5, "underdog", "More", "B-", 0.5),
+                        row(22, "wronger", "kills", 26.5, "underdog", "More", "A-", 1.0)], "underdog", db)
+    assert [d["grade"] for d in out["drafts"]] == ["B-"] and "57.0% model estimate" in out["drafts"][0]["text"]
+    assert len(out["skipped"]) == 1 and "the saved grade A- is not the letter its 57.0%" in out["skipped"][0]["why"]
+    assert posts._letters_of_saved(0.63) == {"B+", "B"} and posts._letters_of_saved(0.6) == {"B"}
+
+
+def test_post_drafts_label_the_diagnostic_record_and_carry_the_public_one(db, monkeypatch):
+    """sweep SR-6: the P1 scorecard beside the drafts counts every logged row (BO3.gg-route rows hidden from members, Map 1 before its
+    hold), so it is labelled a diagnostic and its all-rows match count is named so; the public record members see (/api/record's own
+    shared answer, one single-flight read) rides beside it for a post to quote."""
+    import http.client
+    import threading as _th
+    from http.server import ThreadingHTTPServer
+    import landing_v3
+    import learning
+    import server
+    monkeypatch.setattr(server, "ADMIN_TOKEN", "tok-test")
+    monkeypatch.setattr(server, "board_payload", lambda bk: {"rows": []})
+    for name, val in (("_RESULTS", {}), ("_INFLIGHT", {}), ("_ENC_LOCKS", {}), ("_RES_BYTES", [0, 0.0])):
+        monkeypatch.setattr(server, name, val)
+    monkeypatch.setattr(learning, "dashboard", lambda: {"scorecard": {"product": {
+        "recommended": {"picks": 2943, "hit": 0.5209, "matches": 548}, "units": {"n": 1}, "matches": 568}}})
+    pub = {"totals": {"wins": 1435, "losses": 1274, "pushes": 28, "picks": 2737, "observed": 0.5297, "ci": [0.5055, 0.5546], "matches": 523}}
+    calls = []
+    import public_record
+    monkeypatch.setattr(public_record, "read", lambda srv, sp: calls.append(sp) or pub)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+    httpd.daemon_threads = True
+    _th.Thread(target=httpd.serve_forever, daemon=True).start()
+
+    def get(path):
+        c = http.client.HTTPConnection("127.0.0.1", httpd.server_address[1], timeout=30)
+        c.request("GET", path, headers={"X-Admin-Token": "tok-test"})
+        r = c.getresponse(); body = r.read(); c.close()
+        return r.status, json.loads(body)
+    try:
+        st, d = get("/admin/post_drafts.json?book=prizepicks")
+        g = d["grader_record_at_real_lines"]
+        assert st == 200 and g["label"].startswith("P1 diagnostic") and "Not the public record" in g["label"]
+        assert "matches" not in g and g["matches_all_rows"] == 568 and g["recommended"]["matches"] == 548
+        assert d["public_record"] == {"wins": 1435, "losses": 1274, "pushes": 28, "picks": 2737, "observed": 0.5297,
+                                      "ci": [0.5055, 0.5546], "matches": 523}
+        get("/admin/post_drafts.json?book=underdog")
+        assert calls == ["cs2"]                                          # one shared read (the /api/record key), not one per request
+        assert landing_v3._peek(server, landing_v3.record_key("cs2")) is not None
+    finally:
+        httpd.shutdown(); httpd.server_close()

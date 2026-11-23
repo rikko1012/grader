@@ -166,9 +166,12 @@
   };
   /* an extra book's line (Sleeper, Dabble) sits with the board's lines of that player and market, first, so its card can switch between them */
   const siblings = (rec) => { const b = R.boards[rec.sport].props.get(propKey(rec)) || []; return rec.extra ? [rec, ...b.filter((x) => x !== rec)] : (b.length ? b : [rec]); };
+  /* v3 HLTV only (the v3 player script marks the page: data-hltv-only): a CS2 row's L10 is the shared pass's HLTV count (/hits l10, the same series the
+     card counts), never the board's saved L10 (BO3.gg + HLTV) - so the row's L5 / L10 / L20 come from one series and match the card */
+  const hltvL10 = (rec) => rec.sport === "cs2" && !rec.extra && document.documentElement.dataset.hltvOnly === "cs2";   /* an extra book's line (not in /hits) keeps its own counts */
   const tallies = (rec) => {
     const h = rec.history || {}, saved = rec.sport === "cs2" ? R.hits[offerKey(rec.offer.platform, rec.offer.offer_id)] || {} : {}, more = saved.line === rec.offer.line ? saved : {};
-    return { l5: h.l5 || more.l5 || null, l10: h.l10 || null, l20: h.l20 || more.l20 || null, h2h: h.h2h || more.h2h || null, season: h.season || more.season || null };   /* h2h / season: SCOUT_BOARD_H2H only */
+    return { l5: h.l5 || more.l5 || null, l10: hltvL10(rec) ? more.l10 || null : h.l10 || null, l20: h.l20 || more.l20 || null, h2h: h.h2h || more.h2h || null, season: h.season || more.season || null };   /* h2h / season: SCOUT_BOARD_H2H only */
   };
 
   /* ---- offer helpers, the workspace's rules ---- */
@@ -1508,7 +1511,7 @@
     try {
       await window.scoutStylesReady;
       const hub = await import("/upgrade/hub.js");
-      HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, hitsPending, tallies, siblings, started, priceText, lineLabel, offerKey,
+      HUB = hub.mount({ api, R, T, SPORTS, PLATFORMS, esc, pct, when, loadBoard, loadHits, hitsPending, hltvL10, tallies, siblings, started, priceText, lineLabel, offerKey,
         research, researchDoc, chartSvg, addLeg, makeLeg, generateBatch, checkGenerated, refreshAdvice: runAdvice, useGenerated, openGenerated, openLine, cleanLeg, onSlip, slipTab, openTray, loadMine, picksTab, recordTab, receiptHtml, moveHtml, movesOf, moveRow, resultsInto, say, chanceOf, verdictText, oneSided, oneSidedNote, shareSlip, faceHtml, lineKind, lineKindHtml });
     } catch (e) { window.scoutClassicMount?.(); console.warn("Research hub unavailable; original tools remain available"); }
     window.scoutBootDone?.();

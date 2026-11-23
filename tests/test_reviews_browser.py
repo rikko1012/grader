@@ -108,3 +108,29 @@ def test_signed_out_visitor_reads_and_is_offered_sign_in(browser, env, size):
         assert not p.errors, p.errors
     finally:
         c.close()
+
+
+def test_review_dates_are_the_utc_day_the_landing_states(browser, env, monkeypatch):
+    """sweep L7: the landing (server-rendered) dates reviews by their UTC day ("All 15 were posted on Nov 16, 2026"); /reviews must show
+    the same day in every time zone - a review written 2026-11-16T05:52Z reads Nov 16, 2026 in Chicago too, never Nov 15."""
+    import json as _json
+    monkeypatch.setattr(reviews, "_RATE", {})
+    reviews.upsert("user_tz", "Member TZ", {"stars": 5, "title": "", "body": "The board and the player cards are quick to read on my phone."})
+    c = browser.new_context(viewport=SIZES[1], timezone_id="America/Chicago")
+    c.route("https://fonts.*/**", lambda r: r.abort())
+
+    def early(route):
+        resp = route.fetch()
+        d = resp.json()
+        for r in d.get("reviews") or []:
+            r["created"] = "2026-11-16T05:52:31Z"
+        route.fulfill(response=resp, body=_json.dumps(d), headers=dict(resp.headers, **{"content-type": "application/json"}))
+    c.route("**/api/reviews?*", early)
+    try:
+        p = watch(c.new_page())
+        p.goto(env.url + "/reviews")
+        p.wait_for_selector(".when")
+        assert p.evaluate("Intl.DateTimeFormat().resolvedOptions().timeZone") == "America/Chicago"
+        assert p.locator(".when").first.inner_text().startswith("Nov 16, 2026"), p.locator(".when").first.inner_text()
+    finally:
+        c.close()

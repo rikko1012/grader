@@ -89,7 +89,7 @@ def test_signed_out_pages_render_in_the_new_identity(browser, env, monkeypatch, 
     c = browser.new_context(viewport=SIZES[size], color_scheme=scheme)
     c.route("https://fonts.*/**", lambda r: r.abort())
     try:
-        for path, ready in (("/", "#hero-title"), ("/?signin_error=Not%20a%20member", "#signin-error:not([hidden])"), ("/record", "h1"), ("/alerts/unsubscribe?m=a&t=b", "h1")):
+        for path, ready in (("/", "#hero-title"), ("/?signin_error=no_account", "#signin-error:not([hidden])"), ("/record", "h1"), ("/alerts/unsubscribe?m=a&t=b", "h1")):
             p = c.new_page()
             errors = []
             p.on("pageerror", lambda e: errors.append(str(e)))
@@ -104,7 +104,7 @@ def test_signed_out_pages_render_in_the_new_identity(browser, env, monkeypatch, 
                 bg = p.evaluate("getComputedStyle(document.body).backgroundColor")
                 assert (sum(int(x) for x in re.findall(r"\d+", bg)[:3]) > 600) == (scheme == "light"), (path, bg)
             if path.startswith("/?signin"):
-                assert "Not a member" in p.locator("#signin-error").inner_text()
+                assert "Whop didn't return your account" in p.locator("#signin-error").inner_text()   # sweep L8: a code, the page's words
             assert not errors, (path, errors)
             p.close()
     finally:
