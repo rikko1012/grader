@@ -530,3 +530,41 @@ def test_700_at_once_no_5xx_and_never_two_reads_together(http_srv, data, monkeyp
     assert codes.count(200) >= 100 and hpeak[0] == 1, (codes.count(200), hpeak[0])
     assert took < 120, took
     assert data.joinpath("comparison_snapshots.jsonl").read_bytes() == blob   # reads never change the file
+
+
+def test_an_inode_change_outside_a_cut_is_rebound_by_content_and_a_foreign_file_is_not(data):
+    blob = lines(400)
+    p = write_live(data, blob)
+    n = blob.index(b"\n", len(blob) // 2) + 1
+    assert trim(p, n, dry_run=False)[0] == 200
+    kept = p.read_bytes()
+    copy = data / "moved.tmp2"                             # a disk migration / restore copies the file: new inode, same bytes
+    copy.write_bytes(kept + lines(3, start=7000))
+    os.replace(copy, p)
+    applied = so.reconcile()
+    assert len(applied) == 1 and so.read_manifest()[0][-1]["kind"] == "rebind"
+    assert so.reconcile() == applied                       # recorded once
+    blob2 = p.read_bytes()
+    st, out = trim(p, blob2.index(b"\n", 3000) + 1, dry_run=False)
+    assert st == 200 and so.applied_entries()[-1]["history_offset"] == n
+
+
+def test_a_mutable_table_over_the_page_bound_is_refused_never_truncated(data, monkeypatch):
+    _ml_store(data, n=1)
+    con = moneyline._connect()
+    con.executemany("INSERT INTO ml_meta VALUES (?, ?, 'now')", [(f"k{i}", "v" * 300) for i in range(20)])
+    con.commit(); con.close()
+    monkeypatch.setattr(so, "ROWS_BYTES_MAX", 2000)
+    st, out, _ = so.ml_rows({"table": "ml_meta"})
+    assert st == 413
+
+
+def test_a_manifest_problem_raises_the_rotation_alert(data, monkeypatch):
+    monkeypatch.setattr(so, "LIVE_MAX_MB", 0.05)
+    blob = lines(2000)
+    p = write_live(data, blob)
+    assert trim(p, blob.index(b"\n", 20000) + 1, dry_run=False)[0] == 200
+    with open(data / "comparison_archive" / "manifest.jsonl", "ab") as f:
+        f.write(b"{torn\n")
+    assert so.rotate_once()["skip"] == "manifest"
+    assert "rotation_error" in so.status()["alerts"] and "manifest_unreadable_lines" in so.status()["alerts"]

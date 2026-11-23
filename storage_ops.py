@@ -391,6 +391,15 @@ def _remove_stale_tmp():
                 pass
 
 
+def _prefix_is(n, sha):
+    """True when the live file still starts with exactly the n bytes of that sha256 (the crash case: swap never ran)."""
+    try:
+        with open(live_path(), "rb") as f:
+            return bool(n and sha) and os.fstat(f.fileno()).st_size >= int(n) and hash_prefix(f, int(n))[0] == sha
+    except (OSError, Refused):
+        return False
+
+
 def reconcile():
     """Void an entry whose os.replace never happened (crash between the manifest line and the swap). Returns the
     applied entries; raises Refused when the manifest and the live file disagree in a way no crash explains."""
@@ -405,13 +414,29 @@ def reconcile():
         ino = os.stat(live_path()).st_ino
     except FileNotFoundError:
         raise Refused(409, "live file missing")
-    if ino == last.get("new_inode"):
+    rebinds = [e for e in entries if e.get("kind") == "rebind" and e["seq"] > last["seq"]]
+    marker = rebinds[-1]["new_inode"] if rebinds else last.get("new_inode")
+    if ino == marker:
         return applied
-    if ino == last.get("old_inode"):
+    if ino == last.get("old_inode") and not rebinds and _prefix_is(last.get("archived_bytes"), last.get("sha256")):
         _append_manifest({"seq": max(e["seq"] for e in entries) + 1, "kind": "void", "voids": last["seq"],
                           "reason": "swap never happened (its bytes are still in the live file)", "at": _now_iso()})
         STATS["voided"] += 1
         return applied_entries()
+    # the inode changed outside a cut (disk migration / restore / resize copy): the file is still ours when it starts with
+    # exactly the tail the last cut kept - then the new inode is recorded ("rebind") and nothing else changes
+    tb, want = int(last.get("tail_bytes") or 0), last.get("tail_sha256")
+    if want and tb:
+        try:
+            with open(live_path(), "rb") as f:
+                got = hash_prefix(f, tb)[0]
+        except (OSError, Refused):
+            got = None
+        if got == want:
+            _append_manifest({"seq": max(e["seq"] for e in entries) + 1, "kind": "rebind", "after": last["seq"],
+                              "old_marker": marker, "new_inode": ino, "at": _now_iso(),
+                              "reason": "live file starts with the last cut's kept tail (sha256 checked); inode changed outside a cut"})
+            return applied
     raise Refused(409, "live file is neither the last cut's old nor new file", inode=ino, last_seq=last["seq"])
 
 
@@ -557,6 +582,7 @@ def rotate_once(force_checks=True):
             try:
                 applied = reconcile()
             except Refused as r:
+                STATS["rotation_error"] = dict(r.body, at=_now_iso())      # an alert in status: the file would regrow silently
                 return _skip("manifest", detail=r.body)
             if not any(e.get("kind") == "manual_trim" for e in applied):
                 return _skip("no_manual_trim")
@@ -766,11 +792,11 @@ def ml_rows(q):
             parts, size, n, last, cut = [], 0, 0, after, False
             for row in cur:
                 ln = canonical(row)
+                if mutable and size + len(ln) > ROWS_BYTES_MAX:     # whole or nothing: never a truncated "done" page
+                    return 413, {"error": "mutable table over the page bound"}, {}
                 if n and size + len(ln) > ROWS_BYTES_MAX:
                     cut = True
                     break
-                if mutable and size + len(ln) > ROWS_BYTES_MAX:
-                    return 413, {"error": "mutable table over the page bound"}, {}
                 parts.append(ln)
                 size += len(ln)
                 n += 1
