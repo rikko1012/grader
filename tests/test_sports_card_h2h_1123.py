@@ -1,10 +1,11 @@
 """sweep 2026-11-23 nbanfl-1: the NBA / NFL card's H2H block counts the same meetings as the board's H2H cell.
 
 The card cut the player's log to the 30-game research window (DNPs included) before matching, so meetings at log positions
-past 30 were missing (live: board 3 of 3, card 1 of 1). Every team, player and number here is a TEST FIXTURE."""
+past 30 were missing (live: board 3 of 3, card 1 of 1). The board side (sports/board_view.h2h_season_lines) gives these same
+EXPECTED counts on this same fixture in sports/tests/test_board_h2h_card_parity_1123.py (CS2 tests never import sports).
+Every team, player and number here is a TEST FIXTURE."""
 from datetime import datetime, timedelta, timezone
 
-from sports import board_view
 import workspace_sports as ws
 
 OPP = {"team_id": "nba:team:espn:21", "abbr": "PHX", "name": "Phoenix"}
@@ -23,9 +24,14 @@ def _games(meet_at=(34, 44, 45, 57), n=60, dnp_every=7):
     return out
 
 
-def _board(games, line, opp_id=OPP["team_id"]):
-    c = board_view.h2h_season_lines("points", [line], games, opp_id)["linesH2h"][board_view.line_key(line)]
-    return {"over": c[0], "under": c[1], "push": c[2], "n": c[3]}
+# board_view.h2h_season_lines on these fixtures (pinned by sports/tests/test_board_h2h_card_parity_1123.py)
+EXPECTED = {"base": {12.5: (3, 1, 0, 4), 14.5: (2, 2, 0, 4), 15.0: (2, 2, 0, 4), 17.5: (0, 4, 0, 4)},
+            "ten": {14.5: (6, 4, 0, 10)}, "id": {14.5: (2, 2, 0, 4)}}
+
+
+def _board(case, line):
+    o, u, p, n = EXPECTED[case][line]
+    return {"over": o, "under": u, "push": p, "n": n}
 
 
 def _card(games, line, oid=OPP["team_id"], opponent="PHX"):
@@ -37,8 +43,7 @@ def _card(games, line, oid=OPP["team_id"], opponent="PHX"):
 def test_meetings_past_the_research_window_count_on_the_card_as_on_the_board():
     games = _games()
     for line in (12.5, 14.5, 15.0, 17.5):
-        assert _card(games, line) == _board(games, line), line
-    assert _board(games, 14.5)["n"] == 4
+        assert _card(games, line) == _board("base", line), line
     # the old card rule (30-game research window) saw none of these meetings
     hist = ws.trim({"family": "basketball", "games": games})
     assert not [s for s in ws.series_of(hist, "points") if s["opponent"] == "PHX"]
@@ -46,13 +51,13 @@ def test_meetings_past_the_research_window_count_on_the_card_as_on_the_board():
 
 def test_newest_ten_meetings_like_the_board():
     games = _games(meet_at=tuple(range(1, 60, 4)))           # 15 meetings: both keep the newest 10
-    assert _card(games, 14.5) == _board(games, 14.5) and _board(games, 14.5)["n"] == 10
+    assert _card(games, 14.5) == _board("ten", 14.5)
 
 
 def test_meetings_match_on_team_id_not_the_code():
     games = _games()
     games[2]["opponent"] = {"team_id": "nba:team:espn:999", "abbr": "PHX", "name": "Other club, same code"}
-    assert _card(games, 14.5) == _board(games, 14.5) and _card(games, 14.5)["n"] == 4
+    assert _card(games, 14.5) == _board("id", 14.5)
 
 
 def test_without_team_ids_the_exact_code_still_matches():
