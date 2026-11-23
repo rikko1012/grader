@@ -12,7 +12,7 @@ DESIGN_RULES.md. No network, no production data: real-shaped board / record / re
   line-gap panel is the first real two-app row in rule order of another player than the phone's when there is one, or absent; the
   Slip stage has one real CS2 card (the first other frame row in rule order, its value labelled 'model estimate') and examples
   (the role on the name line, no per-card chip) whose value slot is a lock (no number in the source); each board card leaves a
-  dashed 'Added to slip' outline;
+  dashed 'Added to slip' outline while the legs fly, and the end frame shows ONE 'All 4 legs are in the slip' line (critic round 4);
 - record = Won / Lost / Push counts only; the decided count = the table's Won + Lost; the review score never ticks;
 - copy / CSS hard rules: no banned words, no arrows or middle-dot strings in page copy, curly apostrophes, one uppercase tag, green
   on one selector, no gradient / blur / shadow except the Slip flight token; every Try button (six) opens the free-trial checkout,
@@ -343,7 +343,8 @@ def test_slip_stage_has_one_real_row_and_examples_with_no_real_numbers(srv, monk
     # the first frame row in rule order other than the phone's (Gap) and the gap panel's (Gap): Mover - never the best estimate
     assert len(cards) == 4 and "<b>Mover</b>" in cards[0] and "<b>64.0%</b>" in cards[0] and "<small>model estimate</small>" in cards[0]
     assert stage.count('<div class="sc ph">') == 3 * 2 and s.count('class="btn btn-md ss-cta"') == 1
-    assert stage.count("Added to slip</span>") == 4 and "phl" not in s and "Members only" not in stage and "ss-ft" not in s
+    assert stage.count("Added to slip</span>") == 4 and stage.count('class="ss-done"') == 1 and "All 4 legs are in the slip</p>" in stage
+    assert "phl" not in s and "Members only" not in stage and "ss-ft" not in s
     for c, who in zip(cards[1:], ("NBA guard", "LoL mid", "Tennis")):
         assert f'<b>{who}</b>' in c and '<span class="sv mo">' in c and "Example" not in c
         assert 'class="mt"' not in c and not re.search(r"\d+(\.\d)?%", c) and "placeholder" not in c
@@ -433,16 +434,17 @@ def test_review_cards_escape_feature_by_rule_and_leave_handles_off(srv, monkeypa
     m = block(s, 'id="members"')
     assert "<script>x</script>" not in s and "&lt;script&gt;" in m
     quotes = re.findall(r"<blockquote><p>&ldquo;(.*?)&rdquo;</p></blockquote>", m)
-    assert len(quotes) == 2                                              # complete reviews only; the cut one is never featured
+    assert len(quotes) == 3                       # complete reviews first, then ONE excerpt fills the row (critic round 4, reverses D38)
     assert quotes[0].startswith("The cards explain every lean") and quotes[1] == "Reasons behind each prop are great for me"
+    assert quotes[2] == "Love the stats and reasons behind each prop."       # whole sentences, no ellipsis inside the quote marks
     assert '<p class="st-t">A member ran his first ever 6&nbsp;man with Grader and cashed.</p>' in m   # Prop Grader's post: no quote marks
     caps = re.findall(r"<figcaption>(Paying member[^<]*)", m)
-    assert caps == ["Paying member, Nov 16, 2026"] * 2 and not any(n in m for n in ("longform", "slipper", "earner"))
+    assert [c.strip() for c in caps] == ["Paying member, Nov 16, 2026"] * 3 and not any(n in m for n in ("longform", "slipper", "earner"))
     assert "Hit big" not in m and "profitable" not in m and "YALL" not in m and "guaranteed" not in m and "Paying member ·" not in m
-    assert "Full review" not in m and "…" not in m and "2026.<" not in m
+    assert m.count('<a class="tl" href="/reviews">Full review</a>') == 1 and "…" not in m and "2026.<" not in m   # the excerpt links its review
     assert ('<p class="st-r"><a href="/reviews"><b><span class="star" aria-hidden="true">★</span>&nbsp;4.8</b>'
             '<span>from 12 reviews, all published</span></a></p>') in m
-    assert m.index('class="story"') < m.index('class="rqs n2"')        # the featured card leads (brief 8), then a 2-up row
+    assert m.index('class="story"') < m.index('class="rqs n3"')        # the featured card leads (brief 8), then a 3-up row
     assert "Shared by Prop Grader on X. One member, one night: a result, not a promise." in m
 def test_review_order_cut_rule_and_curly_apostrophes():
     rv = {"summary": {"count": 3}, "reviews": [
@@ -453,10 +455,20 @@ def test_review_order_cut_rule_and_curly_apostrophes():
         review(4, "d", "Love the stats. Made money."),                                                     # cut, 3 words left: never
     ]}
     got = landing_v3.featured(rv)
-    assert [r["id"] for r, _q, _c, _o in got] == [3] and [c for _r, _q, c, _o in got] == [False]   # a cut review is never featured
+    # complete first; excerpts fill the row (product talk, then length); a 3-word excerpt never
+    assert [r["id"] for r, _q, _c, _o in got] == [3, 2, 1] and [c for _r, _q, c, _o in got] == [False, True, True]
+    assert [q for _r, q, _c, _o in got][1:] == ["The breakdowns on every card are clear and I can read the map data quickly before I build.",
+                                                 "Love the stats and the reasons."]
     _h, cards, _n, _a = landing_v3.wall(rv)
     assert "You’ve got the stats right there, it’s the best board." in cards and "&#x27;" not in cards
-    assert "…" not in cards and "Full review" not in cards
+    assert "…" not in cards and cards.count("Full review") == 2
+
+
+def test_an_excerpt_is_one_run_of_consecutive_sentences():
+    rv = {"summary": {"count": 1}, "reviews": [
+        review(1, "a", "Love the stats on every card. Made money all week. The map data and reasons are clear too.")]}
+    (_r, q, cut, _o), = landing_v3.featured(rv)
+    assert cut and q == "The map data and reasons are clear too."          # never two sentences joined over the cut one
 def test_rating_shows_only_from_ten_reviews(srv, monkeypatch):
     few = dict(REVIEWS, summary={"count": 4, "average": 5.0})
     seed(srv, monkeypatch, board(), rv=few)
@@ -554,7 +566,7 @@ def test_links_go_to_the_trial_and_weekly_checkouts(srv, monkeypatch):
     trial, week = JOIN.replace("&", "&amp;"), WEEK.replace("&", "&amp;")
     btns = re.findall(r'<a class="btn[^"]*"[^>]*href="([^"]+)"[^>]*>([^<]+)</a>', s)
     assert len(btns) == 6 and {h for h, _t in btns} == {trial}          # nav, hero, Slip, pricing, final, phone bar (no stage CTA, D15)
-    assert sorted(t for _h, t in btns) == sorted(["Try free", "Try free"] + ["Try Prop Grader free for 1&nbsp;day"] * 4)
+    assert sorted(t for _h, t in btns) == sorted(["Try free", "Try free for 1&nbsp;day"] + ["Try Prop Grader free for 1&nbsp;day"] * 4)
     whop = re.findall(r'href="(https://whop\.com/[^"]+)"', s)
     assert set(whop) == {trial, week} and whop.count(week) == 1 and f'<a href="{week}">Weekly plan</a>: $9.99/week' in s
     assert OLD_JOIN not in s

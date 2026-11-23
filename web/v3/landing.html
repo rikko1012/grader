@@ -200,7 +200,7 @@
         <div class="ss-fig" role="img" aria-label="Example animation: four graded props from different sports move from the board into a 4-pick slip.">
           <div class="ss-col ss-board">
             <p class="ss-h"><b>Graded board</b><span class="tag">Example</span></p>
-            <div class="ss-list">{{SS_CARDS}}</div>
+            <div class="ss-list">{{SS_CARDS}}<p class="ss-done"><svg viewBox="0 0 16 16"><path d="M3 8.5l3.2 3L13 4.5"/></svg>All 4 legs are in the slip</p></div>
           </div>
           <div class="ss-col ss-slip" id="ss-slip">
             <p class="ss-h"><b>Slip Studio · 4-pick</b><span class="st" id="ss-st">Slip ready</span></p>
@@ -299,8 +299,8 @@
   </div>
 </footer>
 <div class="dock" id="dock">
-  <p class="dk-t"><b translate="no">Prop Grader</b><span>{{PRICE_M}}/mo after your free day</span></p>
-  <a class="btn btn-dock" href="{{TRIAL_URL}}">Try free</a>
+  <a class="btn btn-dock" href="{{TRIAL_URL}}">Try free for 1&nbsp;day</a>
+  <p class="dk-t">then {{PRICE_M}}/mo</p>
 </div>
 <script>
 {{PAGE_JS}}

@@ -757,7 +757,8 @@ def _sentences(s):
     return [x.strip() for x in re.split(r"(?<=[.!?])\s+", str(s or "").strip()) if x.strip()]
 
 
-# critic round 3: a review with a sentence left out is never featured (a cut stub looked edited under "in their words")
+# critic round 4 (reverses D38): complete reviews first; when fewer than FEATURE_N are complete, an excerpt fills the row. An excerpt
+# quotes whole sentences only (5+ words), never an ellipsis inside the quote marks, and its caption links the full review on /reviews.
 
 
 def curly(s):
@@ -769,8 +770,8 @@ def curly(s):
 def featured(doc):
     """[(review, quote, cut, old)] by the stated rule: reviews that talk about using the product. A review with photos (slips) or
     shouting is not featured; a sentence with money / result / betting / guarantee talk is never quoted (cut = a sentence was left
-    out, and such a review is left on /reviews, never featured). Order: the most product talk, then the longest. Fewer than
-    FEATURE_N complete reviews: the row shows fewer cards (2-up / 1-up). Different dates are preferred when the reviews have them. A review
+    out: the quote is one run of consecutive whole sentences, and the card links the full review). Order: complete reviews first
+    (the most product talk, then the longest); excerpts only fill the row up to FEATURE_N; fewer candidates = fewer cards. Different dates are preferred when the reviews have them. A review
     that names the site's old brand (_OLD_BRAND) is never featured (it stays on /reviews). old is always False (kept for callers)."""
     out = []
     for r in (doc or {}).get("reviews") or []:
@@ -780,22 +781,32 @@ def featured(doc):
         if r.get("photos") or shouting:
             continue
         sents = _sentences(r.get("body"))
-        kept = [x for x in sents if not _MONEY.search(x)]
-        quote = " ".join(kept)
-        cut = len(kept) < len(sents)
+        kept, runs = [], []                              # an excerpt is ONE run of consecutive sentences (never two joined over a gap)
+        for x in sents:
+            if _MONEY.search(x):
+                kept = []
+            else:
+                if not kept:
+                    runs.append(kept)
+                kept.append(x)
+        run = max(runs, key=lambda k: (len(_PRODUCT.findall(" ".join(k))), len(" ".join(k))), default=[])
+        quote = " ".join(run)
+        cut = len(run) < len(sents)
         hits = len(_PRODUCT.findall(quote))
         if not hits or len(quote.split()) < 5 or _OLD_BRAND.search(f'{text} {r.get("name") or ""}'):
             continue
-        if cut:
-            continue
         out.append((cut, -hits, -len(quote), r, quote))
     out.sort(key=lambda x: x[:3])
-    first, rest, days = [], [], set()
-    for x in out:                                        # one review per date first (when the dates differ), then the rest in order
-        d = str(x[3].get("created") or "")[:10]
-        (rest if d in days else first).append(x)
-        days.add(d)
-    pick = sorted((first + rest)[:FEATURE_N], key=lambda x: x[:3]) if len(first) > 1 else out[:FEATURE_N]
+
+    def by_date(xs):                                     # one review per date first (when the dates differ), then the rest in order
+        first, rest, days = [], [], set()
+        for x in xs:
+            d = str(x[3].get("created") or "")[:10]
+            (rest if d in days else first).append(x)
+            days.add(d)
+        return sorted(first + rest, key=lambda x: x[:3]) if len(first) > 1 else xs
+    whole = by_date([x for x in out if not x[0]])
+    pick = (whole + by_date([x for x in out if x[0]]))[:FEATURE_N]   # complete reviews first; an excerpt only fills the row
     return [(r, q, cut, False) for cut, _h, _n, r, q in pick]
 
 
@@ -812,7 +823,7 @@ def wall(doc):
     for r, quote, cut, _old in featured(doc):
         d = _ts(r.get("created"))
         more = ' <a class="tl" href="/reviews">Full review</a>' if cut else ""
-        cards.append(f'<li><figure class="rq"><blockquote><p>&ldquo;{esc(curly(quote))}{chr(160) + "…" if cut else ""}&rdquo;</p></blockquote>'
+        cards.append(f'<li><figure class="rq"><blockquote><p>&ldquo;{esc(curly(quote))}&rdquo;</p></blockquote>'
                      f'<figcaption>Paying member, {esc(_date(d))}{more}</figcaption></figure></li>')
     head = (f"from {n} reviews, all published" if avg is not None else "reviews, all published")
     return head, "".join(cards), n, avg

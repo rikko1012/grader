@@ -151,7 +151,12 @@ def test_landing_v3_first_screen_passes_the_five_second_test(browser, lbase, siz
             assert inside(".br:not(.br-h)") and inside(".br:not(.br-h) .gb")          # the first graded row, letter and all
             assert page.locator(".phone").is_visible() and page.locator(".side").is_visible()
         else:
-            assert not page.locator(".browser").is_visible() and inside(".ph-who") and inside(".ph-pr") and inside(".ph-at")
+            # critic round 4: phones see real board rows (a compact frame, no sidebar) above the phone, not one prop
+            assert page.locator(".browser").is_visible() and not page.locator(".side").is_visible() and page.locator(".phone").is_visible()
+            assert inside(".br:not(.br-h)") and inside(".br:not(.br-h) .gb") and inside(".url")
+            assert page.evaluate("[...document.querySelectorAll('.br:not(.br-h) .b-ln, .br:not(.br-h) .b-pk, .br:not(.br-h) .b-p b')]"
+                                 ".every(e => e.scrollWidth <= e.clientWidth + 1)")      # lines, pick and estimate never cut
+            assert page.evaluate("getComputedStyle(document.querySelector('.url')).fontFamily").startswith('"Geist Mono"')
         assert page.locator(".hero a.btn").count() == 1                                # one call to action in the hero
         assert page.locator(".hero-proof").count() == 0 and page.locator(".hero a").count() == 1   # brief 3.2: nothing else in the hero
         small = page.evaluate("""() => [...document.querySelectorAll('a,button')].filter(e => e.offsetParent && !e.closest('.dock')
@@ -196,7 +201,8 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
         assert page.locator("#ss-st").text_content() == "Slip ready" and page.locator("#ss-cta").count() == 0   # no stage CTA (D15)
         assert page.locator(".ss-board").is_visible()                                  # phones: a 2x2 strip of mini cards above the slip
         assert page.evaluate("[...document.querySelectorAll('.sbx>.sc')].every(e => getComputedStyle(e).opacity === '0')")   # end frame:
-        assert page.evaluate("[...document.querySelectorAll('.sad')].every(e => getComputedStyle(e).opacity === '1')")      # 'Added to slip'
+        assert page.evaluate("[...document.querySelectorAll('.sad')].every(e => getComputedStyle(e).opacity === '0')")      # one line, not
+        assert page.locator(".ss-done").is_visible() and page.locator(".ss-done").text_content() == "All 4 legs are in the slip"   # 4 copies
         assert page.evaluate("[...document.querySelectorAll('.rv')].every(e => getComputedStyle(e).opacity === '1')")
         assert page.evaluate("[...document.querySelectorAll('.slot .sc')].every(e => getComputedStyle(e).opacity === '1')")
     finally:
@@ -229,7 +235,10 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
         page.wait_for_function("document.getElementById('ss-st').textContent === 'Building 2 of 4'", timeout=4000)
         page.wait_for_function("document.getElementById('ss').classList.contains('ready')", timeout=6000)   # mini cards fly down
         assert page.locator("#ss .slot.on").count() == 4 and page.evaluate("[...document.querySelectorAll('.ghost')].length") == 0
-        assert page.locator("#ss .sbx.gone").count() == 4                            # each flown card leaves its 'Added to slip' outline
+        assert page.locator("#ss .sbx.gone").count() == 4                            # each flown card left its 'Added to slip' outline
+        page.wait_for_timeout(400)                                                    # ... and "Slip ready" folds them into one line
+        assert page.evaluate("getComputedStyle(document.querySelector('.ss-done')).opacity") == "1"
+        assert page.evaluate("[...document.querySelectorAll('.sad')].every(e => getComputedStyle(e).opacity === '0')")
         assert not page.errors, page.errors
     finally:
         ctx.close()
@@ -302,8 +311,8 @@ def test_landing_v3_phone_bar_never_covers_content(browser, lbase):
         page.locator("#how").scroll_into_view_if_needed()
         page.wait_for_function("document.getElementById('dock').classList.contains('show')")
         a = dock.locator("a")
-        assert a.text_content() == "Try free" and a.get_attribute("href") == JOIN and a.get_attribute("tabindex") is None
-        assert dock.locator(".dk-t").text_content() == "Prop Grader$24.99/mo after your free day" and a.bounding_box()["height"] >= 44
+        assert a.text_content() == "Try free for 1 day" and a.get_attribute("href") == JOIN and a.get_attribute("tabindex") is None
+        assert dock.locator(".dk-t").text_content() == "then $24.99/mo" and a.bounding_box()["height"] >= 44   # brief 3: the bar's words
         assert page.evaluate("getComputedStyle(document.body).paddingBottom") == "76px" and dock.bounding_box()["height"] == 76   # rule 5.11
         a.focus()
         assert page.evaluate("document.activeElement === document.querySelector('#dock a')")   # keyboard / switch users reach it

@@ -323,6 +323,15 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 .stage.run .slot.on .sc{opacity:1;transition:none}
 .stage.run .ss-slip{border-color:var(--color-border)}
 .stage.run.ready .ss-slip{border-color:var(--color-accent-line)}
+/* the end frame (still page and "Slip ready"): the four outlines give way to ONE line, so the board never repeats itself */
+.ss-board .ss-list{position:relative}
+.ss-done{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 12px;border:1px dashed var(--color-border);
+  border-radius:10px;background:var(--color-surface);color:var(--color-text-body);font-size:14px;font-weight:500;white-space:nowrap;opacity:1}
+.ss-done svg{width:16px;height:16px;flex:none;fill:none;stroke:var(--color-text-body);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.stage:not(.run) .sad{opacity:0;visibility:hidden}
+.stage.run .ss-done{opacity:0;transition:opacity 160ms var(--ease-ui)}
+.stage.run.ready .ss-done{opacity:1;transition:opacity var(--dur-ui) var(--ease-ui)}
+.stage.run.ready .sbx.gone .sad{opacity:0;transition:opacity 160ms var(--ease-ui)}
 
 /* record */
 .rec-eb{grid-column:1 / -1}
@@ -362,8 +371,8 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 .rqs.n1{grid-template-columns:minmax(0,1fr);max-width:480px}
 .rq{flex:1;display:flex;flex-direction:column;gap:20px;padding:24px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:16px}
 .rq p{font-size:17px;line-height:1.5;color:var(--color-text);text-wrap:pretty}
-.rq figcaption{margin-top:auto;color:var(--color-text-caption);font-size:13px;line-height:1.5}
-.rq figcaption .tl{display:flex;width:fit-content;align-items:center;min-height:44px;margin:-10px 0 -12px;font-weight:400;text-decoration:underline;text-underline-offset:3px}
+.rq figcaption{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:20px;margin-top:auto;color:var(--color-text-caption);font-size:13px;line-height:1.5}
+.rq figcaption .tl{display:inline-flex;flex:none;align-items:center;min-height:44px;margin:-12px 0;font-weight:400;text-decoration:underline;text-underline-offset:3px}
 
 /* pricing: one card */
 .pricing .wrap{display:flex;flex-direction:column;align-items:center;text-align:center}
@@ -497,8 +506,31 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
   .hero .lead{margin-top:16px}
   .hero .btn{margin-top:28px;width:100%}
   .product{margin-top:24px}
-  .pcol{display:none}
-  .phone{display:block;justify-self:center;width:min(320px,100%);margin:0}
+  .pcol{grid-area:1 / 1;margin:0}
+  .phone{display:block;grid-area:2 / 1;justify-self:center;width:min(320px,100%);margin:16px 0 0}
+  .hero-cap{grid-row:3}
+  .bw-bar{grid-template-columns:auto minmax(0,1fr) auto;column-gap:10px;padding:0 12px}
+  .url{padding:0 8px}
+  .board{padding:12px}
+  .bh{margin-bottom:12px;text-align:left}
+  .bh b{font-size:14px}
+  .bh small{font-size:12px;line-height:1.4}
+  .tabs{display:none}
+  .br{grid-template-columns:minmax(0,1fr) 50px 40px 44px 34px;column-gap:8px;padding:0 10px}
+  .dots{gap:5px}
+  .dots i{width:8px;height:8px}
+  .br-h{font-size:11px;line-height:1.2}
+  .br-h span:nth-child(4){grid-column:4 / 6;white-space:nowrap}
+  .br-h span:nth-child(5){display:none}
+  .br .mt{display:none}
+  .b-p{gap:0}
+  .b-p b{width:auto;font-size:13px}
+  .b-pk{font-size:13px}
+  .b-ln{font-size:12px}
+  .b-who b{font-size:14px}
+  .b-who small{font-size:12px}
+  .br .gb{width:34px}
+  .bfoot{font-size:12px;text-align:left}
   .ph-scr{min-height:0}
   .pf{grid-template-columns:1fr 1fr;padding:40px 0}
   .pf-2{grid-template-columns:1fr 1fr}
@@ -564,9 +596,8 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
     padding:14px var(--gut) calc(14px + env(safe-area-inset-bottom));background:var(--color-page);border-top:1px solid var(--color-border);
     transform:translateY(100%);visibility:hidden;transition:transform 160ms var(--ease-ui),visibility 0s 160ms}
   .dock.show{transform:none;visibility:visible;transition:transform var(--dur-bar-in) var(--ease-ui),visibility 0s}
-  .dk-t{display:flex;flex-direction:column;min-width:0}
-  .dk-t b{font-size:15px;font-weight:600;line-height:1.3}
-  .dk-t span{color:var(--color-text-caption);font-size:13px;line-height:1.4}
+  .dk-t{min-width:0;color:var(--color-text-body);font-size:15px;line-height:1.3;white-space:nowrap}
+  .btn-dock{flex:1 1 auto;max-width:240px}
 }
 @media (prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
