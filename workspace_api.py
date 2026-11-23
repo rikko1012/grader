@@ -1828,7 +1828,9 @@ def _hits_pass(srv, items, key, cols, budget, board=None):
             full = _history(srv, x, full=True) or {}
             ser = full.get("ser")
             if ser:
-                row = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l20": _tally_of(ser, x.get("line"), 20)}
+                # l10: the HLTV count of the same series (the v3 CS2 row shows it, never the saved BO3.gg + HLTV L10, so row = card)
+                row = {"line": x.get('line'), "l5": _tally_of(ser, x.get("line"), 5), "l10": _tally_of(ser, x.get("line"), 10),
+                       "l20": _tally_of(ser, x.get("line"), 20)}
                 if cols:                    # the history just read is passed on: one history read per row (700-load test)
                     hh = _core_h2h(srv, x, x.get("opp_name") or x.get("opponent"), x.get("line"), board=True, full=full)
                     if hh is CORE_PENDING:
@@ -2490,7 +2492,9 @@ def post_slip_advice(h, srv, q, member, scratch, name, n):
     for sport in [s for s in SPORTS if allowed.get(s) and any(l["sport"] == s for l in legs)]:
         got = _slip_pool(srv, sport, table)
         if got:
-            pool_legs += [x for x in got[0] if not x["research"] and ((sq._ts(x["start"]) or now) - now).total_seconds() >= sq.LEAD_S]
+            # NBA / NFL legs (research=True) join too: their letters are released and Auto-build ranks them whenever the sport is on
+            # the slip (_gen_opts, owner 2026-11-12), so the adder rates them the same way instead of "not in the pool"
+            pool_legs += [x for x in got[0] if ((sq._ts(x["start"]) or now) - now).total_seconds() >= sq.LEAD_S]
     pool_legs = _ranked(pool_legs)
     by_key = {l["key"]: l for l in pool_legs}
     types = {s: _line_types(srv, s) for s in {l["sport"] for l in legs}}

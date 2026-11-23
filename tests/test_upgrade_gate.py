@@ -288,6 +288,7 @@ def test_hits_add_l5_and_l20_only_when_the_rows_reproduce_the_saved_l10(env, mon
     d = json.loads(get(env.base, "/api/upgrade/hits", "good-u1")[1])
     x = d["rows"]["underdog|11111111-0000-4000-8000-000000000001"]
     assert x["l5"] == {"over": 3, "under": 2, "push": 0, "n": 5} and x["l20"] == {"over": 12, "under": 8, "push": 0, "n": 20}
+    assert x["l10"] == {"over": 6, "under": 4, "push": 0, "n": 10}       # sweep cs2m-1: the same HLTV series' L10 rides along
     assert d["complete"] is True
     assert "underdog|11111111-0000-4000-8000-000000000003" not in d["rows"] or d["rows"]
 
@@ -298,6 +299,8 @@ def test_hits_count_the_newest_results_even_when_they_disagree_with_the_saved_l1
     monkeypatch.setattr(hltv, "recent_series", lambda *a, **k: series([10] * 20))
     rows = json.loads(get(env.base, "/api/upgrade/hits", "good-u1")[1])["rows"]
     assert rows and all(r["l5"]["n"] == 5 and r["l20"]["n"] == 20 for r in rows.values())
+    # sweep cs2m-1: the HLTV L10 of those same results (what the v3 card counts), even where the saved L10 differs
+    assert all(r["l10"]["n"] == 10 and r["l10"]["push"] + r["l10"]["over"] + r["l10"]["under"] == 10 for r in rows.values())
 
 
 def test_hits_never_make_a_member_wait_and_stop_at_the_budget(env, monkeypatch):

@@ -38,7 +38,7 @@
   <div class="wrap top-in">
     <a class="brand" href="/" aria-label="1time Scout home"><span class="mark" aria-hidden="true">1T</span><b>Scout</b></a>
     <nav class="nav" aria-label="Page">
-      <a href="#terminal">Board</a><a href="#record">Record</a><a href="#reviews">Reviews</a><a href="#faq">FAQ</a>
+      <!--if:TERM--><a href="#terminal">Board</a><!--/if:TERM--><!--if:LEDGER--><a href="#record">Record</a><!--/if:LEDGER--><!--if:REVIEWS--><a href="#reviews">Reviews</a><!--/if:REVIEWS--><a href="#faq">FAQ</a>
     </nav>
     <div class="top-cta"><a class="lnk" href="/auth/login">Sign in</a><a class="btn primary sm" href="{{JOIN_URL}}">Get the board</a></div>
   </div>
@@ -146,7 +146,7 @@
         <li><b>LoL</b><span>Its own model for kills and assists</span></li>
       </ul>
     </div>
-    <!--if:POOL--><div class="pool" id="pool" data-line="{{POOL_LINE}}">
+    <!--if:POOL--><div class="pool" id="pool" data-line="{{POOL_LINE}}" data-pairs="{{POOL_PAIRS}}">
       <div class="pool-h"><b>Pick two maps. See the pace.</b><small>{{POOL_WHO}} · Kills · Maps 1-2 · line {{POOL_LINE}} on {{POOL_APP}}</small></div>
       <ul class="maps">{{POOL_MAPS}}</ul>
       <div class="pool-out" aria-live="polite">

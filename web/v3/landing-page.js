@@ -5,7 +5,7 @@
    - "Move the line": Scout's CS2 kills chance and letter as the line moves (formula, spread, cap, cut points and the per-letter record
      come from the server in data-gw; at the real line it prints the board's own number);
    - the hero board's chances count in once (html.motion only);
-   - a failed sign-in (/?signin_error=...) shown as text; freshness said by the browser (the cached HTML only says "as of");
+   - a failed sign-in (/?signin_error=<code>) shown as the page's fixed message for that code; freshness said by the browser (the cached HTML only says "as of");
    - reveal-once on view (html.motion only) and the phone dock after the hero buttons scroll away. */
 (function () {
   'use strict';
@@ -14,9 +14,20 @@
   function $$(s, r) { return Array.prototype.slice.call((r || D).querySelectorAll(s)); }
   function safe(f) { try { f(); } catch (e) { if (window.console) console.warn('landing', e); } }
 
+  /* a failed sign-in comes back as /?signin_error=<code> (server.py, whop_auth.error_code): the page shows its own fixed message for
+     the code, never text from the URL (a crafted link cannot put words on the page); an unknown code gets the generic message */
+  var SIGNIN_ERRORS = {
+    expired: 'Sign-in expired - please try again',
+    whop: 'Whop sign-in did not complete - please try again',
+    no_account: "Whop didn't return your account - please try again"
+  };
   safe(function () {
     var e = new URLSearchParams(location.search).get('signin_error');
-    if (e) { var el = D.getElementById('signin-error'); el.textContent = e; el.hidden = false; }
+    if (e) {
+      var el = D.getElementById('signin-error');
+      el.textContent = Object.prototype.hasOwnProperty.call(SIGNIN_ERRORS, e) ? SIGNIN_ERRORS[e] : 'Sign-in did not complete - please try again';
+      el.hidden = false;
+    }
   });
 
   /* freshness: the cached HTML says "as of <time>". The browser says it relative to now from data-at: "checked N min ago" (and lights
@@ -56,7 +67,8 @@
     if (!b) return;
     var row = b.closest('.tr');
     $$('button.bk', row).forEach(function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); });
-    var d = b.dataset, gv = d.g || '–';
+    /* a line under the B- cut keeps Lean wording ("Lean Over"), the same words the member board and "Move the line" use; never a dash */
+    var d = b.dataset, gv = d.g || (d.side ? 'Lean ' + d.side : '');
     var pv = $('.pv', row), mt = $('.mt', row), sd = $('.sd', row), g = $('.gr b', row);
     if (d.p && pv) pv.firstChild.nodeValue = d.p;
     if (d.p && mt) mt.style.setProperty('--p', d.p);
@@ -75,8 +87,10 @@
       if (k === 'g' && n.classList.contains('gt')) n.className = 'gt ' + gcls(gv);
     });
     $$('.dt [data-c]', row).forEach(function (n) { n.hidden = !map[n.getAttribute('data-c')]; });
+    /* the tier link only for a letter the public record has a tier for (data-rec, set by the server from the record's 57% rule):
+       a B- line or a Lean line links to no tier */
     var rec = $('.dt-rec', row);
-    if (rec) rec.hidden = !d.g;
+    if (rec) rec.hidden = !(d.g && d.rec === '1');
   });
 
   /* pick two maps: the pooled kills per map = sum(kills/map x maps) / sum(maps) over the two chosen; pace = line / 2 */
@@ -85,13 +99,21 @@
     if (!pool) return;
     var btns = $$('button.map', pool), order = btns.filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; });
     var pace = (+pool.getAttribute('data-line')) / 2, vE = D.getElementById('pool-v'), dE = D.getElementById('pool-d'), nE = D.getElementById('pool-names');
+    var pairs = {};
+    try { pairs = JSON.parse(pool.getAttribute('data-pairs') || '{}') || {}; } catch (e) { pairs = {}; }
     function draw() {
-      var k = 0, n = 0;
-      order.forEach(function (b) { k += (+b.getAttribute('data-k')) * (+b.getAttribute('data-n')); n += +b.getAttribute('data-n'); });
-      var v = n ? k / n : 0, dlt = v - pace;
-      vE.textContent = v.toFixed(2);
-      dE.textContent = (dlt >= 0 ? '+' : '−') + Math.abs(dlt).toFixed(2);
-      dE.className = dlt >= 0 ? 'up' : 'dn';
+      /* the server's own strings for this pair (data-pairs: pooled, delta, class), so a pair never reads two ways (load vs re-pick) */
+      var ix = order.map(function (b) { return +b.getAttribute('data-i'); }).sort(function (a, b) { return a - b; }), got = pairs[ix.join('-')];
+      if (got && got.length === 3) {
+        vE.textContent = got[0]; dE.textContent = got[1]; dE.className = got[2];
+      } else {
+        var k = 0, n = 0;
+        order.forEach(function (b) { k += (+b.getAttribute('data-k')) * (+b.getAttribute('data-n')); n += +b.getAttribute('data-n'); });
+        var v = n ? k / n : 0, dlt = v - pace;
+        vE.textContent = v.toFixed(2);
+        dE.textContent = (dlt >= 0 ? '+' : '−') + Math.abs(dlt).toFixed(2);
+        dE.className = dlt >= 0 ? 'up' : 'dn';
+      }
       nE.textContent = order.map(function (b) { return $('.mn', b).textContent; }).join(' + ');
     }
     btns.forEach(function (b) {
@@ -147,8 +169,14 @@
     var pE = D.getElementById('gw-p'), gE = D.getElementById('gw-g'), sE = D.getElementById('gw-side'), lv = D.getElementById('gw-lv'),
         lad = $$('#gw-ladder li');
     function fill() { L.style.setProperty('--p', ((L.value - L.min) / (L.max - L.min) * 100) + '%'); }
+    /* at the real line: the board's own chance, side and letter (cfg.at, from the row); the formula draws every other line */
+    function read(line) {
+      var r = chance(line), at = cfg.at;
+      if (at && Math.abs(line - cfg.line) < 1e-9 && isFinite(parseFloat(at.p))) { r.ch = parseFloat(at.p) / 100; r.pt = at.p; r.g = at.g || r.g; r.side = at.side || r.side; }
+      return r;
+    }
     function draw() {
-      var line = parseFloat(L.value), r = chance(line), lx = x(line), txt = 'Line ' + line.toFixed(1), w = txt.length * 7;
+      var line = parseFloat(L.value), r = read(line), lx = x(line), txt = 'Line ' + line.toFixed(1), w = txt.length * 7;
       gU.setAttribute('d', area(X0, r.dn)); gO.setAttribute('d', area(r.up, X1));
       gU.setAttribute('class', 'c-u' + (r.side === 'Under' ? ' on' : '')); gO.setAttribute('class', 'c-o' + (r.side === 'Over' ? ' on' : ''));
       mk.setAttribute('x1', lx); mk.setAttribute('x2', lx);
@@ -157,10 +185,11 @@
       pjt.setAttribute('x', right ? x(lam) + 6 : x(lam) - 6); pjt.setAttribute('text-anchor', right ? 'start' : 'end');
       lv.textContent = line.toFixed(1);
       sE.textContent = r.side + ' ' + line.toFixed(1) + ' kills';
-      pE.textContent = (r.ch * 100).toFixed(1);
+      var pt = r.pt || (r.ch * 100).toFixed(1);
+      pE.textContent = pt;
       gE.textContent = r.g; gE.className = 'gw-g ' + gcls(r.g);
       lad.forEach(function (li) { li.classList.toggle('on', li.getAttribute('data-g') === r.g); });
-      L.setAttribute('aria-valuetext', 'Line ' + line.toFixed(1) + ', ' + r.side + ' ' + (r.ch * 100).toFixed(1) + ' percent, ' + (r.g === 'Lean' ? 'Lean ' + r.side : 'grade ' + r.g));
+      L.setAttribute('aria-valuetext', 'Line ' + line.toFixed(1) + ', ' + r.side + ' ' + pt + ' percent, ' + (r.g === 'Lean' ? 'Lean ' + r.side : 'grade ' + r.g));
       fill();
     }
     L.addEventListener('input', draw);
@@ -184,8 +213,11 @@
      already printed the final values, so without motion or JS nothing changes) */
   safe(function () {
     if (!term || !D.documentElement.classList.contains('motion') || !('IntersectionObserver' in window) || !window.requestAnimationFrame) return;
-    var nums = $$('.tr .pv', term).map(function (b) { return { n: b.firstChild, v: parseFloat(b.firstChild.nodeValue) }; })
+    /* each row counts in to the chance of its pressed line (read every frame), so a line tapped before or during the count-in keeps
+       its own number; the lead line's value is never put back over it */
+    var nums = $$('.tr .pv', term).map(function (b) { return { n: b.firstChild, row: b.closest('.tr'), v: parseFloat(b.firstChild.nodeValue) }; })
       .filter(function (x) { return x.n && isFinite(x.v); });
+    function target(x) { var on = x.row && $('button.bk.on', x.row), p = on ? parseFloat(on.getAttribute('data-p')) : NaN; return isFinite(p) ? p : x.v; }
     nums.forEach(function (x) { x.n.nodeValue = '0.0'; });
     var go = new IntersectionObserver(function (es) {
       if (!es[0].isIntersecting) return;
@@ -193,7 +225,7 @@
       var t0 = performance.now();
       (function tick(t) {
         var k = Math.min(1, (t - t0) / 800), e = 1 - Math.pow(1 - k, 3);
-        nums.forEach(function (x) { x.n.nodeValue = (x.v * e).toFixed(1); });
+        nums.forEach(function (x) { var v = target(x); x.n.nodeValue = k >= 1 ? v.toFixed(1) : (v * e).toFixed(1); });
         if (k < 1) requestAnimationFrame(tick);
       })(t0);
     });

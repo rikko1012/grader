@@ -227,19 +227,21 @@ def _parse(name, body):
 
 # --------------------------------------------------------------------------------------------------------------- the terminal
 
-def _rows(board, n=6):
+def _rows(board, n=6, live=False):
     """Terminal rows by the stated rule: graded standard CS2 props with a lock after the board's own time, one row per
     player/stat/maps market (every app's line on it). Line gaps and moved lines first, then the soonest. Returns (rows, board time,
-    how many letter-graded markets the board holds in all)."""
+    how many letter-graded markets the board holds in all). live=True (the live board, build()): the lock must also be after now, so
+    a kept older board never shows a match that has started; the saved board (live=False) is dated and keeps its own rows."""
     recs = (board or {}).get("records") or []
     at = _ts((board or {}).get("board_at"))
+    now = datetime.now(timezone.utc) if live else None
     groups = {}
     for r in recs:
         sc, mk, ev = r.get("scout") or {}, r.get("market") or {}, r.get("event") or {}
         if mk.get("line_type") != "standard" or not sc.get("side") or sc.get("p_side") is None or (r.get("state") or {}).get("kind") != "ok":
             continue
         lock = _ts(ev.get("lock_utc") or ev.get("start_utc"))
-        if lock is None or (at and lock <= at):
+        if lock is None or (at and lock <= at) or (now is not None and lock <= now):
             continue
         k = (ev.get("id"), (r.get("player") or {}).get("key"), mk.get("stat"), mk.get("period"))
         groups.setdefault(k, []).append(r)
@@ -280,6 +282,19 @@ def _gcls(g):
     return "ga" if g[:1] == "A" else "gb" if g[:1] == "B" else ""
 
 
+def on_record(g):
+    """True when the public record has a tier for letter g: the record counts the favoured side at results_view.RULE (57%) or more,
+    so its tiers are the letters whose cut is at or above that (A+ .. B); a B- (55-57%) is never on it."""
+    import results_view
+    cut = dict((x, c) for c, x in CUTS).get(str(g or ""))
+    return cut is not None and cut >= results_view.RULE - 1e-9
+
+
+def _grade_text(grade, side):
+    """The grade cell's words: the letter, else 'Lean Over' / 'Lean Under' (a line under the B- cut keeps Lean wording, never a dash)."""
+    return grade or (f"Lean {side}" if side else "")
+
+
 def _offer_cell(r, lead):
     of = r.get("offer") or {}
     sc = r.get("scout") or {}
@@ -294,7 +309,8 @@ def _offer_cell(r, lead):
     be = _pct((r.get("parity") or {}).get("be"))
     l10s = f"{l10[0]} of {l10[1]}" if l10 else ""
     seen, graded = _ts(of.get("seen_at")), _ts(sc.get("forecast_at"))
-    data = (f' data-p="{esc(p)}" data-side="{side}" data-g="{esc(sc.get("grade") or "")}" data-line="{esc(_num(of.get("line")))}"'
+    data = (f' data-p="{esc(p)}" data-side="{side}" data-g="{esc(sc.get("grade") or "")}" data-rec="{"1" if on_record(sc.get("grade")) else ""}"'
+            f' data-line="{esc(_num(of.get("line")))}"'
             f' data-app="{esc(of.get("platform_label") or "")}" data-l10="{esc(l10s)}" data-h="{l10[0] if l10 else ""}" data-n="{l10[1] if l10 else ""}"'
             f' data-be="{esc(be or "")}" data-entry="{esc((r.get("parity") or {}).get("entry") or "")}"'
             f' data-seen="{seen.strftime("%H:%M") if seen else ""}" data-graded="{esc(_when(graded))}"')
@@ -312,9 +328,9 @@ def _span_cells(rs):
     return "".join(out)
 
 
-def minis(board):
+def minis(board, live=False):
     """The tool tiles' small product fragments, from real terminal rows (a line gap, a moved line, a break-even). {} = none."""
-    pick = _rows(board)[0]
+    pick = _rows(board, live=live)[0]
     out = {}
     for rs, gap, moved in pick:
         if gap and "GAP" not in out:
@@ -330,9 +346,9 @@ def minis(board):
     return out
 
 
-def hand_minis(board):
+def hand_minis(board, live=False):
     """The by-hand table's real UI chips: the first terminal row's lines by app, and its chance against break-even as the row's meter."""
-    pick = _rows(board, n=HERO_ROWS)[0]
+    pick = _rows(board, n=HERO_ROWS, live=live)[0]
     if not pick:
         return "", ""
     rs = pick[0][0]
@@ -360,7 +376,8 @@ def _detail(i, lead, opened):
     graded, seen = _ts(sc.get("forecast_at")), _ts(of.get("seen_at"))
     app = esc(of.get("platform_label") or "")
     hid = lambda v: "" if v else " hidden"
-    cells = [f'<div><dt>Grade at this line</dt><dd><b class="gt {_gcls(sc.get("grade"))}" data-k="g">{esc(sc.get("grade") or "–")}</b></dd></div>',
+    gtext = _grade_text(sc.get("grade"), side)
+    cells = [f'<div><dt>Grade at this line</dt><dd><b class="gt {_gcls(sc.get("grade"))}" data-k="g">{esc(gtext)}</b></dd></div>',
              f'<div><dt>Scout&#x27;s chance at exactly <span data-k="line">{line}</span></dt><dd class="big"><b data-k="p">{esc(p)}</b>%</dd></div>']
     if isinstance(proj, (int, float)):
         cells.append(f'<div><dt>Why</dt><dd>Projection <b>{float(proj):.1f}</b> vs line <b data-k="line">{line}</b></dd></div>')
@@ -376,7 +393,7 @@ def _detail(i, lead, opened):
             f'<p class="dt-h"><b data-k="side">{side}</b> <b data-k="line">{line}</b> {esc(mk.get("stat_label"))} · {esc(mk.get("period_label"))}'
             f' <span class="dt-app">on <span data-k="app">{app}</span></span></p>'
             f'<dl class="dt-g">{"".join(cells)}</dl>'
-            f'<p class="dt-rec"><a href="/record#cs2">See the <b data-k="g">{esc(sc.get("grade") or "")}</b> tier on the public record, losses included'
+            f'<p class="dt-rec"{hid(on_record(sc.get("grade")))}><a href="/record#cs2">See the <b data-k="g">{esc(gtext)}</b> tier on the public record, losses included'
             f' <span aria-hidden="true">→</span></a></p>'
             f'<p class="dt-f">{foot}</p>'
             f'</div>')
@@ -396,10 +413,10 @@ def feeds_label(board):
     return " + ".join(out)
 
 
-def terminal(board):
+def terminal(board, live=False):
     """(html rows, meta line, row count, letter-graded markets on the board). Empty board -> ("", "", 0, 0). Rows start closed (tap a
-    player for the read), so the hero card shows its rows next to the headline."""
-    pick, at, total = _rows(board, n=HERO_ROWS)
+    player for the read), so the hero card shows its rows next to the headline. live: see _rows."""
+    pick, at, total = _rows(board, n=HERO_ROWS, live=live)
     if not pick:
         return "", "", 0, 0
     meta = "as of " + _when(at) if at else ""   # the page is cached: the HTML never claims freshness; the browser reads data-at
@@ -427,7 +444,7 @@ def terminal(board):
             f'<div class="bks" role="group" aria-label="Lines by app">{"".join(_offer_cell(r, j == 0) for j, r in enumerate(rs))}</div>'
             f'<div class="ch"><span class="sd">{side}</span><b class="pv">{esc(p)}<i>%</i></b>'
             f'<span class="mt" style="--p:{esc(p)}" aria-hidden="true"><i></i>{bee}</span></div>'
-            f'<div class="gr"><b class="{_gcls(grade)}">{esc(grade) or "–"}</b></div>'
+            f'<div class="gr"><b class="{_gcls(grade)}">{esc(_grade_text(grade, side))}</b></div>'
             f'<div class="rc">{dots}{bes}</div>'
             f'{_detail(i, lead, opened)}'
             f'</li>')
@@ -468,10 +485,10 @@ def kills_chance(line, lam):
     return min(KILLS_CAP, max(1 - KILLS_CAP, raw))
 
 
-def grade_seed(board):
+def grade_seed(board, live=False):
     """The widget's seed: the first row (in the terminal's order, over every graded market on the board) that is a CS2 kills Maps 1-2 line whose chance the formula reproduces within 0.3
     points (the board's own number, not an approximation). None = no widget."""
-    for rs, _g, _m in _rows(board, n=10 ** 6)[0]:
+    for rs, _g, _m in _rows(board, n=10 ** 6, live=live)[0]:
         r = rs[0]
         mk, sc, of = r.get("market") or {}, r.get("scout") or {}, r.get("offer") or {}
         lam, line, ps = sc.get("projection"), of.get("line"), sc.get("p_side")
@@ -603,11 +620,18 @@ def pool_subject(board, fetch):
 
 
 def pace(maps2, line):
-    """(pooled kills per map, line pace, delta) exactly as the page script draws it: summed kills / summed maps, pace = line / 2."""
+    """(pooled kills per map, line pace, delta): summed kills / summed maps, pace = line / 2."""
     k, n = sum(m[1] for m in maps2), sum(m[2] for m in maps2)
     v = k / n
     pc = float(line) / 2
     return v, pc, v - pc
+
+
+def pace_text(maps2, line):
+    """(pooled, delta, delta class) as printed. The page script shows these exact strings for every pair (data-pairs), so a pair
+    reads the same on load and after it is chosen again (a tie such as 1404 / 96 = 14.625 is never rounded two ways)."""
+    v, _pc, d = pace(maps2, line)
+    return f"{v:.2f}", ("+" if d >= 0 else "\u2212") + f"{abs(d):.2f}", "up" if d >= 0 else "dn"
 
 
 def pool_module(board, fetch):
@@ -627,10 +651,12 @@ def pool_module(board, fetch):
         btns = []
         for i, (k, kills, n) in enumerate(maps):
             kpm = kills / n
-            btns.append(f'<li><button type="button" class="map" aria-pressed="{"true" if i < 2 else "false"}" data-k="{kpm:.6f}" data-n="{n}"'
+            btns.append(f'<li><button type="button" class="map" aria-pressed="{"true" if i < 2 else "false"}" data-i="{i}" data-k="{kpm:.6f}" data-n="{n}"'
                         f' style="--mc:{MAP_COLOR.get(k, "#9AA4B8")}"><span class="mn">{esc(hltv_maps.display(k))}</span>'
                         f'<span class="kv"><span>Kills/map</span><b>{kpm:.2f}</b></span><span class="kv"><span>Maps</span><b>{n}</b></span></button></li>')
         v, pc, d = pace(maps[:2], line)
+        vt, dt, dcls = pace_text(maps[:2], line)
+        pairs = {f"{i}-{j}": list(pace_text([maps[i], maps[j]], line)) for i in range(len(maps)) for j in range(i + 1, len(maps))}
         names = sorted(hltv_maps.display(k) for k in pool)
         who = str(pl.get("name"))
         cap = (f"{who}'s HLTV numbers for the last 12 months (newest map {newest}, read {_when(read)}) on the "
@@ -638,8 +664,8 @@ def pool_module(board, fetch):
         return {
             "POOL_LINE": esc(_num(line)), "POOL_WHO": esc(who), "POOL_APP": esc(app), "POOL_MAPS": "".join(btns),
             "POOL_NAMES": esc(f"{hltv_maps.display(maps[0][0])} + {hltv_maps.display(maps[1][0])}"),
-            "POOL_V": f"{v:.2f}", "POOL_PACE": f"{pc:.2f}", "POOL_D": ("+" if d >= 0 else "\u2212") + f"{abs(d):.2f}",
-            "POOL_DCLS": "up" if d >= 0 else "dn", "POOL_CAP": esc(cap),
+            "POOL_V": vt, "POOL_PACE": f"{pc:.2f}", "POOL_D": dt, "POOL_DCLS": dcls, "POOL_CAP": esc(cap),
+            "POOL_PAIRS": esc(json.dumps(pairs, separators=(",", ":"), ensure_ascii=False)),
         }
     except Exception:
         return {}
@@ -809,13 +835,15 @@ def _widget(seed, saved_at):
     lo, hi = max(0.5, math.floor(lam * 0.5) + 0.5), math.floor(lam * 1.5) + 0.5
     cuts = [[c, g] for c, g in CUTS if c <= KILLS_CAP]      # kills are capped at 78% either side: no A+ on kills (grader p_cap_kills)
     g = sc.get("grade") or ""
-    data = {"proj": round(lam, 2), "line": line, "spread": KILLS_SPREAD, "cap": KILLS_CAP, "cuts": cuts}
+    # at the real line the widget prints the board's own chance, side and letter (the formula is used for other lines only)
+    data = {"proj": round(lam, 2), "line": line, "spread": KILLS_SPREAD, "cap": KILLS_CAP, "cuts": cuts,
+            "at": {"p": _pct(sc.get("p_side")), "g": g or "Lean", "side": "Over" if sc.get("side") == "over" else "Under"}}
     return {
         "GW_DATA": esc(json.dumps(data, separators=(",", ":"))),
         "GW_WHO": esc(pl.get("name")), "GW_PROJ": f"{lam:.1f}", "GW_LINE": esc(_num(line)), "GW_MIN": _num(lo), "GW_MAX": _num(hi),
         "GW_SIDE": "Over" if sc.get("side") == "over" else "Under", "GW_P": esc(_pct(sc.get("p_side"))), "GW_G": esc(g),
         "GW_GCLS": _gcls(g), "GW_ASOF": esc(saved_at),
-        "GW_LADDER": "".join(f'<li data-g="{x}"{" class=on" if x == g else ""}>{x}</li>' for x in ["Lean"] + [c[1] for c in reversed(cuts)]),
+        "GW_LADDER": "".join(f'<li data-g="{x}"{" class=on" if x == (g or "Lean") else ""}>{x}</li>' for x in ["Lean"] + [c[1] for c in reversed(cuts)]),
     }
 
 
@@ -831,7 +859,7 @@ def build(srv, join_url, fetch=True):
     inp = _inputs(srv, fetch)
     sp = sports_on()
     board, saved = inp["board"], False
-    rows, meta, nrows, ntotal = terminal(board) if board else ("", "", 0, 0)
+    rows, meta, nrows, ntotal = terminal(board, live=True) if board else ("", "", 0, 0)
     if not nrows:                                     # nothing to show live: the saved board, dated, through the same code
         board = fallback_board()
         rows, meta, nrows, ntotal = terminal(board) if board else ("", "", 0, 0)
@@ -839,13 +867,13 @@ def build(srv, join_url, fetch=True):
     cells, total, asof, rec_names = ledger(inp["record"], sp)
     head, cards, nrv, rv_note = wall(inp["reviews"])
     nfeat = len(featured(inp["reviews"])) if nrv else 0
-    seed = grade_seed(board) if nrows else None
+    seed = grade_seed(board, live=not saved) if nrows else None
     gw = _widget(seed, _when(_ts((board or {}).get("board_at"))))
     pm = pool_module(board, fetch) if (nrows and not saved) else {}     # live board only: the saved board's line is not current
     more = ntotal - nrows if (nrows and not saved) else 0
-    mi = minis(board) if nrows else {}
+    mi = minis(board, live=not saved) if nrows else {}
     slip, slip_cap = slip_card()
-    hp, hb = hand_minis(board) if nrows else ("", "")
+    hp, hb = hand_minis(board, live=not saved) if nrows else ("", "")
     tools = (os.environ.get("SCOUT_MARKET_TOOLS") == "1", os.environ.get("SCOUT_PICKEM_EV", "").strip() == "1")
     base = public_base()
     unrec = [LONG[s].lower() for s in sp if s not in SPORTS and s in LONG]

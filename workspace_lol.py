@@ -134,9 +134,11 @@ def read_series(con, pids):
     return out
 
 
-def series_values(series, stat, scope):
+def series_values(series, stat, scope, best_of=None):
     """Newest-first values of this stat on these maps: every game in scope that was played, the way a line settles. A best-of-one has
-    no Maps 1-2, and Maps 1-3 needs a series that could reach three games."""
+    no Maps 1-2, and Maps 1-3 needs a series that could reach three games. best_of = the LINE's series length: on a best-of-5 line games
+    1-3 are always played, so only past series where all three were played count (a best-of-3 that ended 2-0 is a 2-game total and is
+    left out); on a best-of-3 line (or unknown) a 2-0 best-of-3 still counts on two games, the way that line settles."""
     want = PERIOD[scope][2] if scope in PERIOD else None
     if want is None:
         return []
@@ -149,12 +151,25 @@ def series_values(series, stat, scope):
             continue
         if len(want) == 3 and (len(games) < 2 or (s.get("best_of") or 3) < 3):
             continue
+        if len(want) == 3 and isinstance(best_of, int) and best_of >= 5 and len(games) < 3:
+            continue
         vals = [_value(stat, games[n]) for n in sorted(games)]
         if any(v is None for v in vals):
             continue
         total = sum(vals)
         out.append({"date": s["date"], "opponent": s.get("opponent") or "", "value": round(total, 2) if stat == "fantasy_points" else total, "values": vals, "maps": [f"Game {n}" for n in sorted(games)]})
     return out
+
+
+GRADE_ORDER = ("A+", "A", "A-", "B+", "B", "B-", "Lean Over", "Lean Under")     # the public record's LoL tier order
+
+
+def _bo(v):
+    """A line's series length as an int (5 / 3 / 1), or None when unknown."""
+    try:
+        return int(v) if v is not None and not isinstance(v, bool) else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _tally(values, line, n):
@@ -275,7 +290,7 @@ def _build(srv):
         if r is None or x.get("line") is None:
             continue
         pid = canon.get(r["link"].get("pid"), r["link"].get("pid"))
-        values = series_values(series.get(pid), x.get("stat"), x.get("scope"))
+        values = series_values(series.get(pid), x.get("stat"), x.get("scope"), _bo(x.get("best_of")))
         rec = board_parity.attach(record_of(x, r, values))     # 4.16 parity numbers, only while a SCOUT_PARITY_* row flag is on
         records.append(rec)
         ix = {"rec": json.dumps(rec, default=str, separators=(",", ":")).encode(), "market_key": r["market_key"], "sid": r["link"].get("sid"), "pid": pid, "raw_pid": r["link"].get("pid"), "fid": r["fid"], "fc_line": r["fc_line"],
@@ -569,7 +584,7 @@ def line_doc(srv, book, rid):
     if x is None:
         return 404, {"error": "not found"}
     rec = json.loads(x["rec"])
-    values = series_values(_SNAP["series"].get(x["pid"]), x["stat"], x["scope"])
+    values = series_values(_SNAP["series"].get(x["pid"]), x["stat"], x["scope"], _bo((rec.get("event") or {}).get("best_of")))
     books = []
     for bk, i in _SNAP["props"].get((x["eid"], x["pkey"], x["stat"], x["period"]), []):
         o = _SNAP["index"].get((bk, i))
@@ -624,7 +639,9 @@ def results(srv):
     st = cohort.get("settled_by_status") or {}
     ci = ((doc.get("series_grouped_95ci") or {}).get("offered_side_only") or {}).get("side_hit") or {}
     stat = [_group(k[5:].replace("_", " ").title(), v) for k, v in sorted(metrics.items()) if k.startswith("stat ")]
-    grade = [_group(k[6:], v) for k, v in sorted(metrics.items()) if k.startswith("grade ")]
+    # tiers in letter order (A+, A, A-, B+, B, B-, then Lean Over / Lean Under), never as text ("A" before "A+"); unknown names last
+    grade = [_group(k[6:], v) for k, v in sorted(((k, v) for k, v in metrics.items() if k.startswith("grade ")),
+                                                 key=lambda kv: (GRADE_ORDER.index(kv[0][6:]) if kv[0][6:] in GRADE_ORDER else len(GRADE_ORDER), kv[0]))]
     role = [_group(k[5:], v) for k, v in sorted(metrics.items()) if k.startswith("role ") and k[5:] not in ("None", "")]
     return {"sport": "lol", "label": "LoL forecast record", "as_of": doc.get("at"), 'calendar':doc.get('calendar'),
             "population": "Saved pre-match LoL forecasts on lines that offered both sides, each scored on official game stats. Over only and Under only lines are not graded and are not counted. Letters carry 0 units.",

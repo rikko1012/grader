@@ -127,6 +127,22 @@ def _log_fail(step, resp):
     sys.stderr.write("  whop sign-in " + msg + "\n")
 
 
+SIGNIN_ERROR_CODES = ("expired", "whop", "no_account", "failed")
+
+
+def error_code(msg):
+    """The fixed code a failed sign-in sends back in /?signin_error=<code> (finish_login's message -> code). The pages show their own
+    fixed text for a code, never text from the URL, so a crafted link cannot put words on the site. The message itself (status codes,
+    Whop's reason) stays in the server log only (_log_fail and the line below)."""
+    m = str(msg or "")
+    code = ("expired" if m.startswith("Sign-in expired") else "no_account" if m.startswith("Whop didn't return")
+            else "whop" if m.startswith("Whop sign-in failed") else "failed")
+    if code != "expired":
+        import sys
+        sys.stderr.write(f"  whop sign-in failed ({code}): {m[:300]}\n")
+    return code
+
+
 def start_login():
     """-> (redirect URL, value for the short-lived PKCE cookie)."""
     verifier = secrets.token_urlsafe(48)[:64]
