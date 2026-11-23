@@ -361,7 +361,9 @@ def default_jobs():
         # is re-read within ~3 h and a finished game reaches the player page the same night
         "history": dict(argv=_py("-m", "sports.snapshots", "history", *lg, "--max-players", "60"), every_s=900,
                         timeout_s=900, flag="SPORTS_INGEST", cap_mb=200, cls=HEAVY, prio=6,
-                        locks=("canonical", "cache")),                         # 107 MB @ 40 players
+                        locks=("canonical", "cache")),
+        # live 2026-11-22/23: peak ~308 MB at 60 players (the service sets a higher cap than 200 by env); five runs in a row hit
+        # the 900 s timeout, so the job now stops starting players at a 720 s budget (snapshots.HISTORY_BUDGET_S) and exits 0
         # locks (review 2026-11-08): lockless, both waited for an empty heavy pair that backfill never leaves (a starved
         # archive lets the hot records table grow). They write canonical.db (archive moves cold offers in one
         # transaction, verify stamps verified_at): "canonical" keeps them off every store writer (collectors, settle,
