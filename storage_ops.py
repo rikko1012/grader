@@ -416,7 +416,20 @@ def reconcile():
         raise Refused(409, "live file missing")
     rebinds = [e for e in entries if e.get("kind") == "rebind" and e["seq"] > last["seq"]]
     marker = rebinds[-1]["new_inode"] if rebinds else last.get("new_inode")
-    if ino == marker:
+    tb, want = int(last.get("tail_bytes") or 0), last.get("tail_sha256")
+
+    def _starts_with_kept_tail():
+        if not (want and tb):
+            return False
+        try:
+            with open(live_path(), "rb") as f:
+                return hash_prefix(f, tb)[0] == want
+        except (OSError, Refused):
+            return False
+
+    # an inode number alone is not identity: Linux reuses a freed inode number for the next file created, so a live file
+    # replaced outside a cut can carry the marker inode. Ours always still starts with the last cut's kept tail.
+    if ino == marker and (not (want and tb) or _starts_with_kept_tail()):
         return applied
     if ino == last.get("old_inode") and not rebinds and _prefix_is(last.get("archived_bytes"), last.get("sha256")):
         _append_manifest({"seq": max(e["seq"] for e in entries) + 1, "kind": "void", "voids": last["seq"],
@@ -425,18 +438,11 @@ def reconcile():
         return applied_entries()
     # the inode changed outside a cut (disk migration / restore / resize copy): the file is still ours when it starts with
     # exactly the tail the last cut kept - then the new inode is recorded ("rebind") and nothing else changes
-    tb, want = int(last.get("tail_bytes") or 0), last.get("tail_sha256")
-    if want and tb:
-        try:
-            with open(live_path(), "rb") as f:
-                got = hash_prefix(f, tb)[0]
-        except (OSError, Refused):
-            got = None
-        if got == want:
-            _append_manifest({"seq": max(e["seq"] for e in entries) + 1, "kind": "rebind", "after": last["seq"],
-                              "old_marker": marker, "new_inode": ino, "at": _now_iso(),
-                              "reason": "live file starts with the last cut's kept tail (sha256 checked); inode changed outside a cut"})
-            return applied
+    if ino != marker and _starts_with_kept_tail():
+        _append_manifest({"seq": max(e["seq"] for e in entries) + 1, "kind": "rebind", "after": last["seq"],
+                          "old_marker": marker, "new_inode": ino, "at": _now_iso(),
+                          "reason": "live file starts with the last cut's kept tail (sha256 checked); inode changed outside a cut"})
+        return applied
     raise Refused(409, "live file is neither the last cut's old nor new file", inode=ino, last_seq=last["seq"])
 
 

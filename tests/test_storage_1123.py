@@ -269,6 +269,33 @@ def test_a_replaced_live_file_is_refused(data):
     assert st == 409 and "neither" in out["error"] and p.read_bytes() == blob2
 
 
+
+def test_a_replaced_live_file_with_the_marker_inode_is_refused(data, monkeypatch):
+    """Linux reuses a freed inode number: a replacement file can carry the last cut's new_inode. Forced here so the
+    test also fails on Windows without the content check."""
+    blob = lines(400)
+    p = write_live(data, blob)
+    n = blob.index(b"\n", len(blob) // 2) + 1
+    assert trim(p, n, dry_run=False)[0] == 200
+    marker = so.applied_entries()[-1]["new_inode"]
+    p.unlink()
+    p.write_bytes(lines(400))
+    blob2 = p.read_bytes()
+    real_stat = os.stat
+
+    class _St:
+        def __init__(self, st):
+            self._st = st
+
+        def __getattr__(self, k):
+            return marker if k == "st_ino" else getattr(self._st, k)
+
+    monkeypatch.setattr(so.os, "stat", lambda q, *a, **k: _St(real_stat(q, *a, **k)) if str(q) == str(p) else real_stat(q, *a, **k))
+    with pytest.raises(so.Refused) as e:
+        so.reconcile()
+    assert e.value.code == 409 and "neither" in e.value.body["error"]
+    assert p.read_bytes() == blob2
+
 # ---------------------------------------------------------------- rot-1
 
 def test_rotation_waits_for_the_manual_trim_then_moves_bytes_into_verified_gzip(data, monkeypatch):
