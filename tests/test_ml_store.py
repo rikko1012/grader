@@ -271,7 +271,7 @@ def test_short_restart_gap_is_not_recorded(store):
     gaps = con.execute("SELECT last_saved_before, first_saved_after, reason FROM ml_gaps").fetchall()
     con.close()
     assert gaps == [(iso(NOW + timedelta(minutes=12)), iso(NOW + timedelta(minutes=50)),
-                     "no quote saved (process down, source refresh failing or no listings)")]
+                     moneyline.GAP_UNKNOWN)]
 
 
 def test_retention_window_leaves_room_under_the_cap(monkeypatch):
