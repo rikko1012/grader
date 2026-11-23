@@ -60,7 +60,10 @@ def test_v3_shell_on_every_page_group(browser, env, monkeypatch, group, size, th
         assert p.evaluate("document.documentElement.dataset.theme") == want
         bg = p.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sc-bg').trim()")
         assert bg.upper() == ("#F6F7F9" if want == "light" else "#080B13")
-        assert p.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sc-font')").strip().startswith("Outfit")
+        if group == "landing":                                 # the Prop Grader landing (owner brief Nov 23): Geist, its own tokens
+            assert p.evaluate("getComputedStyle(document.body).fontFamily").startswith('Geist')
+        else:
+            assert p.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sc-font')").strip().startswith("Outfit")
         if member:
             p.wait_for_selector(".sc-appbar.sc-v3-bar", state="visible")
             assert p.locator(".sc-v3-bar").count() == 1 and p.locator(".sc-v3-tabs").count() == 1

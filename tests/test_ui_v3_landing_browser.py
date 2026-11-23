@@ -1,4 +1,5 @@
-"""v3 group D (web/UI_V3.md): the signed-out landing page in v3 (landing_v3.py + web/v3/landing.html, direction C "line terminal"),
+"""v3 group D (web/UI_V3.md): the signed-out landing page in v3 (landing_v3.py + web/v3/landing.html, the Prop Grader page built to the
+owner's Nov 23 brief: view-only product pictures, one call to action per screen),
 and the member-side sign-in gate / account / alerts surfaces. Real server.Handler, SCOUT_UI_V3=1, fixture data, a real-shaped board
 snapshot and real-shaped reviews only. 390x844 and 1280x900, dark and light. V3_SHOTS=<folder> keeps screenshots.
 
@@ -19,7 +20,7 @@ import whop_auth
 import workspace_api
 from tests import test_landing_browser as L
 from tests.test_landing_browser import seed, JOIN  # noqa: F401
-from tests.test_landing_v3 import board, hltv_off, map_rows, map_totals, MOVER_MAPS
+from tests.test_landing_v3 import board, hltv_off
 from tests.test_upgrade_browser import env, context, no_h_scroll  # noqa: F401
 
 PHONE, DESK = {"width": 390, "height": 844}, {"width": 1280, "height": 900}
@@ -123,80 +124,179 @@ def open_page(browser, base, size, theme, motion="reduce"):
     return ctx, page
 
 
+
+
 @pytest.mark.parametrize("theme", ["dark", "light"])
 @pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
-def test_landing_v3_first_screen_targets_and_width(browser, lbase, size, theme):
+def test_landing_v3_first_screen_passes_the_five_second_test(browser, lbase, size, theme):
+    """What it is (H1), which apps and sports, a real graded row with a letter, line and model estimate, one call to action and the
+    price: all in the first screen. Pinned dark, no sideways scroll, no small targets, no script errors."""
     warm(lbase, 12)
     ctx, page = open_page(browser, lbase, size, theme)
     try:
-        assert page.evaluate("document.documentElement.dataset.theme") == "dark"    # pinned dark: a stored light theme does not apply
-        for a in ("Try Prop Grader free for 1 day", "Sign in with Whop"):   # both in the first phone screen (standing rule)
-            loc = page.locator(".hero a", has_text=a).first
-            assert loc.is_visible() and loc.bounding_box()["y"] + loc.bounding_box()["height"] <= size["height"], a
-        assert page.locator(".hero a.btn.primary").get_attribute("href") == JOIN
-        btn, terms = page.locator(".hero a.btn.primary").bounding_box(), page.locator(".hero .terms").bounding_box()
-        assert terms["y"] >= btn["y"] + btn["height"] and terms["y"] - (btn["y"] + btn["height"]) < 24     # the price right under the button
-        assert page.locator(".hero .terms").text_content() == "Then $24.99/month. Cancel anytime from your Whop account."
-        proof = page.locator("#proof").bounding_box()                        # the proof strip: first screen too (owner blueprint)
-        assert proof["y"] + proof["height"] <= size["height"], proof
-        assert page.locator("#proof li").count() >= 3 and page.locator("#proof .pf-post").is_visible()   # no record store here: 3 tiles
-        if size is DESK:                                                     # desktop: the live sample's first row beside the headline
-            first = page.locator(".term .tr").first
-            assert first.locator(".pv").bounding_box()["y"] + first.locator(".pv").bounding_box()["height"] <= size["height"]
-            assert first.locator(".gr b").bounding_box()["y"] + first.locator(".gr b").bounding_box()["height"] <= size["height"]
-        else:                                                                # phone: 3 sample rows, each with its break-even
-            rows = page.locator(".term .tr")
-            vis = [i for i in range(rows.count()) if rows.nth(i).is_visible()]
-            assert len(vis) == 3 and all(rows.nth(i).locator(".rc small").is_visible() for i in vis)
-        for sel in (".hero", "body"):
-            assert page.evaluate(f"getComputedStyle(document.querySelector('{sel}')).backgroundColor") in ("rgb(8, 11, 19)", "rgb(12, 18, 34)"), sel
-        small = page.evaluate("""() => [...document.querySelectorAll('a,button,summary,input')].filter(e => e.offsetParent && !e.closest('.dock')
-            && e.getBoundingClientRect().height < 44).map(e => e.textContent.trim().slice(0, 30))""")
+        assert page.evaluate("document.documentElement.dataset.theme") == "dark"
+        h = size["height"]
+
+        def inside(sel):
+            b = page.locator(sel).first.bounding_box()
+            return b is not None and b["y"] >= 0 and b["y"] + b["height"] <= h
+
+        for sel in ("h1", ".hero-for", ".hero .lead", "#hero-cta", ".hero .terms"):    # critic round 3: the sports line at every width
+            assert inside(sel), sel
+        assert page.locator("#hero-cta").get_attribute("href") == JOIN
+        assert page.locator(".hero .terms").text_content() == "Then $24.99/month. Cancel anytime."
+        btn, terms = page.locator("#hero-cta").bounding_box(), page.locator(".hero .terms").bounding_box()
+        assert 0 <= terms["y"] - (btn["y"] + btn["height"]) < 24
+        if size is DESK:
+            assert inside(".br:not(.br-h)") and inside(".br:not(.br-h) .gb")          # the first graded row, letter and all
+            assert page.locator(".phone").is_visible() and page.locator(".side").is_visible()
+        else:
+            # brief 3 + rulebook 5.6 (critic round 5): phones show the phone frame only, its Why list complete, nothing cut
+            assert not page.locator(".browser").is_visible() and page.locator(".phone").is_visible()
+            assert page.locator(".ph-why li").count() == page.evaluate("[...document.querySelectorAll('.ph-why li')].filter(e => e.offsetParent).length")
+            assert page.evaluate("[...document.querySelectorAll('.ph-why b, .ph-who, .ph-prop')].every(e => e.scrollWidth <= e.clientWidth + 1)")
+        assert page.locator(".hero a.btn").count() == 1                                # one call to action in the hero
+        assert page.locator(".hero-proof").count() == 0 and page.locator(".hero a").count() == 1   # brief 3.2: nothing else in the hero
+        small = page.evaluate("""() => [...document.querySelectorAll('a,button')].filter(e => e.offsetParent && !e.closest('.dock')
+            && !e.classList.contains('btn-nav') && !e.classList.contains('skip') && e.getBoundingClientRect().height < 44).map(e => e.textContent.trim().slice(0, 30))""")
         assert not small, small
+        nav = page.locator(".btn-nav").bounding_box()
+        assert nav["height"] >= 36
         no_h_scroll(page)
-        assert page.locator("#reviews .rv").count() >= 1 and page.locator("#rvq").count() == 0
-        assert page.locator(".brand").first.text_content().strip() == "PropGrader" and page.title().startswith("Prop Grader")
-        assert page.locator("#term-at").text_content().startswith("checked ")    # a 3-minute-old board: the browser says so
-        assert page.evaluate("document.documentElement.classList.contains('live')")
-        assert page.locator("#term-st").text_content() == "Live sample · CS2 board"   # "Live" only beside a fresh board
-        rects = page.evaluate("[...document.querySelectorAll('.nw')].filter(e => e.offsetParent).map(e => e.getClientRects().length)")
-        assert rects and all(n == 1 for n in rects), rects                               # 1-800-GAMBLER never splits across lines
-        snap(page, f"landing-c-{size['width']}-{theme}", full=True)
+        assert page.title().startswith("Prop Grader")
+        snap(page, f"landing-brief-{size['width']}-{theme}", full=True)
         assert not page.errors, page.errors
     finally:
         ctx.close()
 
 
-def test_landing_v3_book_tap_shows_that_lines_chance(browser, lbase):
-    warm(lbase, 0)
+def test_landing_v3_product_pictures_are_view_only(browser, lbase):
+    warm(lbase, 12)
     ctx, page = open_page(browser, lbase, DESK, "dark")
     try:
-        row = page.locator(".tr", has=page.locator(".who b", has_text="Gap"))
-        assert row.locator(".pv").text_content().startswith("58.3")
-        row.locator("button.bk", has_text="13.5").click()
-        assert row.locator(".pv").text_content().startswith("52.2")
-        assert row.locator("button.bk", has_text="13.5").get_attribute("aria-pressed") == "true"
-        assert row.locator(".gr b").text_content() == "Lean Over"            # sweep L3: under the B- cut it reads Lean, never a dash
-        row.locator("button.bk", has_text="12.5").click()
-        assert row.locator(".pv").text_content().startswith("58.3") and row.locator(".gr b").text_content() == "B-"
+        bad = page.evaluate("""() => { const foc = 'a[href],button,input,select,textarea,[tabindex]';
+            return [...document.querySelectorAll('[aria-hidden="true"],[role="img"]')].flatMap(n => [...n.querySelectorAll(foc)]).length
+              + [...document.querySelectorAll('.browser *,.phone *,.panel *,.ss-board *,.ss-pic *')].filter(e => getComputedStyle(e).cursor === 'pointer').length }""")
+        assert bad == 0
+        before = page.content()
+        page.locator(".br:not(.br-h)").first.click()
+        page.locator(".phone .ph-why").click()                                         # the phone picture is inert too
+        assert page.content() == before                                                # nothing opens, toggles or reveals
+        # critic round 7: at >=1024 the frame is as tall as its rows and the phone starts at its top (a full 6-row board holds the
+        # phone; a short one lets it hang below on purpose, never an empty well in the frame); 3 Why rows, no note
+        for w in (1440, 1024):
+            page.set_viewport_size({"width": w, "height": 900})
+            page.wait_for_timeout(100)
+            geo = page.evaluate("""() => { const b = document.querySelector('.browser').getBoundingClientRect(),
+                p = document.querySelector('.phone').getBoundingClientRect(), c = document.querySelector('.hero-cap').getBoundingClientRect();
+                const rows = [...document.querySelectorAll('.br:not(.br-h)')], last = rows.at(-1).getBoundingClientRect();
+                const foot = document.querySelector('.bfoot'), end = foot ? foot.getBoundingClientRect().bottom : last.bottom;
+                return {over: p.bottom - b.bottom, top: p.top - b.top, well: b.bottom - end, capGap: c.top - Math.max(p.bottom, b.bottom),
+                        why: [...document.querySelectorAll('.ph-why li')].filter(e => e.offsetParent).length,
+                        note: !!document.querySelector('.ph-add').offsetParent} }""")
+            assert abs(geo["top"]) < 1 and geo["well"] <= 26 and geo["capGap"] >= 23.5 and geo["why"] <= 3 and not geo["note"], (w, geo)
+        tabbed = []
+        for _ in range(40):
+            page.keyboard.press("Tab")
+            tabbed.append(page.evaluate("document.activeElement.closest('.browser,.phone,.panel,.ss-board,.ss-pic') ? 'frame' : document.activeElement.tagName"))
+        assert "frame" not in tabbed
+    finally:
+        ctx.close()
+
+
+def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(browser, lbase):
+    warm(lbase, 12)
+    ctx, page = open_page(browser, lbase, PHONE, "dark", motion="reduce")
+    try:
+        assert not page.evaluate("document.documentElement.classList.contains('motion')")
+        assert page.locator("#ss-st").text_content() == "Slip ready"
+        assert page.locator("#ss .ss-go").is_visible() and page.locator("#ss .ss-go").get_attribute("href") == JOIN   # brief 6b: the slip CTA
+        assert page.locator(".ss-board").is_visible()                                  # phones: a 2x2 strip of mini cards above the slip
+        # end frame: every source card stays in its box under a 45% veil with an "In slip" mark (critic round 7: moved, not missing)
+        assert page.evaluate("[...document.querySelectorAll('.sbx')].every(e => getComputedStyle(e, '::after').opacity === '0.45' && getComputedStyle(e.firstElementChild).opacity === '1' && getComputedStyle(e.querySelector('.insl')).opacity === '1')")
+        assert page.locator(".sad, .ss-done").count() == 0
+        assert page.evaluate("[...document.querySelectorAll('.rv')].every(e => getComputedStyle(e).opacity === '1')")
+        assert page.evaluate("[...document.querySelectorAll('.slot .sc')].every(e => getComputedStyle(e).opacity === '1')")
+    finally:
+        ctx.close()
+    ctx, page = open_page(browser, lbase, DESK, "dark", motion="no-preference")
+    try:
+        assert page.evaluate("document.documentElement.classList.contains('motion')")
+        assert page.locator("#ss-st").text_content() == "Slip ready"                  # off screen: always the final frame
+        assert page.locator("#ss .slot.on").count() == 0 and page.locator("#ss .slot .sc").first.evaluate("e => getComputedStyle(e).opacity") == "1"
+        page.locator("#ss").scroll_into_view_if_needed()
+        page.wait_for_function("document.getElementById('ss-st').textContent.startsWith('Building')", timeout=4000)
+        assert page.evaluate("getComputedStyle(document.querySelector('.ss-go')).visibility") == "hidden"   # fades in only at Slip ready
+        page.wait_for_function("document.getElementById('ss').classList.contains('ready')", timeout=8000)
+        page.wait_for_timeout(600)
+        assert page.locator("#ss .slot.on").count() == 4 and page.locator("#ss a").count() == 1 and not page.locator("#ss .ss-go").is_visible()
+        assert page.locator(".slip-copy .ss-cta").is_visible()                    # >=768 the one Slip pill is in the text column (round 7)
+        page.wait_for_timeout(3000)
+        assert page.locator("#ss-st").text_content() == "Slip ready"                  # holds: no loop
+        page.evaluate("window.scrollTo(0, 0)")
+        page.wait_for_timeout(300)
+        assert page.locator("#ss-st").text_content() == "Slip ready"                  # left the screen: the final frame, re-armed
+        page.locator("#ss").scroll_into_view_if_needed()
+        page.wait_for_function("document.getElementById('ss-st').textContent.startsWith('Building')", timeout=8000)  # replays after leaving
+        page.wait_for_function("document.getElementById('ss').classList.contains('ready')", timeout=8000)
+        assert page.evaluate("[...document.querySelectorAll('.ghost')].length") == 0
+        assert not page.errors, page.errors
+    finally:
+        ctx.close()
+    ctx, page = open_page(browser, lbase, PHONE, "dark", motion="no-preference")
+    try:
+        page.evaluate("document.querySelector('#ss').scrollIntoView({block:'center'})")
+        page.wait_for_function("document.getElementById('ss-st').textContent === 'Building \u00b7 2 of 4'", timeout=4000)
+        page.wait_for_function("document.getElementById('ss').classList.contains('ready')", timeout=6000)   # mini cards fly down
+        assert page.locator("#ss .slot.on").count() == 4 and page.evaluate("[...document.querySelectorAll('.ghost')].length") == 0
+        assert page.locator("#ss .sbx.gone").count() == 4                            # each flown card stays, dimmed (brief 6b)
+        page.wait_for_timeout(600)
+        assert page.evaluate("[...document.querySelectorAll('.sbx')].every(e => getComputedStyle(e, '::after').opacity === '0.45')")
+        assert page.evaluate("getComputedStyle(document.querySelector('.ss-go')).opacity") == "1"
         assert not page.errors, page.errors
     finally:
         ctx.close()
 
 
-def test_landing_v3_motion_plays_once_and_reduced_motion_shows_everything(browser, lbase):
+def test_landing_v3_inside_text_shows_with_motion_and_no_map_panel(browser, lbase):
+    """No HLTV in these tests: row B has no panel to reveal, so its text must not wait for one."""
     warm(lbase, 12)
-    for motion, expect in (("reduce", False), ("no-preference", True)):
-        ctx, page = open_page(browser, lbase, PHONE, "dark", motion=motion)
+    for size in (DESK, PHONE):
+        ctx, page = open_page(browser, lbase, size, "dark", motion="no-preference")
         try:
-            assert page.evaluate("document.documentElement.classList.contains('motion')") is expect
-            if not expect:                                                   # nothing hidden waiting for an animation
-                assert page.evaluate("getComputedStyle(document.querySelector('.tools .tile')).opacity") == "1"
-            page.locator("#faq").scroll_into_view_if_needed()
-            page.wait_for_timeout(900)
-            assert page.evaluate("getComputedStyle(document.querySelector('.qs')).opacity") == "1"
+            assert page.locator(".kbars").count() == 0
+            for sel in (".icol.solo .itxt", ".icol:not(.solo) .itxt"):
+                page.locator(sel).scroll_into_view_if_needed()
+                page.wait_for_timeout(900)
+                assert page.evaluate(f"getComputedStyle(document.querySelector('{sel}')).opacity") == "1", sel
+            box = page.locator(".icol.solo .itxt").bounding_box()
+            assert box["x"] < size["width"] / 2                                      # the text-only column starts on the left
         finally:
             ctx.close()
+
+
+def test_landing_v3_faq_is_an_accessible_accordion(browser, lbase):
+    warm(lbase, 12)
+    ctx, page = open_page(browser, lbase, DESK, "dark", motion="no-preference")
+    try:
+        qs = page.locator("#acc button")
+        assert qs.count() == 5 and qs.nth(0).get_attribute("aria-expanded") == "true" and page.locator("#a1").is_visible()
+        assert not page.locator("#a2").is_visible()
+        qs.nth(1).click()
+        page.wait_for_timeout(400)
+        assert qs.nth(1).get_attribute("aria-expanded") == "true" and page.locator("#a2").is_visible()
+        assert qs.nth(0).get_attribute("aria-expanded") == "false" and not page.locator("#a1").is_visible()
+        qs.nth(1).focus()
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(400)
+        assert all(qs.nth(i).get_attribute("aria-expanded") == "false" for i in range(5))     # all may be closed
+        page.keyboard.press("Space")
+        page.wait_for_timeout(400)
+        assert qs.nth(1).get_attribute("aria-expanded") == "true"
+        assert page.locator("#a3").get_attribute("hidden") == "until-found"
+        assert not page.errors, page.errors
+    finally:
+        ctx.close()
 
 
 def test_landing_v3_sign_in_error_is_text(browser, lbase):
@@ -204,11 +304,50 @@ def test_landing_v3_sign_in_error_is_text(browser, lbase):
     ctx = browser.new_context(viewport=PHONE)
     page = ctx.new_page()
     try:
-        page.goto(lbase + "/?signin_error=%3Cb%3ENope%3C%2Fb%3E")         # sweep L8: URL text is never shown, only the page's own words
+        page.goto(lbase + "/?signin_error=%3Cb%3ENope%3C%2Fb%3E")
         err = page.locator("#signin-error")
-        assert err.is_visible() and err.text_content() == "Sign-in did not complete - please try again" and err.locator("b").count() == 0
+        assert err.is_visible() and err.text_content() == "Sign-in did not complete. Please try again." and err.locator("b").count() == 0
         page.goto(lbase + "/?signin_error=expired")
-        assert err.is_visible() and err.text_content() == "Sign-in expired - please try again"
+        assert err.is_visible() and err.text_content() == "Sign-in expired. Please try again."
+    finally:
+        ctx.close()
+
+
+def test_landing_v3_phone_bar_never_covers_content(browser, lbase):
+    """The phone bar shows once the hero button has left the screen, hides over the Slip button, the pricing card and the final call
+    to action, and the page keeps static room for it at the bottom."""
+    warm(lbase, 12)
+    ctx, page = open_page(browser, lbase, PHONE, "dark")
+    try:
+        dock = page.locator("#dock")
+        shown = lambda: dock.evaluate("d => d.classList.contains('show')")    # noqa: E731
+        assert not shown() and not dock.is_visible()                              # hidden = visibility:hidden, so never focusable
+        page.locator("#how").scroll_into_view_if_needed()
+        page.wait_for_function("document.getElementById('dock').classList.contains('show')")
+        a = dock.locator("a")
+        assert a.text_content() == "Try free for 1 day" and a.get_attribute("href") == JOIN and a.get_attribute("tabindex") is None
+        assert dock.locator(".dk-t").text_content() == "then $24.99/mo" and a.bounding_box()["height"] >= 44   # brief 3: the bar's words
+        assert page.evaluate("getComputedStyle(document.body).paddingBottom") == "76px" and dock.bounding_box()["height"] == 76   # rule 5.11
+        a.focus()
+        assert page.evaluate("document.activeElement === document.querySelector('#dock a')")   # keyboard / switch users reach it
+        page.wait_for_timeout(300)
+        assert not page.locator(".btn-nav").is_visible()                              # one Try on screen: the header pill steps aside
+        si = page.locator(".nav-cta .tl").bounding_box()                              # and Sign in sits flush right (no hole)
+        assert abs(si["x"] + si["width"] - (PHONE["width"] - 20)) <= 1, si
+        for sel in (".ss-go", "#plan", "#final"):                         # phones: the slip panel CTA is the Slip Try (round 5)
+            page.locator(sel).scroll_into_view_if_needed()
+            page.evaluate(f"document.querySelector('{sel}').scrollIntoView({{block:'center'}})")
+            page.wait_for_timeout(400)
+            assert not shown(), sel
+        page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+        page.wait_for_timeout(400)
+        page.evaluate("document.getElementById('dock').classList.add('show')")   # forced shown at the very bottom: covers nothing
+        page.wait_for_timeout(500)
+        top = dock.bounding_box()["y"]
+        for sel in (".foot .rg", ".foot nav"):
+            box = page.locator(sel).bounding_box()
+            assert box["y"] + box["height"] <= top + 0.5, (sel, box, top)
+        assert not page.errors, page.errors
     finally:
         ctx.close()
 
@@ -303,94 +442,6 @@ def test_member_nav_stays_while_sign_in_is_checked(browser, env, monkeypatch, si
     c.close()
 
 
-def gw_board():
-    """board() with Zeta's kills row carrying a projection whose formula chance is the row's own (the widget draws only then)."""
-    b = board()
-    p = landing_v3.kills_chance(30.5, 32.4)
-    b["records"][0]["scout"].update(p_side=round(p, 4), projection=32.4)
-    return b
-
-
-def test_landing_v3_row_opens_in_place_and_a_line_tap_updates_the_read(browser, lbase):
-    warm(lbase, 0)
-    ctx, page = open_page(browser, lbase, PHONE, "dark")
-    try:
-        first = page.locator(".tr").first
-        assert not first.locator(".dt").is_visible() and first.locator("button.who").get_attribute("aria-expanded") == "false"
-        first.locator("button.who").click()                                  # rows start closed; a tap opens the read in place
-        assert first.locator(".dt").is_visible() and first.locator("button.who").get_attribute("aria-expanded") == "true"
-        first.locator("button.bk", has_text="13.5").click()                 # the other app's line: the open read follows it
-        assert first.locator('.dt [data-k="p"]').text_content() == "52.2"
-        assert first.locator('.dt-h [data-k="line"]').text_content() == "13.5" and first.locator('.dt-h [data-k="app"]').text_content() == "Prizepicks"
-        first.locator("button.who").click()
-        assert not first.locator(".dt").is_visible() and first.locator("button.who").get_attribute("aria-expanded") == "false"
-        second = page.locator(".tr").nth(1)
-        second.locator("button.who").click()
-        assert second.locator(".dt").is_visible()
-        no_h_scroll(page)
-        assert not page.errors, page.errors
-    finally:
-        ctx.close()
-
-
-def test_landing_v3_two_maps_pool_and_move_the_line(browser, lbase, monkeypatch):
-    import hltv_maps
-    monkeypatch.setattr(workspace_api, "_SNAP", dict(workspace_api._SNAP, body=json.dumps(gw_board()).encode()))
-    rows = {"Mover": map_rows(MOVER_MAPS)}                              # Mover: the soonest lettered Kills Maps 1-2 row on gw_board()
-    hltv_off(monkeypatch, lambda nick, team, since: (77005, rows[nick]) if nick in rows else (None, []))
-    monkeypatch.setattr(hltv_maps, "pool_for", lambda mid=None: (list(hltv_maps.ACTIVE_DUTY), "constant"))
-    landing_v3.reset()
-    warm(lbase, 0)
-    tot = map_totals(MOVER_MAPS)
-    pooled = lambda a, b: (tot[a][0] + tot[b][0]) / (tot[a][1] + tot[b][1])
-    for size in (PHONE, DESK):
-        ctx, page = open_page(browser, lbase, size, "dark")
-        try:
-            assert page.locator(".pool-h small").text_content() == "Mover · Kills · Maps 1-2 · line 32.5 on Underdog"
-            assert page.locator("#pool-v").text_content() == f"{pooled('Mirage', 'Dust 2'):.2f}"   # Mirage + Dust 2: summed kills / summed maps
-            page.locator("button.map", has_text="Inferno").click()                        # the oldest choice drops out
-            assert page.locator("#pool-names").text_content() == "Dust 2 + Inferno"
-            assert page.locator("#pool-v").text_content() == f"{pooled('Dust 2', 'Inferno'):.2f}"
-            d = pooled('Dust 2', 'Inferno') - 32.5 / 2
-            assert page.locator("#pool-d").text_content() == ("+" if d >= 0 else "−") + f"{abs(d):.2f}"
-            p0 = page.locator("#gw-p").text_content()
-            assert p0 == landing_v3._pct(round(landing_v3.kills_chance(30.5, 32.4), 4))   # at the real line: the board's own rounded number
-            slider = page.locator("#gw-line")
-            slider.focus()
-            for _ in range(8):
-                page.keyboard.press("ArrowRight")                                          # line 34.5: past the projection, Under
-            assert page.locator("#gw-lv").text_content() == "34.5" and page.locator("#gw-side").text_content().startswith("Under")
-            want = 1 - landing_v3.kills_chance(34.5, 32.4)
-            assert abs(float(page.locator("#gw-p").text_content()) - want * 100) < 0.11
-            assert "Under" in slider.get_attribute("aria-valuetext")
-            no_h_scroll(page)
-            assert not page.errors, page.errors
-        finally:
-            ctx.close()
-
-
-def test_landing_v3_move_the_line_prints_the_boards_rounded_number_at_the_real_line(browser, lbase, monkeypatch):
-    """Defect Nov 23: the board row said 0.59 (59.0%) and the widget printed the formula's 58.9 after load. At the real line it now
-    prints the board's own number, on load and after dragging away and back."""
-    b = board()
-    p = landing_v3.kills_chance(30.5, 32.4)
-    b["records"][0]["scout"].update(p_side=round(p, 2), projection=32.4)
-    monkeypatch.setattr(workspace_api, "_SNAP", dict(workspace_api._SNAP, body=json.dumps(b).encode()))
-    landing_v3.reset()
-    warm(lbase, 0)
-    ctx, page = open_page(browser, lbase, PHONE, "dark")
-    try:
-        assert page.locator("#gw-p").text_content() == "59.0" and page.locator("#gw-g").text_content() == "B"
-        slider = page.locator("#gw-line")
-        slider.focus()
-        page.keyboard.press("ArrowRight")
-        assert page.locator("#gw-p").text_content() != "59.0"
-        page.keyboard.press("ArrowLeft")
-        assert page.locator("#gw-lv").text_content() == "30.5" and page.locator("#gw-p").text_content() == "59.0"
-        assert "59.0 percent" in slider.get_attribute("aria-valuetext")
-        assert not page.errors, page.errors
-    finally:
-        ctx.close()
 
 
 @pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
@@ -417,173 +468,3 @@ def test_landing_v3_web_vitals_lcp_and_cls(browser, lbase, size):
         ctx.close()
 
 
-def test_landing_v3_a_line_without_last_10_hides_it_never_keeps_the_other_lines(browser, base, monkeypatch):
-    b = board()
-    pp = next(r for r in b["records"] if r["offer"]["platform"] == "prizepicks")
-    pp["history"] = {"l10": None}
-    pp["parity"] = {"be": 0.577, "entry": "PrizePicks power 2-pick"}
-    pp["offer"]["seen_at"] = "2026-11-22T10:04:00+00:00"
-    monkeypatch.setattr(workspace_api, "_SNAP", dict(workspace_api._SNAP, body=json.dumps(b).encode()))
-    monkeypatch.setattr(workspace_api, "snapshot", lambda s: workspace_api._SNAP)
-    landing_v3.reset()
-    warm(base, 0)
-    ctx, page = open_page(browser, base, DESK, "dark")
-    try:
-        row = page.locator(".tr").first
-        row.locator("button.who").click()
-        assert row.locator('.dt [data-c="l10"]').is_visible() and row.locator(".rc .l10").is_visible()
-        row.locator("button.bk", has_text="13.5").click()
-        assert not row.locator('.dt [data-c="l10"]').is_visible() and not row.locator(".rc .l10").is_visible()
-        assert row.locator('.dt [data-k="entry"]').text_content() == "PrizePicks power 2-pick"
-        assert row.locator('.dt [data-k="be"]').text_content() == "57.7" and row.locator(".rc small b").text_content() == "57.7"
-        assert row.locator('.dt [data-k="seen"]').text_content() == "10:04"
-        row.locator("button.bk", has_text="12.5").click()
-        assert row.locator('.dt [data-k="l10"]').text_content() == "6 of 10" and row.locator(".rc .l10").is_visible()
-        assert row.locator('.dt [data-k="entry"]').text_content() == "Underdog standard 2-pick"
-        assert not page.errors, page.errors
-    finally:
-        ctx.close()
-
-
-def test_landing_v3_phone_bar_is_trial_first_and_never_covers_content(browser, lbase):
-    """The phone bar ("Try free for 1 day · then $24.99/mo") shows once the hero button scrolls away; the page keeps static room for it
-    at the bottom, so even shown at the very end it covers neither the footer nor its 21+ line."""
-    warm(lbase, 12)
-    ctx, page = open_page(browser, lbase, PHONE, "dark")
-    try:
-        dock = page.locator("#dock")
-        assert not dock.evaluate("d => d.classList.contains('show')")       # the hero button is on screen: no bar yet
-        page.locator("#tools").scroll_into_view_if_needed()
-        page.wait_for_function("document.getElementById('dock').classList.contains('show')")
-        a = dock.locator("a")
-        assert a.text_content() == "Try free for 1 day · then $24.99/mo" and a.get_attribute("href") == JOIN
-        assert a.bounding_box()["height"] >= 44
-        page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
-        page.wait_for_timeout(400)
-        page.evaluate("document.getElementById('dock').classList.add('show')")   # force it shown at the very bottom
-        page.wait_for_timeout(500)
-        top = dock.bounding_box()["y"]
-        for sel in (".foot .rg", ".foot nav", ".rg-close"):
-            box = page.locator(sel).bounding_box()
-            assert box["y"] + box["height"] <= top + 0.5, (sel, box, top)
-        assert "21 and over" in page.locator(".foot .rg").text_content()
-        assert not page.errors, page.errors
-    finally:
-        ctx.close()
-
-
-# ---------------------------------------------------------------------------------------------- sweep 2026-11-23 (landing)
-def _with_board(monkeypatch, b):
-    monkeypatch.setattr(workspace_api, "_SNAP", dict(workspace_api._SNAP, body=json.dumps(b).encode()))
-    landing_v3.reset()
-
-
-def test_landing_v3_move_the_line_keeps_the_boards_number_at_the_real_line(browser, lbase, monkeypatch):
-    """sweep L1: the formula gives 56.9 at the real line 31.5 (projection 32.98) but the board says 57.0 B-: the page keeps 57.0 B- on load
-    and whenever the slider comes back to 31.5; any other line is the formula's."""
-    b = board()
-    b["records"][0]["scout"].update(side="over", p_side=0.57, grade="B-", projection=32.98)
-    b["records"][0]["offer"]["line"] = 31.5
-    _with_board(monkeypatch, b)
-    warm(lbase, 0)
-    ctx, page = open_page(browser, lbase, DESK, "dark")
-    try:
-        assert page.locator("#gw-p").text_content() == "57.0" and page.locator("#gw-g").text_content() == "B-"
-        slider = page.locator("#gw-line")
-        slider.focus()
-        page.keyboard.press("ArrowRight")
-        assert page.locator("#gw-lv").text_content() == "32.0"
-        assert page.locator("#gw-p").text_content() == f"{landing_v3.kills_chance(32.0, 32.98) * 100:.1f}"
-        page.keyboard.press("ArrowLeft")
-        assert page.locator("#gw-p").text_content() == "57.0" and page.locator("#gw-g").text_content() == "B-"
-        assert "57.0 percent, grade B-" in slider.get_attribute("aria-valuetext")
-        assert page.locator("#gw-ladder li.on").get_attribute("data-g") == "B-"
-        assert not page.errors, page.errors
-    finally:
-        ctx.close()
-
-
-def test_landing_v3_tier_link_only_for_a_letter_on_the_record(browser, lbase, monkeypatch):
-    """sweep L2: the read's 'See the X tier' link shows for a letter the record has a tier for (57%+: A+ .. B), never for B- or Lean."""
-    b = board()
-    pp = next(r for r in b["records"] if r["offer"]["platform"] == "prizepicks")
-    pp["scout"].update(p_side=0.575, grade="B")                              # Gap: UD 12.5 is B- (lead), PP 13.5 is B
-    _with_board(monkeypatch, b)
-    warm(lbase, 0)
-    ctx, page = open_page(browser, lbase, DESK, "dark")
-    try:
-        row = page.locator(".tr", has=page.locator(".who b", has_text="Gap"))
-        row.locator("button.who").click()
-        rec = row.locator(".dt-rec")
-        assert not rec.is_visible()                                           # B- lead: no tier link
-        row.locator("button.bk", has_text="13.5").click()
-        assert rec.is_visible() and rec.locator('[data-k="g"]').text_content() == "B"
-        row.locator("button.bk", has_text="12.5").click()
-        assert not rec.is_visible()
-        assert not page.errors, page.errors
-    finally:
-        ctx.close()
-
-
-def test_landing_v3_a_tap_during_the_count_in_keeps_its_own_chance(browser, lbase):
-    """sweep L4: the hero chances count in once (motion on). A line tapped while the count-in runs keeps its own chance when it ends; the
-    count-in never puts the lead line's number back. Frames are queued and run by hand, so the tap lands mid count-in every time."""
-    warm(lbase, 0)
-    ctx = browser.new_context(viewport=DESK, reduced_motion="no-preference")
-    ctx.route("https://fonts.*/**", lambda r: r.abort())
-    ctx.add_init_script("window.__raf=[];window.requestAnimationFrame=function(f){window.__raf.push(f);return window.__raf.length;};")
-    page = ctx.new_page()
-    page.errors = []
-    page.on("pageerror", lambda e: page.errors.append(str(e)))
-    try:
-        page.goto(lbase + "/", wait_until="load")
-        page.wait_for_function("document.documentElement.classList.contains('motion') && window.__raf.length > 0")   # count-in started
-        row = page.locator(".tr", has=page.locator(".who b", has_text="Gap"))
-        row.locator("button.bk", has_text="13.5").click()                    # mid count-in
-        page.evaluate("(()=>{for(let i=0;i<5;i++){const q=window.__raf.splice(0);q.forEach(f=>f(performance.now()+400*(i+1)));}})()")
-        assert row.locator(".pv").text_content().startswith("52.2"), row.locator(".pv").text_content()
-        assert row.locator(".mt").evaluate("e=>e.style.getPropertyValue('--p')") == "52.2"
-        mover = page.locator(".tr", has=page.locator(".who b", has_text="Mover"))
-        assert mover.locator(".pv").text_content().startswith("64.0")        # an untapped row ends on its own lead value
-        assert not page.errors, page.errors
-    finally:
-        ctx.close()
-
-
-def _tie_rows():
-    """HLTV map rows (hltv_maps row shape) whose two most played pool maps pool to exactly 14.625 kills per map: Mirage 647 kills in 50
-    maps, Dust 2 757 in 46 (the live dav1g case), plus Inferno and Ancient to fill the module."""
-    from datetime import date, timedelta as td
-    today = date.today()
-    out, i = [], 0
-    for name, n, total in (("Mirage", 50, 647), ("Dust 2", 46, 757), ("Inferno", 12, 170), ("Ancient", 10, 150)):
-        base, extra = divmod(total, n)
-        for j in range(n):
-            k = base + (1 if j < extra else 0)
-            out.append((name, (today - td(days=2 + (i * 3) % 340)).isoformat(), 9000 + i, k, 12, k // 2, 13, 8, 1.0, 75.0, 70.0))
-            i += 1
-    out.sort(key=lambda r: r[1], reverse=True)
-    return out
-
-
-def test_landing_v3_two_maps_reads_the_same_on_load_and_after_reselecting(browser, lbase, monkeypatch):
-    """sweep L6: (647 + 757) / 96 = 14.625 exactly. The server prints 14.62; choosing other maps and then the same two again must read
-    14.62 again (the page shows the server's string for each pair), never 14.63."""
-    import hltv_maps
-    rows = {"Mover": _tie_rows()}
-    hltv_off(monkeypatch, lambda nick, team, since: (77005, rows[nick]) if nick in rows else (None, []))
-    monkeypatch.setattr(hltv_maps, "pool_for", lambda mid=None: (list(hltv_maps.ACTIVE_DUTY), "constant"))
-    _with_board(monkeypatch, gw_board())
-    warm(lbase, 0)
-    ctx, page = open_page(browser, lbase, DESK, "dark")
-    try:
-        assert page.locator("#pool-names").text_content() == "Mirage + Dust 2"
-        first = (page.locator("#pool-v").text_content(), page.locator("#pool-d").text_content())
-        assert first[0] == "14.62"
-        for m in ("Inferno", "Mirage", "Dust 2"):                            # away and back to the same two maps
-            page.locator("button.map", has_text=m).click()
-        assert page.locator("#pool-names").text_content() == "Mirage + Dust 2"
-        assert (page.locator("#pool-v").text_content(), page.locator("#pool-d").text_content()) == first
-        assert not page.errors, page.errors
-    finally:
-        ctx.close()
