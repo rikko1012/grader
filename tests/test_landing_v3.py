@@ -1043,7 +1043,7 @@ def test_hero_shows_up_to_six_rows_in_rule_order():
     (never stretched into an empty well) and the phone starts at the frame's top (a short board lets it hang below on purpose)."""
     assert landing_v3.HERO_ROWS == 6
     css = landing_v3.ASSETS["PAGE_CSS"].read_text(encoding="utf-8")
-    assert ".pcol{grid-area:1 / 1;align-self:start;display:flex;flex-direction:column;min-width:0;margin:0 16px 0 0}" in css
+    assert ".pcol{grid-area:1 / 1;align-self:start;display:flex;flex-direction:column;min-width:0;margin:0 44px 0 0}" in css
     assert ".pcol>.browser{flex:1}" not in css and ".ph-why li.oa{display:none}" in css
     assert "z-index:10;margin:0;width:288px" in css                    # the phone's top = the frame's top
 
