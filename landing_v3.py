@@ -54,6 +54,7 @@ LONG = {"cs2": "CS2", "lol": "League of Legends", "nba": "NBA", "nfl": "NFL", "s
 PICK_APPS = (("prizepicks", "PrizePicks"), ("underdog", "Underdog"))
 COMPARE_BOOKS = (("fanduel", "FanDuel"), ("betrivers", "BetRivers"), ("unibet_au", "Unibet"), ("polymarket", "Polymarket"),
                  ("draftkings", "DraftKings"), ("kalshi", "Kalshi"))
+MARKETS = ("Polymarket", "Kalshi")  # prediction markets: named as markets, never counted or called books
 APPS_MAX_AGE_S = 24 * 3600
 SHORT = {"underdog": "UD", "prizepicks": "PP"}
 # The "Move the line" widget: Scout's CS2 kills chance (grader.p_more with the live kills spread, chances capped either side) and the
@@ -69,11 +70,10 @@ CUTS = ((0.80, "A+"), (0.74, "A"), (0.68, "A-"), (0.63, "B+"), (0.57, "B"), (0.5
 _MONEY = re.compile(r"profit|money|\$|cash|paid|payout|\bwon\b|\bwin|hit big|\bbank|rarely miss|every (single )?day|\bmf\b|"
                     r"\bf+u+c+k|\bshit|\bbitch|\bdamn|guarantee|\blocks?\b|\bbets?\b|\bbetter\b|\bslips?\b|\bparlay|10 ?/ ?10|outta|no cap|\btwin\b", re.I)
 _PRODUCT = re.compile(r"stat|breakdown|reason|navigat|design|analy[sz]|matchup|information|\bcards?\b|\bmaps?\b|projection|grader|"
-                      r"\bboard\b|explain|\bdata\b", re.I)
+                      r"\bboard\b|explain|\bdata\b|\btools?\b", re.I)
 FEATURE_N = 3
-# The landing's brand is Prop Grader. A review that names the site's old name (CS2 Scout, 1time, 1T) is featured only when fewer than
-# FEATURE_N other reviews qualify, after them, and its card says it was written before the rename. Its text is the member's own and is
-# never edited.
+# The landing's brand is Prop Grader. A review that names the site's old name (CS2 Scout, 1time, 1T) is never featured on the landing
+# (no old brand anywhere on the page); it stays on /reviews word for word. A member's text is never edited.
 _OLD_BRAND = re.compile(r"\bscout\b|1time|\b1T\b", re.I)
 
 # Pricing and the trial (owner blueprint, Nov 22 2026). Read from the public Whop checkout pages on Nov 23: the free-trial plan
@@ -114,7 +114,10 @@ def _template():
     if _TPL["mtime"] != mt:
         text = TEMPLATE.read_text(encoding="utf-8")
         for k, f in ASSETS.items():
-            text = text.replace("{{" + k + "}}", f.read_text(encoding="utf-8"))
+            body = f.read_text(encoding="utf-8")
+            if f.suffix == ".css":              # source comments are for the repo, not view-source (tokens.css names the old brand)
+                body = re.sub(r"(?s)/\*.*?\*/", "", body)
+            text = text.replace("{{" + k + "}}", body)
         _TPL.update(mtime=mt, text=text)
     return _TPL["text"]
 
@@ -352,27 +355,37 @@ def minis(board):
 
 
 def hand_minis(board, pair=None):
-    """The by-hand table's real UI chips: (pills, meter, row text). Pills: the first terminal row with two apps' lines; when the CS2
-    sample has none, `pair` (sports_pair: a real NBA / NFL row both pick'em apps list, labelled with its sport); else the first row's
-    single line with wording that says so. Meter: the first terminal row's chance against its break-even."""
+    """The by-hand table's real UI: (gap example, meter, gap row text). One example for the "Spot a gap" and "Price the entry" rows:
+    the first terminal row with two apps' lines; when the CS2 sample has none, `pair` (sports_pair: a real NBA / NFL row both pick'em
+    apps list, labelled with its sport). The Line gap chip shows on it only when its lines differ. Meter: the example's lead row's
+    chance against its break-even when it has both, else the first terminal row's; always captioned with its own sport and player."""
     pick = _rows(board, n=HERO_ROWS)[0] if board else []
-    bar = ""
-    if pick:
-        rs0 = pick[0][0]
-        p, be = _pct((rs0[0].get("scout") or {}).get("p_side")), _pct((rs0[0].get("parity") or {}).get("be"))
-        bar = (f'<span class="mt big" style="--p:{esc(p)}" aria-hidden="true"><i></i><u style="--b:{esc(be)}"></u></span>'
-               f'<span class="lbl"><b>Model estimate {esc(p)}%</b><b>Break-even {esc(be)}%</b></span>') if p and be else ""
+    ex = None
     two = next((rs for rs, _g, _m in pick if len({(r.get("offer") or {}).get("platform") for r in rs}) > 1), None)
     if two:
-        return _span_cells(two) + _who(two[0], "CS2"), bar, "Each app's line on one row, each graded on its own"
-    if pair:
+        ex = (two, "CS2")
+    elif pair:
         lg, rs = pair
-        return _span_cells(rs) + _who(rs[0], LABEL.get(lg, lg.upper())), bar, "Each app's line on one row, each graded on its own"
-    if pick:
-        rs = pick[0][0]
-        return (_span_cells(rs) + _who(rs[0], "CS2"), bar,
-                "The app's line on the row; when a second app lists the prop, its line sits beside it, graded on its own")
-    return "", bar, "Each app's line on one row, each graded on its own"
+        ex = (rs, LABEL.get(lg, lg.upper()))
+
+    def meter(r, sport):
+        p, be = _pct((r.get("scout") or {}).get("p_side")), _pct((r.get("parity") or {}).get("be"))
+        if not (p and be):
+            return ""
+        return (f'<span class="mt big" style="--p:{esc(p)}" aria-hidden="true"><i></i><u style="--b:{esc(be)}"></u></span>'
+                f'<span class="lbl"><b>Model estimate {esc(p)}%</b><b>Break-even {esc(be)}%</b></span>' + _who(r, sport))
+    bar = meter(ex[0][0], ex[1]) if ex else ""
+    if not bar and pick:
+        bar = meter(pick[0][0][0], "CS2")
+    if ex:
+        rs, sport = ex
+        gap = len({(r.get("offer") or {}).get("line") for r in rs}) > 1
+        ui = _span_cells(rs) + ('<em class="chip gap">Line gap</em>' if gap else "") + _who(rs[0], sport)
+        txt = ("Flagged on the row when the apps differ, each line graded on its own" if gap else
+               "Same line on both apps here; when they differ the row says Line gap, each line graded on its own")
+        return ui, bar, txt
+    return ('<em class="chip gap">Line gap</em>', bar,
+            "Flagged on the row when two apps list different lines, each line graded on its own")
 
 
 def _who(r, sport=None):
@@ -732,8 +745,8 @@ def _sentences(s):
 def featured(doc):
     """[(review, quote, cut, old)] by the stated rule: reviews that talk about using the product, most specific first. A review with
     photos (slips) or shouting is not featured; a sentence with money / result / betting / guarantee talk is never quoted (cut = a sentence
-    was left out, shown as an ellipsis with a link to the reviews page). old = the review names the site's old brand (_OLD_BRAND): those
-    come after every other qualifying review, so they only fill a slot nothing else can."""
+    was left out, shown as an ellipsis with a link to the reviews page). A review that names the site's old brand (_OLD_BRAND) is never featured
+    (it stays on /reviews). old is always False (kept in the tuple for callers)."""
     out = []
     for r in (doc or {}).get("reviews") or []:
         text = f'{r.get("title") or ""} {r.get("body") or ""}'
@@ -747,10 +760,11 @@ def featured(doc):
         hits = len(_PRODUCT.findall(quote))
         if not hits or len(quote.split()) < 5:
             continue
-        old = bool(_OLD_BRAND.search(f'{text} {r.get("name") or ""}'))
-        out.append((old, hits, len(quote), r, quote, len(kept) < len(sents)))
-    out.sort(key=lambda x: (x[0], -x[1], -x[2]))
-    return [(r, q, cut, old) for old, _h, _n, r, q, cut in out[:FEATURE_N]]
+        if _OLD_BRAND.search(f'{text} {r.get("name") or ""}'):
+            continue
+        out.append((hits, len(quote), r, quote, len(kept) < len(sents)))
+    out.sort(key=lambda x: (-x[0], -x[1]))
+    return [(r, q, cut, False) for _h, _n, r, q, cut in out[:FEATURE_N]]
 
 
 def wall(doc):
@@ -761,18 +775,16 @@ def wall(doc):
     if not n:
         return "", "", 0, ""
     cards = []
-    for r, quote, cut, old in featured(doc):
+    for r, quote, cut, _old in featured(doc):
         d = _ts(r.get("created"))
         title = r.get("title") if r.get("title") and not _MONEY.search(str(r.get("title"))) else ""
         stars = int(r.get("stars") or 0)
-        more = "Read the full review" if cut else "On the reviews page"
         cards.append(
             f'<figure class="rv"><div class="st" aria-label="{stars} of 5 stars">{"★" * stars}<span>{"★" * (5 - stars)}</span></div>'
             f'{"<h3>" + esc(title) + "</h3>" if title else ""}'
             f'<blockquote>{esc(quote)}{" …" if cut else ""}</blockquote>'
-            f'{"<p class=rv-old>Written before the site was renamed Prop Grader. The member’s words are unchanged.</p>" if old else ""}'
             f'<figcaption><b>{esc(r.get("name"))}</b><small>Paying member · {esc(_day(r.get("created")) + (", " + str(d.year) if d else ""))}{" · edited" if r.get("edited") else ""}</small>'
-            f'<a href="/reviews">{more} <span aria-hidden="true">→</span></a></figcaption></figure>')
+            f'<a href="/reviews">On the reviews page <span aria-hidden="true">→</span></a></figcaption></figure>')
     avg = s.get("average")
     head = (f'<p class="rating"><b>★ {float(avg):.1f}</b><span>· {n} member reviews</span></p>' if n >= 10 and avg is not None
             else f'<p class="rating"><span>{n} member reviews</span></p>')
@@ -900,42 +912,52 @@ def apps_seen(board, sp, now=None):
     return ([n for k, n in PICK_APPS if k in seen], [n for k, n in COMPARE_BOOKS if k in seen], book_lgs)
 
 
+def _cmp(sb, mk):
+    """'FanDuel, Unibet and the Polymarket market': sportsbooks by name, prediction markets called markets."""
+    parts = list(sb) + ([f"the {_list(list(mk))} market{'s' if len(mk) > 1 else ''}"] if mk else [])
+    return _list(parts) if parts else ""
+
+
 def app_fills(picks, books, book_lgs):
     """The page's app wording from apps_seen: the proof tile, the by-hand headline / chips / row, step 1, the FAQ answer. Pick'em apps
-    (slips) and comparison books are never counted as one kind. Nothing seen: no count and no "and more" (the tile is left out)."""
-    n = len(picks) + len(books)
-    if picks and books:
-        kind = "apps and books"
-    elif picks:
-        kind = "apps" if len(picks) > 1 else "app"
-    else:
-        kind = "books" if len(books) > 1 else "book"
+    (slips), sportsbooks and prediction markets (MARKETS) are never counted as one kind: the tile leads with the pick'em apps by name
+    and the headline counts pick'em apps only. Nothing seen: no count and no "and more" (the tile is left out)."""
+    sb = [b for b in books if b not in MARKETS]
+    mk = [b for b in books if b in MARKETS]
     lgs = _list(book_lgs) if book_lgs else "sports"
     apps_word = "apps" if len(picks) > 1 else "app"
+    cmp = _cmp(sb, mk)
     tile = ""
     if picks:
-        lead = ", ".join(picks) + " and more" if books else _list(picks)
-        tile = f"<b>{n} {kind}</b><span>Lines from {esc(lead)}</span>"
+        tile = f"<b class=\"apps\">{esc(' + '.join(picks))}</b><span>Lines graded at each app's own number</span>"
     chips = "".join(f"<li>{esc(b)}</li>" for b in picks)
     if books:
-        chips += f'<li class="cmp-k">For comparison on {esc(lgs)}</li>' + "".join(f'<li class="cmp">{esc(b)}</li>' for b in books)
+        chips += (f'<li class="cmp-k">For comparison on {esc(lgs)}</li>' + "".join(f'<li class="cmp">{esc(b)}</li>' for b in sb)
+                  + "".join(f'<li class="cmp">{esc(b)} (market)</li>' for b in mk))
     if picks:
         faq = (f"The boards carry lines from {_list(picks)}, the pick'em {apps_word} Slip Studio builds slips for, "
                f"and each line is graded at the number that app lists.")
         if books:
-            faq += f" The {lgs} boards also show lines from {_list(books)} beside them for comparison. Slips cover {_list(picks)} only."
-        hand_open = "Open " + _list(picks + ([f"{len(books)} books"] if books else [])) + " and write the numbers down"
+            faq += f" The {lgs} boards also show lines from {cmp} beside them for comparison. Slips cover {_list(picks)} only."
+        extra = ([f"{len(sb)} sportsbook{'s' if len(sb) > 1 else ''}"] if sb else []) + mk
+        hand_open = "Open " + _list(picks + extra) + " and write the numbers down"
+        kinds = " and ".join((["sportsbook"] if sb else []) + (["prediction-market"] if mk else []))
         step1 = (f"{_list(picks)} lines on one row for every sport on the board"
-                 f"{f', with books beside them for comparison on {lgs}' if books else ''}.")
+                 f"{f', with {kinds} lines beside them for comparison on {lgs}' if books else ''}.")
     else:
         faq = "Every row names the app whose line it is and when that line was seen, and each line is graded at that app's own number."
         hand_open = "Open each app and write the numbers down"
         step1 = "Every app's line on one row, for every sport on the board."
+    n = len(picks)
+    row1 = ("Both apps' lines on one row, for every sport on the board" if n == 2 else
+            f"{_list(picks)} lines on one row, for every sport on the board" if n > 2 else
+            "The app's line on one row, for every sport on the board" if n == 1 else "Every app's line on one row")
     return {
         "APP_TILE": tile,
-        "HAND_H": esc(f"One row instead of {n} {kind}." if n > 1 else "One row for every line."),
+        "HAND_H": esc(f"One row instead of {n} apps." if n > 1 else "One row for every line."),
         "BOOK_CHIPS": chips,
         "HAND_OPEN": esc(hand_open),
+        "HAND_ROW1": esc(row1),
         "STEP1": esc(step1),
         "APP_FAQ": esc(faq),
     }

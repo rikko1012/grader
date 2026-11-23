@@ -158,6 +158,9 @@ def test_landing_v3_first_screen_targets_and_width(browser, lbase, size, theme):
         assert page.locator(".brand").first.text_content().strip() == "PropGrader" and page.title().startswith("Prop Grader")
         assert page.locator("#term-at").text_content().startswith("checked ")    # a 3-minute-old board: the browser says so
         assert page.evaluate("document.documentElement.classList.contains('live')")
+        assert page.locator("#term-st").text_content() == "Live sample · CS2 board"   # "Live" only beside a fresh board
+        rects = page.evaluate("[...document.querySelectorAll('.nw')].filter(e => e.offsetParent).map(e => e.getClientRects().length)")
+        assert rects and all(n == 1 for n in rects), rects                               # 1-800-GAMBLER never splits across lines
         snap(page, f"landing-c-{size['width']}-{theme}", full=True)
         assert not page.errors, page.errors
     finally:

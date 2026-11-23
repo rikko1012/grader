@@ -27,7 +27,7 @@
   safe(function () {
     var at = term && Date.parse(term.getAttribute('data-at') || ''), atEl = D.getElementById('term-at');
     if (!term || !atEl || !isFinite(at)) return;
-    var asOf = atEl.textContent, saved = term.getAttribute('data-state') === 'saved';
+    var asOf = atEl.textContent, saved = term.getAttribute('data-state') === 'saved', stEl = D.getElementById('term-st');
     function hm(d) { return ('0' + d.getUTCHours()).slice(-2) + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' UTC'; }
     function fresh() {
       var now = Date.now(), min = (now - at) / 60000, lim = +term.getAttribute('data-fresh') || 30, live = !saved && min >= -2 && min <= lim;
@@ -35,6 +35,7 @@
       atEl.textContent = live ? (min < 1 ? 'checked just now' : 'checked ' + Math.floor(min) + ' min ago')
         : day === 0 ? lead + 'today, ' + hm(d) : day === 1 ? lead + 'yesterday, ' + hm(d) : day > 1 ? (saved ? 'Saved board, ' : 'Board, ') + day + ' days old' : asOf;
       if (!saved) term.setAttribute('data-state', live ? 'live' : 'dated');
+      if (stEl) stEl.textContent = live ? 'Live sample · CS2 board' : 'Sample · CS2 board';   /* "Live" only beside a fresh board */
       D.documentElement.classList.toggle('live', live);
     }
     fresh();

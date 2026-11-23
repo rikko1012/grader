@@ -230,7 +230,9 @@ def test_missing_inputs_drop_their_blocks_and_the_page_still_serves(srv, monkeyp
     assert "/landing/board.webp" not in s and 'data-state="saved"' in s   # the saved board, dated, instead of live rows
     assert "as of Nov 22, 17:53 UTC" in s and 'data-at="2026-11-22T17:53:44+00:00"' in s
     assert "more letter-graded" not in s and "Open the full board, free for 1 day" in s      # no count off the saved board
+    assert 'id="term-st">Sample · CS2 board<' in s and "Live sample" not in re.sub(r"(?s)<script>.*?</script>", "", s)   # the cached page never says "Live"; the browser may
     js = landing_v3.ASSETS["PAGE_JS"].read_text(encoding="utf-8")       # the browser keeps an old saved board relative, never a bare date
+    assert "live ? 'Live sample · CS2 board' : 'Sample · CS2 board'" in js
     assert "'Saved board from '" in js and "' days old'" in js
     assert 'id="record"' not in s and 'id="reviews"' not in s and "decided picks" not in s and "member reviews" not in s
     assert "{{" not in s and "<!--if:" not in s
@@ -817,10 +819,11 @@ def test_brand_is_prop_grader_in_title_meta_and_copy(srv, monkeypatch):
     head = s.split("</head>")[0]
     head = re.sub(r'https://[^"]+', "", re.sub(r"(?s)<style>.*?</style>|<script>.*?</script>", "", head))   # the site's own URL aside
     assert not re.search(r"scout|1time|\b1T\b", head, re.I)
-    body = re.sub(r'(?s)<figure class="rv">(?:(?!</figure>).)*?class=rv-old>.*?</figure>', " ", s.split("</head>", 1)[1])
-    t = text(body.encode())                                                    # review cards included, unless marked pre-rename
+    t = text(s.split("</head>", 1)[1].encode())                              # review cards included: no old brand anywhere
     assert not re.search(r"\bScout\b|1time|\b1T\b", t), re.findall(r".{30}(?:Scout|1time|1T).{30}", t)
     assert t.count("Prop Grader") >= 8
+    src = re.sub(r'https://[^"\s<>]+', "", s)                                 # view-source too (inlined CSS comments), the site's own URL aside
+    assert not re.search(r"scout|1time|\b1T\b", re.sub(r"ScoutV3", "", src), re.I), re.findall(r".{30}(?:[Ss]cout|1time|1T).{30}", src)[:3]
 
 
 def test_proof_strip_numbers_come_from_live_data(srv, monkeypatch):
@@ -830,7 +833,8 @@ def test_proof_strip_numbers_come_from_live_data(srv, monkeypatch):
     total = 100 + 90 + 50 + 40 + 300 + 280 + 80 + 70
     assert f"{total:,} decided picks on the public record, losses included" in t
     assert "★ 4.8 from 12 member reviews" in t
-    assert "2 apps Lines from PrizePicks and Underdog" in t                             # the CS2 board's own apps (no books read)
+    assert "PrizePicks + Underdog Lines graded at each app's own number" in t           # the CS2 board's own apps (no books read)
+    assert not re.search(r"\d+ apps", t)                                              # no merged app count on the tile
     assert "“" not in p and "Grader 4 mans: roughly <b>+46U</b> in the past week, and Grader has only been live 2 weeks" in p
     assert "Prop Grader on X, Nov 20" in t
     srv._store_result(landing_v3.record_key("nba"), 200, json.dumps(record_doc("nba", 10, 5, 0)).encode(), 600, 600)
@@ -844,7 +848,7 @@ def test_proof_strip_numbers_come_from_live_data(srv, monkeypatch):
     assert not re.search(r"\d", re.sub(r"\{\{[A-Z_0-9]+\}\}", "", block))
     assert "{{OWNER_POST}}" in block and "{{OWNER_POST_BY}}" in block and "roughly" in landing_v3.OWNER_POST
     page = text(build(srv))
-    assert page.count("+46U") == 1 and page.count("46") == 1                           # the owner's post, once, nowhere else
+    assert page.count("+46U") == 1 and len(re.findall(r"(?<![\d:.,])46(?![\d:])", page)) == 1                           # the owner's post, once, nowhere else
 
 
 def test_proof_tiles_drop_without_their_data(srv, monkeypatch):
@@ -918,27 +922,22 @@ OLD_BRAND_REVIEW = review(9, "brandfan", "CS2 Scout is a great platform with a c
                                          "and matchup breakdown.", "Excellent CS2 Tool")
 
 
-def test_reviews_naming_the_old_brand_come_last_and_are_marked_never_edited(srv, monkeypatch):
-    """The landing is Prop Grader: a review that names the old brand would rank first by the product rule, but comes after every other
-    qualifying review; with 3 others it is not on the landing at all (it stays on /reviews). When it does fill a slot, its card says it
-    was written before the rename, and its words are shown exactly as written."""
+def test_reviews_naming_the_old_brand_are_never_featured_on_the_landing(srv, monkeypatch):
+    """The landing is Prop Grader: a review that names the old brand would rank first by the product rule, but is never featured
+    (it stays on /reviews word for word), even when fewer than 3 other reviews qualify. The cards' link reads the same on every card."""
     rv = dict(REVIEWS, reviews=[OLD_BRAND_REVIEW] + REVIEWS["reviews"])
     seed(srv, monkeypatch, board(), rv=rv)
     s = build(srv).decode("utf-8")
     sec = re.search(r'(?s)<section class="proofwall sec" id="members".*?</section>', s).group(0)
     assert "brandfan" not in sec and "Scout" not in text(sec.encode()) and len(re.findall(r'<figure class="rv">', sec)) == 3
-    assert "renamed" not in sec
+    assert "renamed" not in sec and set(re.findall(r'<a href="/reviews">([^<]+) <span', "".join(re.findall(r'(?s)<figure class="rv">.*?</figure>', sec)))) == {"On the reviews page"}
     few = dict(REVIEWS, reviews=[OLD_BRAND_REVIEW] + [r for r in REVIEWS["reviews"] if r["name"] != "plain"])   # 2 others qualify
     srv._store_result(landing_v3._reviews_key(), 200, json.dumps(few).encode(), 600, 600)
     sec = re.search(r'(?s)<section class="proofwall sec" id="members".*?</section>', build(srv).decode("utf-8")).group(0)
     names = re.findall(r"<figcaption><b>([^<]+)</b>", sec)
-    assert names[-1] == "brandfan" and len(names) == 3                                    # last, never first
-    card = re.findall(r'(?s)<figure class="rv">.*?</figure>', sec)[-1]
-    assert html.escape(OLD_BRAND_REVIEW["body"]) in card                                 # word for word
-    assert "Written before the site was renamed Prop Grader. The member’s words are unchanged." in card
-    assert not any("renamed" in c for c in re.findall(r'(?s)<figure class="rv">.*?</figure>', sec)[:-1])
+    assert "brandfan" not in names and len(names) == 2 and "Scout" not in text(sec.encode())
     for body, title in (("Love the stats from 1time on every card here", ""), ("Great stats and reasons on every card", "1T Scout rocks")):
-        assert landing_v3.featured({"reviews": [review(10, "x", body, title)]})[0][3] is True
+        assert landing_v3.featured({"reviews": [review(10, "x", body, title)]}) == []
     assert landing_v3.featured({"reviews": [review(11, "x", "Scouting reports and stats on every card are great")]})[0][3] is False
 
 
@@ -974,15 +973,17 @@ def test_app_list_is_read_live_and_keeps_pick_apps_apart_from_comparison_books(s
     s = build(srv).decode("utf-8")
     t = html.unescape(text(s.encode()))
     proof = html.unescape(text(re.search(r'(?s)<ul class="proof".*?</ul>', s).group(0).encode()))
-    assert "5 apps and books Lines from PrizePicks, Underdog and more" in proof                     # 2 apps + FanDuel, Unibet, Polymarket
-    assert "One row instead of 5 apps and books." in t
+    assert ("PrizePicks + Underdog Lines graded at each app's own number" in proof and "FanDuel" not in proof
+            and "Polymarket" not in proof and not re.search(r"\d+ apps", proof))                                        # pick'em apps by name, no merged count
+    assert "One row instead of 2 apps." in t and "apps and books" not in t
     assert ("The boards carry lines from PrizePicks and Underdog, the pick'em apps Slip Studio builds slips for, and each line is "
-            "graded at the number that app lists. The NBA boards also show lines from FanDuel, Unibet and Polymarket beside them for "
+            "graded at the number that app lists. The NBA boards also show lines from FanDuel, Unibet and the Polymarket market beside them for "
             "comparison. Slips cover PrizePicks and Underdog only.") in t
     chips = re.search(r'(?s)<ul class="chips books".*?</ul>', s).group(0)
     assert re.findall(r"<li>([^<]+)</li>", chips) == ["PrizePicks", "Underdog"]
-    assert re.findall(r'<li class="cmp">([^<]+)</li>', chips) == ["FanDuel", "Unibet", "Polymarket"] and "For comparison on NBA" in chips
-    assert "Open PrizePicks, Underdog and 3 books and write the numbers down" in t
+    assert re.findall(r'<li class="cmp">([^<]+)</li>', chips) == ["FanDuel", "Unibet", "Polymarket (market)"] and "For comparison on NBA" in chips
+    assert "Open PrizePicks, Underdog, 2 sportsbooks and Polymarket and write the numbers down" in t
+    assert "with sportsbook and prediction-market lines beside them for comparison on NBA" in t
     for gone in ("Bovada", "BetRivers", "Pinnacle", "Unibet (AU)"):                         # unapproved / zero rows: never named
         assert gone not in t, gone
     workspace_sports._SNAP["nba"]["at"] = time.time() - landing_v3.APPS_MAX_AGE_S - 5         # a board nobody has read for a day
@@ -997,7 +998,9 @@ def test_by_hand_row_shows_a_real_two_app_row_from_another_sport_when_cs2_has_on
     seed(srv, monkeypatch, b)
     s = build(srv).decode("utf-8")
     hand = re.search(r'(?s)<section class="hand sec".*?</section>', s).group(0)
-    assert "The app's line on the row; when a second app lists the prop, its line sits beside it" in html.unescape(text(hand.encode()))
+    ht = html.unescape(text(hand.encode()))
+    assert "Flagged on the row when two apps list different lines, each line graded on its own" in ht   # no two-app row: the chip alone
+    assert ht.count("graded on its own") == 1 and "The app's line on one row" in ht
     assert "Every supported app" not in s
     term = text(re.search(r'(?s)<div class="term-foot">.*?</div>\s*</div>', s).group(0).encode())
     assert "two-app line gaps first" not in term and "this sample has Underdog lines only" in term
@@ -1012,8 +1015,13 @@ def test_by_hand_row_shows_a_real_two_app_row_from_another_sport_when_cs2_has_on
     s = build(srv).decode("utf-8")
     hand = re.search(r'(?s)<section class="hand sec".*?</section>', s).group(0)
     find = re.search(r'(?s)Find the line</b>.*?</div>', hand).group(0)
-    assert ">UD<" in find and ">PP<" in find and ">20.5<" in find and ">21.5<" in find          # line gap first, then the soonest
-    assert "NBA · Later · Points · Full game" in find and "Each app&#x27;s line on one row" in find
+    gap = re.search(r'(?s)Spot a gap</b>.*?</div>', hand).group(0)
+    assert ">UD<" not in find and "Both apps&#x27; lines on one row" in find                    # row 1: its own wording, no example
+    assert ">UD<" in gap and ">PP<" in gap and ">20.5<" in gap and ">21.5<" in gap               # line gap first, then the soonest
+    assert "NBA · Later · Points · Full game" in gap and '<em class="chip gap">Line gap</em>' in gap
+    assert "Flagged on the row when the apps differ, each line graded on its own" in gap
+    price = re.search(r'(?s)Price the entry</b>.*?</div>', hand).group(0)
+    assert re.search(r"(NBA · Later|CS2 · [^<]+) · ", price)                                  # the meter names its own sport and player
     assert landing_v3.sports_pair(["nba"], now=(s0 + timedelta(hours=2)).timestamp()) is None   # locked rows never show
 
 

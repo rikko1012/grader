@@ -70,7 +70,7 @@
     <!--if:TERM-->
     <div class="term" id="terminal" data-state="{{TERM_STATE}}" data-at="{{TERM_AT}}" data-fresh="{{FRESH_MIN}}">
       <div class="term-bar">
-        <span class="st"><i class="dot" aria-hidden="true"></i><b>Live sample · CS2 board</b></span>
+        <span class="st"><i class="dot" aria-hidden="true"></i><b id="term-st">Sample · CS2 board</b></span>
         <span class="src">{{TERM_FEEDS}} <i>·</i> <span id="term-at">{{TERM_META}}</span></span>
       </div>
       <div class="th" aria-hidden="true"><span>Player · line by app</span><span>Model estimate · grade</span></div>
@@ -201,8 +201,8 @@
     </div>
     <div class="vs" role="table" aria-label="By hand compared with Prop Grader">
       <div class="vs-h" role="row"><span role="columnheader">The job</span><span role="columnheader">By hand</span><span role="columnheader" class="sc">With Grader</span></div>
-      <div class="vs-r" role="row"><b role="cell">Find the line</b><span role="cell" class="bh">{{HAND_OPEN}}</span><span role="cell" class="sc"><!--if:HANDPILLS--><span class="ui">{{HAND_PILLS}}</span><!--/if:HANDPILLS-->{{HAND_ROW}}</span></div>
-      <div class="vs-r" role="row"><b role="cell">Spot a gap</b><span role="cell" class="bh">Only if you happen to compare the right two apps</span><span role="cell" class="sc"><span class="ui"><em class="chip gap">Line gap</em></span>Each line graded on its own</span></div>
+      <div class="vs-r" role="row"><b role="cell">Find the line</b><span role="cell" class="bh">{{HAND_OPEN}}</span><span role="cell" class="sc">{{HAND_ROW1}}</span></div>
+      <div class="vs-r" role="row"><b role="cell">Spot a gap</b><span role="cell" class="bh">Only if you happen to compare the right two apps</span><span role="cell" class="sc"><!--if:HANDPILLS--><span class="ui">{{HAND_PILLS}}</span><!--/if:HANDPILLS-->{{HAND_ROW}}</span></div>
       <div class="vs-r" role="row"><b role="cell">Price the entry</b><span role="cell" class="bh">Payout table, then a calculator</span><span role="cell" class="sc"><span class="ui">{{HAND_BE}}</span>Break-even for your entry beside the model estimate</span></div>
       <div class="vs-r" role="row"><b role="cell">Keep score</b><span role="cell" class="bh">Screenshots of the good nights</span><span role="cell" class="sc"><span class="ui"><em class="chip saved-chip">Saved before the game</em></span>Every call scored after, losses included</span></div>
     </div>
@@ -289,7 +289,7 @@
       <details><summary>What happens after my free day?</summary><p>Your membership renews at {{PRICE_M}}/month unless you cancel from your Whop account before the free day ends.</p></details>
       <details><summary>How do I know the grades are honest?</summary><p>Every graded call is saved before the game starts and scored after it on the public record, losses included. Each sport states its rule, and anyone can read it without an account.<!--if:UNREC--> {{UNREC_SENT}}<!--/if:UNREC--></p></details>
       <details><summary>Will I win every day?</summary><p>No. A grade is a chance, not a certainty, and the record shows the losing days next to the good ones. Parlays multiply the risk, which is why Slip Studio prints the estimate that every leg hits.</p></details>
-      <details><summary>Do I need a big bankroll?</summary><p>No. Grades are chances, not promises, so play only what you can afford to lose and stay within your limits. For adults 21 and over. If gambling stops being fun, call 1-800-GAMBLER.</p></details>
+      <details><summary>Do I need a big bankroll?</summary><p>No. Grades are chances, not promises, so play only what you can afford to lose and stay within your limits. For adults 21 and over. If gambling stops being fun, call <span class="nw">1-800-GAMBLER</span>.</p></details>
       <details><summary>Which apps does it cover?</summary><p>{{APP_FAQ}}</p></details>
       <details><summary>Is esports an afterthought?</summary><p>No. CS2 came first: HLTV map chances and veto history, roles, stand-ins and headshots all feed the CS2 card, and LoL has its own model. {{SPORT_LIST}} share one board.</p></details>
       <details><summary>What happens after I sign up?</summary><p>Checkout runs on Whop. Then sign in with Whop on this page and the board, player pages, Slip Studio and your saved picks open in the browser, on phone or desktop.</p></details>
@@ -305,7 +305,7 @@
     <div class="ctas center"><a class="btn primary" href="{{TRIAL_URL}}">Try it free for 1 day</a></div>
     <p class="terms">Then {{PRICE_M}}/month. Cancel anytime from your Whop account.</p>
     <p class="signin">Already a member? <a href="/auth/login">Sign in with Whop</a></p>
-    <p class="rg-close">For adults 21 and over. Prop Grader gives chances, not certainties. If gambling stops being fun, call 1-800-GAMBLER.</p>
+    <p class="rg-close">For adults 21 and over. Prop Grader gives chances, not certainties. If gambling stops being fun, call <span class="nw">1-800-GAMBLER</span>.</p>
   </div>
 </section>
 </main>
@@ -314,7 +314,7 @@
   <div class="wrap foot-in">
     <a class="brand" href="/" aria-label="Prop Grader home"><span class="mark" aria-hidden="true"><i></i></span><b>Prop<em>Grader</em></b></a>
     <nav aria-label="Footer"><a href="/record">Record</a><a href="/reviews">Reviews</a><a href="#pricing">Pricing</a><a href="/auth/login">Sign in</a></nav>
-    <p class="rg">Prop Grader gives chances, not certainties. Play only what you can afford to lose. For adults 21 and over. If gambling stops being fun, call 1-800-GAMBLER.</p>
+    <p class="rg">Prop Grader gives chances, not certainties. Play only what you can afford to lose. For adults 21 and over. If gambling stops being fun, call <span class="nw">1-800-GAMBLER</span>.</p>
   </div>
 </footer>
 <div class="dock" id="dock"><a class="btn primary" href="{{TRIAL_URL}}">Try free for 1 day · then {{PRICE_M}}/mo</a></div>
