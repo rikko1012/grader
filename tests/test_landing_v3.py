@@ -217,18 +217,20 @@ def frames(s):
 
 
 # ------------------------------------------------------------------------------------------------------------ the hero frames
-def test_frame_rows_any_letter_in_rule_order_with_the_first_row_highlighted(srv, monkeypatch):
+def test_frame_rows_any_letter_in_rule_order_with_no_row_highlighted(srv, monkeypatch):
     seed(srv, monkeypatch, board())
     s = build(srv).decode("utf-8")
-    rows = re.findall(r'<div class="br(?: hl)?"><span class="b-who"><b>([^<]+)</b>', s)
-    assert rows == ["Gap", "Mover", "Zeta"]           # rule order, two-app first; the first row is the highlight (a B- here)
-    assert s.count('<div class="br hl">') == 1 and '<div class="br hl"><span class="b-who"><b>Gap</b>' in s
+    rows = re.findall(r'<div class="br"><span class="b-who"><b>([^<]+)</b>', s)
+    assert rows == ["Gap", "Mover", "Zeta"]           # rule order, two-app first; the first row is the phone's (a B- here)
+    assert " hl" not in s.split('class="bt"')[1].split('<p class="cap hero-cap">')[0]      # critic round 7: no featured-row tint / rule
+    css = landing_v3.ASSETS["PAGE_CSS"].read_text(encoding="utf-8")
+    assert ".br.hl" not in css
     assert "NoLetter" not in s.split('class="bt"')[1].split('<p class="cap hero-cap">')[0] and ">Past<" not in s
     assert 'class="bfoot"' not in s                   # 3 graded props < MORE_MIN: never a small "of N" count
     mover = re.search(r'(?s)<div class="br"><span class="b-who"><b>Mover</b>.*?</span></div>', s).group(0)
     assert "<b>64.0%</b>" in mover and 'scaleX(0.640)' in mover
     assert '<span class="b-pk">Under</span>' in mover and '<i class="gb gc">B+</i>' in mover
-    gap = re.search(r'(?s)<div class="br hl"><span class="b-who"><b>Gap</b>.*?</div>', s).group(0)
+    gap = re.search(r'(?s)<div class="br"><span class="b-who"><b>Gap</b>.*?</div>', s).group(0)
     assert '<i class="gb gg">B-</i>' in gap
     frame = s.split('class="bt"')[1].split('<p class="cap hero-cap">')[0]
     assert "break-even" not in frame and "b-pe" not in s           # critic round 3: no board row prints its break-even
@@ -250,11 +252,11 @@ def test_highlight_is_the_first_two_app_market_by_position_never_merit(srv, monk
     b["records"].append(rec("NoBe", "kills", 22.5, "underdog", .700, "A", datetime.now(timezone.utc) + timedelta(hours=3), be=None))
     seed(srv, monkeypatch, b)
     s = build(srv).decode("utf-8")
-    assert re.findall(r'<div class="br(?: hl)?"><span class="b-who"><b>([^<]+)</b>', s) == ["Gap", "Mover", "Zeta", "NoBe"]
-    gap = re.search(r'(?s)<div class="br hl"><span class="b-who"><b>Gap</b>.*?</span></div>', s).group(0)
+    assert re.findall(r'<div class="br"><span class="b-who"><b>([^<]+)</b>', s) == ["Gap", "Mover", "Zeta", "NoBe"]
+    gap = re.search(r'(?s)<div class="br"><span class="b-who"><b>Gap</b>.*?</span></div>', s).group(0)
     assert '<span class="b-ln"><span>PP 13.5</span><span>UD 12.5</span></span>' in gap   # each app's line, raw, PrizePicks first
     assert "<b>51.0%</b>" in gap and "break-even" not in gap
-    assert '<p class="ph-who">Gap</p>' in s                                               # the phone mirrors the highlight
+    assert '<p class="ph-who">Gap</p>' in s                                               # the phone shows the first row
 
 
 def test_one_app_frames_never_say_each_apps_own_line():
@@ -267,7 +269,7 @@ def test_a_live_board_with_one_row_shows_the_dated_saved_board_but_inside_stays_
     seed(srv, monkeypatch, b)
     s = build(srv).decode("utf-8")
     frame = s.split('class="bt"')[1].split('<p class="cap hero-cap">')[0]
-    assert "public sample board, Nov 22, 2026." in s and ">Gap<" not in frame and s.count('<div class="br hl">') == 1
+    assert "public sample board, Nov 22, 2026." in s and ">Gap<" not in frame and " hl" not in frame
     assert "<small>Graded at Underdog’s line</small>" in s and "<span>Line</span>" in s and "each app" not in frame
     assert "Gap · Headshots · Maps 1-2" in s                              # the gap panel still reads the live board
     assert "graded on the board right now" not in s and 'class="bfoot"' not in s
@@ -280,7 +282,7 @@ def test_frame_picks_in_rule_order_never_the_boards_best_grades(srv, monkeypatch
     b["records"].append(rec("Late", "kills", 20.5, "underdog", .800, "A+", datetime.now(timezone.utc) + timedelta(hours=9)))
     seed(srv, monkeypatch, b)
     s = build(srv).decode("utf-8")
-    rows = re.findall(r'<div class="br(?: hl)?"><span class="b-who"><b>([^<]+)</b>', s)
+    rows = re.findall(r'<div class="br"><span class="b-who"><b>([^<]+)</b>', s)
     assert rows == ["Gap", "Mover", "Soon0", "Soon1", "Soon2", "Zeta"] and "Late" not in rows     # HERO_ROWS = 6 (critic round 6)
 def test_lines_print_as_the_member_board_prints_them(srv, monkeypatch):
     b = board()
@@ -343,11 +345,15 @@ def test_slip_stage_has_one_real_row_and_examples_with_no_real_numbers(srv, monk
     seed(srv, monkeypatch, board())
     s = build(srv).decode("utf-8")
     stage = block(s, '<div class="stage" id="ss">', '<p class="cap">Example animation.')
-    cards = re.findall(r'<div class="sbx" data-i="\d"><div class="sc(?: ph)?">(.*?)</div></div>(?=<div class="sbx"|</div>)', stage)
+    cards = re.findall(r'<div class="sbx" data-i="\d"><div class="sc(?: ph)?">(.*?)</div><span class="insl">', stage)
     # the first frame row in rule order other than the phone's (Gap) and the gap panel's (Gap): Mover - never the best estimate
     assert len(cards) == 4 and "<b>Mover</b>" in cards[0] and "<b>64.0%</b>" in cards[0] and "<small>model estimate</small>" in cards[0]
     assert stage.count('<div class="sc ph">') == 3 * 2 and s.count('class="btn btn-md ss-cta"') == 0
-    assert '<p class="ss-cta-p"><a class="tl ss-cta" href="' in s       # critic round 6: the text column's Try is a text link (one pill per view)
+    assert '<p class="ss-cta-p"><a class="btn ss-cta" href="' in s      # critic round 7: the pill sits in the text column (>=768)
+    assert '<p class="sports">' not in s                                # critic round 7: no sports line in the Slip text column
+    css = landing_v3.ASSETS["PAGE_CSS"].read_text(encoding="utf-8")
+    assert ".ss-go{display:none;" in css and ".ss-go{display:flex;grid-column:1;" in css          # the stage pill is phones only
+    assert stage.count('<span class="insl">') == 4 and stage.count("In slip") == 4    # moved cards say so (critic round 7)
     assert "Added to slip" not in stage and "ss-done" not in stage and "All 4 legs" not in stage and 'class="sad"' not in s
     # the one Slip pill: outside role=img AND outside the slip card (critic round 6), a child of the stage grid
     assert re.search(r'</div>\s*</div>\s*<a class="btn ss-go" href="[^"]+">Try Prop Grader free for 1&nbsp;day</a>\s*</div>\s*</div>', stage)
@@ -383,7 +389,7 @@ def test_record_table_and_decided_count_come_from_the_record_answers(srv, monkey
     seed(srv, monkeypatch, board())
     s = build(srv).decode("utf-8")
     rec = block(s, 'id="record"')
-    rows = re.findall(r'<tr><th scope="row"><span>([^<]+)</span><small>([^<]+)</small></th><td class="w">([\d,]+)</td><td class="l">([\d,]+)</td><td class="p">([\d,]+)</td></tr>', rec)
+    rows = re.findall(r'<tr><th scope="row"><span>(?:<b class="lg">)?([^<]+)(?:</b><b class="sh" aria-hidden="true">LoL</b>)?</span><small>([^<]+)</small></th><td class="w">([\d,]+)</td><td class="l">([\d,]+)</td><td class="p">([\d,]+)</td></tr>', rec)
     assert [r[0] for r in rows] == ["CS2", "League of Legends", "NBA", "NFL"] and rows[0][1:] == ("40 matches", "100", "90", "2")
     decided = sum(int(w) + int(l) for _n, _m, w, l, _p in rows)
     assert decided == 1010
@@ -447,19 +453,20 @@ def test_review_cards_escape_feature_by_rule_and_leave_handles_off(srv, monkeypa
     quotes = re.findall(r"<blockquote><p>&ldquo;(.*?)&rdquo;</p></blockquote>", m)
     assert len(quotes) == 3                       # complete reviews first, then ONE excerpt fills the row (critic round 4, reverses D38)
     assert quotes[0].startswith("The cards explain every lean") and quotes[1] == "Reasons behind each prop are great for me"
-    assert quotes[2] == "Love the stats and reasons behind each prop.\u00a0…"     # whole sentences + an ellipsis where the rest was left out (round 6)
+    assert quotes[2] == "Love the stats and reasons behind each prop."     # whole sentences, no ellipsis (critic round 7)
     assert '<p class="st-t">A member ran his first ever 6&nbsp;man with Grader and cashed.</p>' in m   # Prop Grader's post: no quote marks
     caps = re.findall(r"<figcaption>(Paying member[^<]*)", m)
     assert [c.strip() for c in caps] == ["Paying member, Nov 16, 2026"] * 3 and not any(n in m for n in ("longform", "slipper", "earner"))
     assert "Hit big" not in m and "profitable" not in m and "YALL" not in m and "guaranteed" not in m and "Paying member ·" not in m
-    assert m.count('<a class="tl" href="/reviews">Full review</a>') == 1 and m.count("…") == 1 and "2026.<" not in m   # the excerpt links its review
+    assert m.count('<a class="tl" href="/reviews">Full review</a>') == 1 and "…" not in m and "2026.<" not in m   # the excerpt links its review
     assert ('<p class="rv-line"><a href="/reviews"><span aria-hidden="true"><span class="star">★</span>&nbsp;4.8 ·&nbsp;</span>'
             '<span class="sr-only">Rated 4.8 out of 5 from </span>12 reviews, all published</a></p>') in m
     assert "st-r" not in m and m.count("4.8") == 2                    # one rating line beside the H2; the 6-man card is the post only
-    # critic round 6: the members' reviews sit under the H2; Prop Grader's own post follows with its own source label
-    assert m.index('class="rqs n3"') < m.index('class="story"') and '<p class="st-k">From Prop Grader on X</p>' in m
+    # brief 8 / critic round 7: Prop Grader's own post is the featured card under the H2 (its own source label first), then the reviews
+    assert m.index('class="story"') < m.index('class="rqs n3"') and '<p class="st-k">From Prop Grader on X</p>' in m
+    assert m.index('<p class="st-k">') < m.index('<p class="st-t">')
     assert '<h2 id="rv-title">Members, in their words.</h2>' in m
-    assert "Shared by Prop Grader on X. One member, one night: a result, not a promise." in m
+    assert '<p class="st-by">One member, one night: a result, not a promise.</p>' in m and "Shared by" not in m   # attributed once
 def test_review_order_cut_rule_and_curly_apostrophes():
     rv = {"summary": {"count": 3}, "reviews": [
         review(1, "a", "Love the stats and the reasons. Paid me big last week, money every day."),            # cut, 6 words left: fill
@@ -475,8 +482,8 @@ def test_review_order_cut_rule_and_curly_apostrophes():
                                                  "Love the stats and the reasons."]
     _h, cards, _n, _a = landing_v3.wall(rv)
     assert "You’ve got the stats right there, it’s the best board." in cards and "&#x27;" not in cards
-    # an ellipsis on the side that was cut (both excerpts here keep their first sentence and drop the rest)
-    assert "I build.\u00a0…&rdquo;" in cards and "the reasons.\u00a0…&rdquo;" in cards and cards.count("…") == 2 and cards.count("Full review") == 2
+    # excerpts are whole sentences: no ellipsis (critic round 7), each links its full review
+    assert "I build.&rdquo;" in cards and "the reasons.&rdquo;" in cards and "…" not in cards and cards.count("Full review") == 2
 
 
 def test_an_excerpt_is_one_run_of_consecutive_sentences():
@@ -584,9 +591,9 @@ def test_links_go_to_the_trial_and_weekly_checkouts(srv, monkeypatch):
     assert '<html lang="en" data-ui-v3="1" data-v3-page="landing" data-sc-sport="cs2" data-theme="dark" style="color-scheme:dark">' in s
     trial, week = JOIN.replace("&", "&amp;"), WEEK.replace("&", "&amp;")
     btns = re.findall(r'<a class="btn[^"]*"[^>]*href="([^"]+)"[^>]*>([^<]+)</a>', s)
-    assert len(btns) == 6 and {h for h, _t in btns} == {trial}          # nav, hero, the Slip pill (brief 6b), pricing, final, phone bar
-    assert sorted(t for _h, t in btns) == sorted(["Try free", "Try free for 1&nbsp;day"] + ["Try Prop Grader free for 1&nbsp;day"] * 4)
-    assert re.findall(r'<a class="tl ss-cta" href="([^"]+)">Try Prop Grader free for 1&nbsp;day</a>', s) == [trial]   # the Slip text link
+    assert len(btns) == 7 and {h for h, _t in btns} == {trial}          # nav, hero, the Slip pill x2 (one per view), pricing, final, phone bar
+    assert sorted(t for _h, t in btns) == sorted(["Try free", "Try free for 1&nbsp;day"] + ["Try Prop Grader free for 1&nbsp;day"] * 5)
+    assert re.findall(r'<a class="btn ss-cta" href="([^"]+)">Try Prop Grader free for 1&nbsp;day</a>', s) == [trial]   # the Slip pill (>=768)
     whop = re.findall(r'href="(https://whop\.com/[^"]+)"', s)
     assert set(whop) == {trial, week} and whop.count(week) == 1 and (f'<p class="wk">Prefer weekly? <a href="{week}">$9.99/week</a><span class="wk-dot"> · </span>'
                                                                        '<span class="nw wk-s">Secure checkout on Whop</span></p>') in s
@@ -987,13 +994,19 @@ def test_record_caption_ties_to_the_proof_number_and_names_the_missing_sports(sr
     rec = block(s, 'id="record"')
     n = re.findall(r'data-to="(\d+)"', s)[1]                                 # [0] is +46U, [1] the record's decided count
     assert f"<caption>{int(n):,} decided picks, by sport</caption>" in rec and "Every decided pick" not in rec
-    assert '<th scope="col" class="nc">Push<span class="nc-d"> · </span><span class="nc-s">not counted</span></th>' in rec
+    assert '<th scope="col">Push<span class="sr-only"> (not counted)</span></th>' in rec
+    # critic round 7: one caption under the table (rulebook 3); pushes and the missing sports in it
+    caps = re.findall(r'<p class="cap">([^<]+)</p>', rec)
+    assert len(caps) == 1 and caps[0].endswith(". " + landing_v3.ledger_note(landing_v3._inputs(srv, False)["record"], landing_v3.sports_on())) and "rec-gap" not in s
     rec_sp = {k: {"totals": {"wins": 3, "losses": 2}} for k in ("cs2", "lol")}
-    assert landing_v3.ledger_gap(rec_sp, ["cs2", "lol", "soccer", "tennis"]) == "Soccer and tennis are graded on the board, not on the public record yet."
-    assert landing_v3.ledger_gap(rec_sp, ["cs2", "tennis"]) == "Tennis is graded on the board, not on the public record yet."
+    assert landing_v3.ledger_gap(rec_sp, ["cs2", "lol", "soccer", "tennis"]) == "Soccer and tennis are not on the record yet."
+    assert landing_v3.ledger_gap(rec_sp, ["cs2", "tennis"]) == "Tennis is not on the record yet."
+    assert landing_v3.ledger_note(rec_sp, ["cs2", "tennis"]) == "Pushes not counted; tennis is not on the record yet."
+    assert landing_v3.ledger_note(rec_sp, ["cs2", "lol"]) == "Pushes not counted."
     assert landing_v3.ledger_gap(rec_sp, ["cs2", "lol", "nba"]) == ""                    # nba's read failed: an outage, never named
     rec_sp["nfl"] = {"totals": {"wins": 0, "losses": 0, "pushes": 1}}
     assert landing_v3.ledger_gap(rec_sp, ["cs2", "nfl"]) == "NFL has no decided picks yet."
+    assert landing_v3.ledger_note(rec_sp, ["cs2", "nfl", "soccer"]) == "Pushes not counted; soccer is not on the record yet; NFL has no decided picks yet."
     assert landing_v3.ledger_gap({}, ["soccer"]) == ""                                   # no record at all: no table, no line
 
 
@@ -1026,12 +1039,13 @@ def test_phone_why_list_is_the_briefs_four_rows_never_a_stake_or_verdict():
 
 
 def test_hero_shows_up_to_six_rows_in_rule_order():
-    """Critic round 6: the board reaches the phone (6 rows, one per player, rule order); a thinner board is held to a 48 px phone
-    overhang by the stretched browser column in CSS."""
+    """Critic round 6: the board reaches the phone (6 rows, one per player, rule order). Round 7: the frame is as tall as its rows
+    (never stretched into an empty well) and the phone starts at the frame's top (a short board lets it hang below on purpose)."""
     assert landing_v3.HERO_ROWS == 6
     css = landing_v3.ASSETS["PAGE_CSS"].read_text(encoding="utf-8")
-    assert ".pcol{grid-area:1 / 1;align-self:stretch;display:flex;flex-direction:column;min-width:0;margin:0 16px 48px 0}" in css
-    assert ".pcol>.browser{flex:1}" in css and ".ph-why li.oa{display:none}" in css
+    assert ".pcol{grid-area:1 / 1;align-self:start;display:flex;flex-direction:column;min-width:0;margin:0 16px 0 0}" in css
+    assert ".pcol>.browser{flex:1}" not in css and ".ph-why li.oa{display:none}" in css
+    assert "z-index:10;margin:0;width:288px" in css                    # the phone's top = the frame's top
 
 
 def test_members_heading_says_in_their_words_only_over_member_reviews(srv, monkeypatch):
@@ -1039,4 +1053,23 @@ def test_members_heading_says_in_their_words_only_over_member_reviews(srv, monke
     seed(srv, monkeypatch, board(), rv={"summary": {"count": 0}, "reviews": []})
     m = block(build(srv).decode("utf-8"), 'id="members"')
     assert '<h2 id="rv-title">Members.</h2>' in m and "in their words" not in m and 'class="rqs' not in m
-    assert '<p class="st-k">From Prop Grader on X</p>' in m and "Shared by Prop Grader on X." in m
+    assert '<p class="st-k">From Prop Grader on X</p>' in m and "One member, one night: a result, not a promise." in m
+
+
+def test_round7_frame_count_line_and_how_it_works_fragments(srv, monkeypatch):
+    """Critic round 7: a full board says how many more graded props members get (a count, never a pick); How it works opens each step
+    with a cropped product fragment built from the page's own data (sport tabs, the phone row's grade + model estimate, a locked slot)."""
+    b = board()
+    s0 = datetime.now(timezone.utc) + timedelta(hours=2)
+    b["records"] += [rec(f"More{i}", "kills", 20.5, "underdog", .55, "B", s0 + timedelta(minutes=i)) for i in range(30)]
+    seed(srv, monkeypatch, b)
+    s = build(srv).decode("utf-8")
+    shown = len(re.findall(r'<div class="br"><span class="b-who">', s))
+    foot = re.search(r'<p class="bfoot">(\d+) more graded CS2 props on the member board\.</p>', s)
+    assert shown == landing_v3.HERO_ROWS and foot and int(foot.group(1)) > 0 and "Showing" not in s
+    how = block(s, 'id="how"', "</section>")
+    assert how.count('<div class="frag ') == 3 and how.count('aria-hidden="true"><span class="ftabs">') == 1
+    assert '<i class=on>CS2</i>' in how and "<i>LoL</i>" in how
+    ph = re.search(r'<p class="ph-pr"><b>([\d.]+)%</b><i class="gb (\w+)">([^<]+)</i></p>', s)
+    assert f'<i class="gb {ph.group(2)}">{ph.group(3)}</i><b>{ph.group(1)}%</b>' in how          # the phone row's own values
+    assert '<span class="bl">00.0%</span>' in how and "every sport on the board." in how

@@ -88,7 +88,8 @@ OWNER_UNITS = 46
 OWNER_POST = "on Grader 4 mans in the past week, and Grader has only been live 2 weeks."
 OWNER_POST_BY = "Trey on X, Nov 20, 2026"
 OWNER_STORY = "A member ran his first ever 6 man with Grader and cashed."
-OWNER_STORY_BY = "Shared by Prop Grader on X. One member, one night: a result, not a promise."
+# the card's label ("From Prop Grader on X") carries the attribution, so the caption does not repeat it (critic round 7)
+OWNER_STORY_BY = "One member, one night: a result, not a promise."
 # The Slip Studio stage's other sports: no public sample rows exist for them, so they are labelled examples (owner brief 6b said
 # "placeholder"; critic round 2: that word read as an unfinished site) and their value slot is a lock + "Members only" - never
 # digits, never a made-up name or stat.
@@ -407,18 +408,17 @@ def _meter(p):
 
 def frame_rows(shown, hl=False):
     """The browser frame's rows (a picture inside an aria-hidden frame): player + prop | each app's line | pick | model estimate +
-    meter | grade. Lines print exactly as the member board prints them. hl: the first row is the highlighted one (tinted; the
-    board row prints no break-even)."""
+    meter | grade. Lines print exactly as the member board prints them. No row is tinted or ruled (critic round 7: a highlighted row
+    reads as a featured pick; the phone says which row it shows). hl is kept for callers and ignored."""
     out = []
-    for i, (rs, _gap, _moved) in enumerate(shown):
+    for rs, _gap, _moved in shown:
         lead = rs[0]
         pl, mk, sc = lead.get("player") or {}, lead.get("market") or {}, lead.get("scout") or {}
         p = _pct(sc.get("p_side"))
         lines = "".join(f'<span>{_tag(r)} {esc(_num((r.get("offer") or {}).get("line")))}</span>' for r in _by_app(rs))
         g = sc.get("grade") or ""
-        on = bool(hl and i == 0)
         est = f'<span class="b-p"><b>{esc(p)}%</b>{_meter(sc.get("p_side"))}</span>'
-        out.append(f'<div class="br{" hl" if on else ""}"><span class="b-who"><b>{esc(pl.get("name"))}</b>'
+        out.append(f'<div class="br"><span class="b-who"><b>{esc(pl.get("name"))}</b>'
                    f'<small>{esc(mk.get("stat_label"))} · {esc(mk.get("period_label"))}</small></span>'
                    f'<span class="b-ln">{lines}</span><span class="b-pk">{_side(lead)}</span>'
                    f'{est}<span class="b-g"><i class="gb {gcls(g)}">{esc(_grade_text(g, _side(lead)))}</i></span></div>')
@@ -550,7 +550,10 @@ def slip_cards(real):
                      f'<small>{prop}{" · " + per if per else ""}</small></span>'
                      f'<span class="sv mo">{LOCK}</span>')
     cls = lambda i: "sc" if i == 0 else "sc ph"          # noqa: E731
-    board = "".join(f'<div class="sbx" data-i="{i}"><div class="{cls(i)}">{c}</div></div>' for i, c in enumerate(cards))
+    # a card that has moved keeps its place under a lighter veil with an "In slip" mark (critic round 7: moved, not missing)
+    insl = ('<span class="insl"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>'
+            '<span class="insl-t">In slip</span></span>')
+    board = "".join(f'<div class="sbx" data-i="{i}"><div class="{cls(i)}">{c}</div>{insl}</div>' for i, c in enumerate(cards))
     slots = "".join(f'<div class="slot" data-i="{i}"><div class="{cls(i)}">{c}</div></div>' for i, c in enumerate(cards))
     return board, slots
 
@@ -747,7 +750,8 @@ def ledger(record):
         a = _ts(d.get("as_of"))
         asof = a if asof is None or (a and a < asof) else asof
         n = t.get("matches")
-        rows.append(f'<tr><th scope="row"><span>{LONG[sp]}</span>{f"<small>{int(n):,} {esc(t.get("match_word") or "matches")}</small>" if n else ""}</th>'
+        nm = LONG[sp] if LONG[sp] == LABEL[sp] else f'<b class="lg">{LONG[sp]}</b><b class="sh" aria-hidden="true">{LABEL[sp]}</b>'
+        rows.append(f'<tr><th scope="row"><span>{nm}</span>{f"<small>{int(n):,} {esc(t.get("match_word") or "matches")}</small>" if n else ""}</th>'
                     f'<td class="w">{w:,}</td><td class="l">{l:,}</td><td class="p">{p:,}</td></tr>')
     if not rows:
         return "", 0, ""
@@ -755,14 +759,24 @@ def ledger(record):
 
 
 def ledger_gap(record, sp):
-    """The one line under the record table for the board's sports the table does not show (critic round 6: six sports are promised,
-    the table proves four, and the gap must not read as a hidden record). Two cases, each only when it is true:
-    - a sport the public record does not cover at all (not in SPORTS: soccer, tennis) -> "... graded on the board, not on the public
-      record yet";
+    """The board's sports the table does not show, as sentences (critic round 6: six sports are promised, the table proves four, and
+    the gap must not read as a hidden record). '' when nothing is missing. The page prints ledger_note (one caption, round 7)."""
+    return " ".join(c[:1].upper() + c[1:] + "." for c in _gap_clauses(record, sp))
+
+
+def ledger_note(record, sp):
+    """The record's one caption tail after "From <source>, <date>." (critic round 7: one caption per section): "Pushes not counted;
+    soccer and tennis are not on the record yet." - pushes first, then the gap clauses in mid-sentence casing."""
+    return "; ".join(["Pushes not counted"] + _gap_clauses(record, sp)) + "."
+
+
+def _gap_clauses(record, sp):
+    """Two cases, each only when it is true:
+    - a sport the public record does not cover at all (not in SPORTS: soccer, tennis) -> "... not on the record yet";
     - a record sport whose ledger LOADED with nothing decided -> "... no decided picks yet".
-    A record sport whose read failed (no doc) is never named: that is an outage, not an empty record. '' when nothing is missing."""
+    A record sport whose read failed (no doc) is never named: that is an outage, not an empty record."""
     if not record:
-        return ""
+        return []
     off = [s for s in sp if s not in SPORTS]
     empty = []
     for s in sp:
@@ -772,14 +786,11 @@ def ledger_gap(record, sp):
             empty.append(s)
     out = []
     low = lambda xs: _list([LONG[x] if x in SPORTS else LONG[x].lower() for x in xs])      # noqa: E731 (mid-sentence: soccer, tennis)
-    up = lambda t: t[:1].upper() + t[1:]                                                  # noqa: E731
     if off:
-        names = up(low(off))
-        out.append(f"{names} {'are' if len(off) > 1 else 'is'} graded on the board, not on the public record yet.")
+        out.append(f"{low(off)} {'are' if len(off) > 1 else 'is'} not on the record yet")
     if empty:
-        names = up(low(empty))
-        out.append(f"{names} {'have' if len(empty) > 1 else 'has'} no decided picks yet.")
-    return " ".join(out)
+        out.append(f"{low(empty)} {'have' if len(empty) > 1 else 'has'} no decided picks yet")
+    return out
 
 
 # ----------------------------------------------------------------------------------------------------------------- the reviews
@@ -855,9 +866,8 @@ def wall(doc):
     for r, quote, cut, _old in featured(doc):
         d = _ts(r.get("created"))
         more = ' <a class="tl" href="/reviews">Full review</a>' if cut else ""
-        if cut:                                          # an excerpt says so inside the quote marks (critic round 6): an ellipsis on
-            full = " ".join(_sentences(r.get("body")))   # each side where sentences were left out, so it never reads as the whole review
-            quote = ("…\u00a0" if not full.startswith(quote) else "") + quote + ("\u00a0…" if not full.endswith(quote) else "")   # nbsp: never a lone …
+        # an excerpt is always a run of whole sentences, so it prints with no ellipsis (critic round 7: ". …" read as a broken cut);
+        # the card's "Full review" link says there is more
         cards.append(f'<li><figure class="rq"><blockquote><p>&ldquo;{esc(curly(quote))}&rdquo;</p></blockquote>'
                      f'<figcaption>Paying member, {esc(_date(d))}{more}</figcaption></figure></li>')
     head = (f"from {n} reviews, all published" if avg is not None else "reviews, all published")
@@ -950,9 +960,14 @@ def build(srv, join_url, fetch=True):
         # the frame's sidebar: the long name, and the short one the 1024-1279 layout shows (a nav label never truncates)
         "SPORT_NAV": "".join(f'<li{" class=on" if s == "cs2" else ""}><span class="lg">{LONG[s]}</span><span class="sh">{LABEL[s]}</span></li>'
                              for s in sp),
+        # How it works (critic round 7): a cropped product fragment above each step, built from what the page already shows - the
+        # sport tabs (CS2 on), the phone row's grade + model estimate (blurred placeholder glyphs when there is no row), a locked slot
+        "HOW_TABS": "".join(f'<i{" class=on" if s == "cs2" else ""}>{LABEL[s]}</i>' for s in sp),
+        "HOW_EST": (f'<i class="gb {ph["PH_GCLS"]}">{ph["PH_G"]}</i><b>{ph["PH_P"]}%</b>{ph["PH_METER"]}' if ph else
+                    f'{LOCK}<b class="bl">00.0%</b><span class="mt"><i style="transform:scaleX(0)"></i></span>'),
         "FRAME_ROWS": frame_rows(shown, hl), "FRAME_SR": frame_sr(shown),
         "FRAME_SUB": esc(fsub), "FRAME_LN_H": esc(flh),
-        "FRAME_MORE": esc(f"Showing {len(shown)} of {live_n:,} graded props on the board.") if more_n > 0 else "",
+        "FRAME_MORE": esc(f"{more_n:,} more graded CS2 props on the member board.") if more_n > 0 else "",
         "FRAME_CAP": esc(f"Example rows from the public sample board{', ' + bdate if bdate else ''}. "
                          "A model estimate is a chance, not a promise."),
         # phones show the phone frame only (one prop, no rows): the caption says so (critic round 6); CSS picks one per width
@@ -961,7 +976,7 @@ def build(srv, join_url, fetch=True):
         **ph, **gp, **pm,
         "POOL_ROW": "" if pm else " solo",
         "SS_CARDS": cards_ss[0], "SS_SLOTS": cards_ss[1], "SS_WHO": real.get("SS_WHO", ""),
-        "LEDGER_ROWS": rows, "LEDGER_ASOF": esc(asof),
+        "LEDGER_ROWS": rows, "LEDGER_ASOF": esc(asof), "LEDGER_NOTE": esc(ledger_note(inp["record"], sp)),
         "LEDGER_TOTAL": tot_s, "LEDGER_GAP": esc(ledger_gap(inp["record"], sp)), "LEDGER_N": str(total), "LEDGER_W": str(len(tot_s)),
         "REC_SRC": esc(f"{re.sub(r'^https://', '', base)}/record") if base else "the public record",
         "RV_HEAD": head, "RV_CARDS": cards, "RV_N": str(nrv),
@@ -980,7 +995,7 @@ def build(srv, join_url, fetch=True):
     out = _template()
     # optional blocks: <!--if:NAME--> ... <!--/if:NAME--> kept only when NAME has content
     for name, on in (("FRAME", bool(pick)), ("PHONE", bool(ph)), ("GAP", bool(gp)), ("POOL", bool(pm)), ("SLIP", bool(real)),
-                     ("LEDGER", bool(rows)), ("TOTAL", bool(total)), ("LGAP", bool(rows and ledger_gap(inp["record"], sp))), ("REVIEWS", bool(nrv)), ("RVCARDS", bool(cards)),
+                     ("LEDGER", bool(rows)), ("TOTAL", bool(total)), ("REVIEWS", bool(nrv)), ("RVCARDS", bool(cards)),
                      ("BASE", bool(base)), ("INSIDE", bool(gp or pm)), ("FMORE", bool(more_n > 0))):
         out = re.sub(rf"<!--if:{name}-->(.*?)<!--/if:{name}-->", (lambda m: m.group(1)) if on else "", out, flags=re.S)
     out = re.sub(r"\{\{([A-Z_0-9]+)\}\}", lambda m: fill.get(m.group(1), ""), out)

@@ -182,16 +182,19 @@ def test_landing_v3_product_pictures_are_view_only(browser, lbase):
         page.locator(".br:not(.br-h)").first.click()
         page.locator(".phone .ph-why").click()                                         # the phone picture is inert too
         assert page.content() == before                                                # nothing opens, toggles or reveals
-        # critic round 6: at >=1024 the phone overhangs the browser by at most 48 px whatever the row count; 3 Why rows, no note
+        # critic round 7: at >=1024 the frame is as tall as its rows and the phone starts at its top (a full 6-row board holds the
+        # phone; a short one lets it hang below on purpose, never an empty well in the frame); 3 Why rows, no note
         for w in (1440, 1024):
             page.set_viewport_size({"width": w, "height": 900})
             page.wait_for_timeout(100)
             geo = page.evaluate("""() => { const b = document.querySelector('.browser').getBoundingClientRect(),
                 p = document.querySelector('.phone').getBoundingClientRect(), c = document.querySelector('.hero-cap').getBoundingClientRect();
-                return {over: p.bottom - b.bottom, capGap: c.top - Math.max(p.bottom, b.bottom),
+                const rows = [...document.querySelectorAll('.br:not(.br-h)')], last = rows.at(-1).getBoundingClientRect();
+                const foot = document.querySelector('.bfoot'), end = foot ? foot.getBoundingClientRect().bottom : last.bottom;
+                return {over: p.bottom - b.bottom, top: p.top - b.top, well: b.bottom - end, capGap: c.top - Math.max(p.bottom, b.bottom),
                         why: [...document.querySelectorAll('.ph-why li')].filter(e => e.offsetParent).length,
                         note: !!document.querySelector('.ph-add').offsetParent} }""")
-            assert geo["over"] <= 48.5 and geo["capGap"] >= 23.5 and geo["why"] <= 3 and not geo["note"], (w, geo)
+            assert abs(geo["top"]) < 1 and geo["well"] <= 26 and geo["capGap"] >= 23.5 and geo["why"] <= 3 and not geo["note"], (w, geo)
         tabbed = []
         for _ in range(40):
             page.keyboard.press("Tab")
@@ -209,8 +212,8 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
         assert page.locator("#ss-st").text_content() == "Slip ready"
         assert page.locator("#ss .ss-go").is_visible() and page.locator("#ss .ss-go").get_attribute("href") == JOIN   # brief 6b: the slip CTA
         assert page.locator(".ss-board").is_visible()                                  # phones: a 2x2 strip of mini cards above the slip
-        # end frame: every source card stays in its box, dimmed to 30% by a 70% veil (brief 6b; the text keeps full contrast)
-        assert page.evaluate("[...document.querySelectorAll('.sbx')].every(e => getComputedStyle(e, '::after').opacity === '0.7' && getComputedStyle(e.firstElementChild).opacity === '1')")
+        # end frame: every source card stays in its box under a 45% veil with an "In slip" mark (critic round 7: moved, not missing)
+        assert page.evaluate("[...document.querySelectorAll('.sbx')].every(e => getComputedStyle(e, '::after').opacity === '0.45' && getComputedStyle(e.firstElementChild).opacity === '1' && getComputedStyle(e.querySelector('.insl')).opacity === '1')")
         assert page.locator(".sad, .ss-done").count() == 0
         assert page.evaluate("[...document.querySelectorAll('.rv')].every(e => getComputedStyle(e).opacity === '1')")
         assert page.evaluate("[...document.querySelectorAll('.slot .sc')].every(e => getComputedStyle(e).opacity === '1')")
@@ -226,7 +229,8 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
         assert page.evaluate("getComputedStyle(document.querySelector('.ss-go')).visibility") == "hidden"   # fades in only at Slip ready
         page.wait_for_function("document.getElementById('ss').classList.contains('ready')", timeout=8000)
         page.wait_for_timeout(600)
-        assert page.locator("#ss .slot.on").count() == 4 and page.locator("#ss a").count() == 1 and page.locator("#ss .ss-go").is_visible()
+        assert page.locator("#ss .slot.on").count() == 4 and page.locator("#ss a").count() == 1 and not page.locator("#ss .ss-go").is_visible()
+        assert page.locator(".slip-copy .ss-cta").is_visible()                    # >=768 the one Slip pill is in the text column (round 7)
         page.wait_for_timeout(3000)
         assert page.locator("#ss-st").text_content() == "Slip ready"                  # holds: no loop
         page.evaluate("window.scrollTo(0, 0)")
@@ -247,7 +251,7 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
         assert page.locator("#ss .slot.on").count() == 4 and page.evaluate("[...document.querySelectorAll('.ghost')].length") == 0
         assert page.locator("#ss .sbx.gone").count() == 4                            # each flown card stays, dimmed (brief 6b)
         page.wait_for_timeout(600)
-        assert page.evaluate("[...document.querySelectorAll('.sbx')].every(e => getComputedStyle(e, '::after').opacity === '0.7')")
+        assert page.evaluate("[...document.querySelectorAll('.sbx')].every(e => getComputedStyle(e, '::after').opacity === '0.45')")
         assert page.evaluate("getComputedStyle(document.querySelector('.ss-go')).opacity") == "1"
         assert not page.errors, page.errors
     finally:

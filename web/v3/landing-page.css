@@ -106,16 +106,15 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 
 /* product: browser frame + phone frame (view-only pictures, aria-hidden) */
 .product{position:relative;display:grid;grid-template-columns:minmax(0,1fr);margin-top:40px}
-/* the browser column stretches to the row (phone 56 px down + its height) less 48 px: a thin board never leaves the phone hanging
-   more than 48 px under the frame (critic round 6); a taller board simply runs past the phone */
-.pcol{grid-area:1 / 1;align-self:stretch;display:flex;flex-direction:column;min-width:0;margin:0 16px 48px 0}
-.pcol>.browser{flex:1}
+/* the browser frame is as tall as its rows (critic round 7: a stretched frame left an empty well under a short board); the phone
+   starts at the frame's top, so a full board holds it and a short one lets it hang below on purpose */
+.pcol{grid-area:1 / 1;align-self:start;display:flex;flex-direction:column;min-width:0;margin:0 16px 0 0}
 .browser{position:relative;display:flex;flex-direction:column;background:var(--color-surface);border:1px solid var(--color-border);border-radius:12px;overflow:hidden}
-.bw-bar{display:grid;grid-template-columns:1fr minmax(0,320px) 1fr;align-items:center;height:40px;padding:0 16px;background:var(--color-raised);border-bottom:1px solid var(--color-divider)}
+.bw-bar{display:grid;grid-template-columns:1fr minmax(0,320px) 1fr;column-gap:12px;align-items:center;height:40px;padding:0 16px;background:var(--color-raised);border-bottom:1px solid var(--color-divider)}
 .dots{display:flex;gap:6px}
 .dots i{width:10px;height:10px;border-radius:50%;background:var(--sc-edge-hover)}
 .url{display:flex;align-items:center;justify-content:center;height:26px;padding:0 12px;border-radius:6px;background:var(--color-page);color:var(--color-text-caption);font:400 13px/1 var(--mono);white-space:nowrap;overflow:hidden}
-.bw-bar .tag{justify-self:end}
+.bw-l{display:flex;align-items:center;gap:12px;min-width:0}
 .bw-body{flex:1;display:grid;grid-template-columns:200px minmax(0,1fr)}
 .side{border-right:1px solid var(--color-divider);padding:16px}
 .side .sk{color:var(--color-text-caption);font-size:12px;font-weight:500;line-height:1.3;padding:0 8px;margin:4px 0 8px}
@@ -145,10 +144,7 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 .b-pk{color:var(--color-text-body);font-size:14px}
 .b-p{display:flex;align-items:center;justify-content:flex-end;gap:8px}
 .b-p b{width:44px;text-align:right;font-size:14px;font-weight:500}
-/* the highlighted row (the phone's, first in the neutral rule order): s2 tint, a 2 px accent rule; no break-even on the board */
-.br.hl{position:relative;background:var(--color-raised)}
-.br.hl::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--sc-accent)}
-.br.hl .b-who b{color:var(--color-text);font-weight:600}
+/* no row is tinted or ruled: rows stay in the neutral rule order with no featured signal (critic round 7) */
 .b-g{display:flex;justify-content:flex-end}
 .mt{position:relative;display:block;width:64px;height:4px;border-radius:2px;background:var(--meter-track);overflow:hidden;flex:none}
 .mt i{position:absolute;inset:0;border-radius:2px;background:var(--meter-fill);transform-origin:0 50%}
@@ -157,14 +153,14 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 .gb.gc{border-color:var(--sc-accent);color:var(--sc-accent)}
 .ph-pr .gb{width:44px;height:32px;font-size:16px}
 
-.phone{grid-area:1 / 1;justify-self:end;align-self:start;position:relative;z-index:10;margin:56px 0 0 0;width:288px;border-radius:44px;background:var(--color-frame);padding:10px;border:1px solid var(--color-border)}
+.phone{grid-area:1 / 1;justify-self:end;align-self:start;position:relative;z-index:10;margin:0;width:288px;border-radius:44px;background:var(--color-frame);padding:10px;border:1px solid var(--color-border)}
 .ph-scr{position:relative;border-radius:34px;background:var(--color-page);border:1px solid var(--sc-edge-hover);padding:0 16px 16px;display:flex;flex-direction:column}
-.island{position:absolute;left:50%;top:11px;width:84px;height:26px;margin-left:-42px;border-radius:13px;background:var(--color-frame)}
-.ph-st{display:flex;align-items:center;justify-content:space-between;height:48px;margin:0 -16px;padding:0 18px 0 22px;font-size:13px;color:var(--color-text)}
+.island{position:absolute;left:50%;top:11px;width:72px;height:26px;margin-left:-36px;border-radius:13px;background:var(--color-frame)}
+.ph-st{display:flex;align-items:center;justify-content:space-between;height:48px;margin:0 -16px;padding:0 20px;font-size:13px;color:var(--color-text)}
 .ph-st b{font-weight:600}
-.sg{display:flex;align-items:center;gap:5px}
-.sg svg{display:block;height:12px;width:16px;fill:var(--color-text)}
-.sg svg.bat{width:26px}
+.sg{display:flex;align-items:center;gap:4px}
+.sg svg{display:block;height:11px;width:14px;fill:var(--color-text)}
+.sg svg.bat{width:22px}
 .sg .o,.sg svg.o path{fill:none;stroke:var(--color-text);stroke-width:1.5;stroke-linecap:round}
 .sg svg.bat .o{opacity:.5}
 .ph-back{display:flex;align-items:center;justify-content:space-between;height:32px;margin-top:4px;color:var(--color-text-body);font-size:14px}
@@ -192,7 +188,6 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 .hero-cap .cap-m{display:none}
 
 /* proof strip: three plain columns */
-.proof{border-top:1px solid var(--color-border)}
 .pf{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:64px 0}
 .pc{display:grid;grid-template-rows:auto 1fr auto;padding:0 48px;border-left:1px solid var(--color-border)}
 .pc:first-child{border-left:0;padding-left:0}
@@ -209,7 +204,7 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 .pf-solo .pl{margin-left:auto;margin-right:auto}
 
 /* sections */
-.sec{padding:96px 0;border-top:1px solid var(--color-border)}
+.sec{padding:96px 0}
 .sec.slip,.sec.pricing{padding:144px 0}
 .hd4{grid-column:1 / span 5}
 .hd4 h2{max-width:none}
@@ -218,13 +213,26 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 /* how it works (brief 5): eyebrow + full-width H2, then three columns with 01/02/03, hairline tops, no cards */
 .how-hd h2{max-width:18ch}
 .steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:48px;margin-top:56px}
-.steps li{display:block;padding-top:24px;border-top:1px solid var(--color-divider)}
+.steps li{display:block}
+.frag{display:flex;flex-direction:column;justify-content:center;gap:12px;height:120px;margin-bottom:24px;padding:0 20px;overflow:hidden;
+  background:var(--color-surface);border:1px solid var(--color-border);border-radius:12px}
+.ftabs{display:flex;flex-wrap:wrap;gap:8px;white-space:nowrap}
+.ftabs i{display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--color-divider);color:var(--color-text-body);font-size:13px;font-style:normal;font-weight:500}
+.ftabs i.on{border-color:var(--sc-accent);color:var(--color-text)}
+.fest{display:flex;align-items:center;gap:12px}
+.fest b{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1}
+.fest .mt{flex:1;width:auto;height:6px;border-radius:3px}
+.fest .gb{width:44px;height:32px;font-size:16px}
+.fr-est small{color:var(--color-text-caption);font-size:13px;line-height:1.4}
+.fslot{display:flex;align-items:center;gap:10px;height:56px;padding:0 14px;border-radius:10px;border:1px dashed var(--color-border);color:var(--color-text-caption);font-size:13px;white-space:nowrap}
+.fslot span:nth-of-type(1){min-width:0;overflow:hidden;text-overflow:ellipsis}
+.fslot .bl{margin-left:auto;color:var(--color-text);font-weight:500}
 .sn{display:block;color:var(--color-text-caption);font-size:13px;font-weight:500;line-height:20px}
 .steps h3{margin-top:12px;font-size:20px;line-height:28px}
 .steps p{margin-top:8px;color:var(--color-text-body);font-size:15px;line-height:1.55;max-width:34ch}
 
 /* inside: one row of two columns (critic round 5: no zig-zag); each H3 + copy sits above its own panel, panels top-aligned, equal height */
-.ins-hd{display:flex;flex-direction:column;align-items:center;text-align:center}
+.ins-hd{text-align:left}
 .ipair{display:grid;row-gap:96px;margin-top:64px}
 .icol{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:24px;align-items:start;min-width:0}
 .icol>.itxt{grid-column:1 / span 5;grid-row:1;padding-top:24px}
@@ -277,12 +285,12 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 .slip h2{max-width:none}
 .slip-copy{grid-column:1 / span 4;align-self:start}
 .slip-copy .lead{font-size:18px;line-height:28px}
-.sports{margin-top:16px;color:var(--color-text-body);font-size:14px;line-height:1.5}
-.ss-cta-p{margin-top:24px}
-.ss-cta{display:inline-flex;align-items:center;min-height:44px;font-size:16px;text-decoration:underline;text-decoration-color:var(--color-border);text-underline-offset:5px}
+.ss-cta-p{margin-top:32px}
 .slip-stage{grid-column:5 / span 8}
 .stage{position:relative}
-.ss-fig{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.ss-fig{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:stretch}
+.ss-board .ss-list{flex:1;grid-auto-rows:minmax(64px,1fr)}
+.ss-board .sbx{height:auto}
 .ss-col{position:relative;display:flex;flex-direction:column;background:var(--color-surface);border:1px solid var(--color-border);border-radius:16px;padding:16px;transition:border-color var(--dur-press) var(--ease-ui)}
 .ss-h{display:flex;align-items:center;justify-content:space-between;gap:8px;height:24px;margin-bottom:12px;font-size:14px}
 .ss-h b{font-weight:600}
@@ -321,17 +329,26 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
    board card stays in place dimmed to 30% (brief 6b), the four cards sit in the slip and the slip CTA shows) */
 /* the dim is a 70% panel-colour veil over the card (reads as the card at 30%): the card text itself keeps full contrast, so the
    picture (aria-hidden, inactive) never trips a contrast audit (rulebook D26's objection to plain opacity) */
-.sbx::after{content:"";position:absolute;inset:0;z-index:1;border-radius:10px;background:var(--color-surface);opacity:.7;pointer-events:none}
+.sbx::after{content:"";position:absolute;inset:0;z-index:1;border-radius:10px;background:var(--color-surface);opacity:.45;pointer-events:none}
 .stage.run .sbx::after{opacity:0}
-.stage.run .sbx.gone::after{opacity:.7;transition:opacity var(--dur-ui) var(--ease-ui)}
+.stage.run .sbx.gone::after{opacity:.45;transition:opacity var(--dur-ui) var(--ease-ui)}
+/* "In slip" on each moved card (critic round 7: the end frame reads as moved, not missing) */
+.insl{position:absolute;right:12px;top:50%;z-index:2;display:flex;align-items:center;gap:6px;height:24px;margin-top:-12px;padding:0 8px;border-radius:999px;
+  background:var(--color-surface);color:var(--color-text-caption);font-size:12px;font-weight:500;line-height:1;white-space:nowrap}
+.insl svg{width:12px;height:12px;fill:none;stroke:var(--sc-accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.sbx .sv{visibility:hidden}
+.stage.run .sbx .sv{visibility:visible}
+.stage.run .sbx.gone .sv{visibility:hidden}
+.stage.run .insl{opacity:0}
+.stage.run .sbx.gone .insl{opacity:1;transition:opacity var(--dur-ui) var(--ease-ui)}
 .stage.run .slot{border-style:dashed}
 .stage.run .slot.on{border-style:solid}
 .stage.run .slot .sc{opacity:0}
 .stage.run .slot.on .sc{opacity:1;transition:none}
 .stage.run .ss-slip{border-color:var(--color-border)}
 .stage.run.ready .ss-slip{border-color:var(--color-accent-line)}
-/* the one Slip pill: under the slip column, outside the card (critic round 6), fades in at "Slip ready" on desktop */
-.ss-go{grid-column:2;width:100%;height:44px;margin-top:-4px;padding:0 16px;font-size:15px}
+/* >=768 the one Slip pill is in the text column (critic round 7); the stage's pill is for phones only */
+.ss-go{display:none;grid-column:2;width:100%;height:44px;margin-top:-4px;padding:0 16px;font-size:15px}
 .stage.run .ss-go{opacity:0;visibility:hidden}
 .stage.run.ready .ss-go{opacity:1;visibility:visible;transition:opacity 300ms var(--ease-ui) 200ms,visibility 0s 200ms}
 
@@ -346,10 +363,11 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 .rec-wrap{grid-column:7 / span 6;align-self:start}
 .rec th,.rec td{height:64px;padding:0 16px;border-top:1px solid var(--color-divider);text-align:right}
 .rec th:first-child{text-align:left;padding-left:0}
-.rec thead th.nc{font-size:13px;white-space:nowrap}
 .rec thead th{height:auto;border-top:0;padding-top:0;padding-bottom:12px;color:var(--color-text-caption);font-size:12px;font-weight:500;line-height:1.3}
 .rec tbody th{font-weight:400}
 .rec tbody th span{display:block;font-size:16px;line-height:1.3;color:var(--color-text)}
+.rec tbody th b{font-weight:inherit}
+.rec tbody th .sh{display:none}
 .rec tbody th small{display:block;color:var(--color-text-caption);font-size:13px;line-height:1.4}
 .rec td{font-size:20px;line-height:1;font-weight:500;font-variant-numeric:tabular-nums}
 .rec td.w{color:var(--color-win)}
@@ -357,26 +375,25 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 .rec td.p{color:var(--color-text-caption)}
 .rec tbody tr{transition:background-color var(--dur-press) var(--ease-ui)}
 .rec-wrap .cap{margin-top:16px}
-.rec-wrap .rec-gap{margin-top:4px}
 
 /* members: H2 + the one rating line (brief 8), the featured 6-man card (the post only), then 3 reviews in one row */
 .mem-hd{display:flex;align-items:baseline;justify-content:space-between;gap:12px 32px;flex-wrap:wrap}
 .rv-line{color:var(--color-text-body);font-size:15px;line-height:1.4}
 .rv-line a{display:inline-flex;align-items:center;min-height:44px;text-decoration:underline;text-decoration-color:var(--color-border);text-underline-offset:4px}
 .rv-line .star{color:var(--sc-accent);font-size:inherit;vertical-align:baseline}
-/* Prop Grader's own post, after the members' reviews, with its own source label (never under the H2 as if a member said it) */
-.story{display:grid;grid-template-columns:minmax(0,1fr) 280px;grid-template-rows:auto auto;align-items:end;column-gap:48px;margin-top:24px;padding:48px;
-  background:var(--color-surface);border:1px solid var(--color-border);border-radius:16px}
-.st-k{grid-column:1 / -1;margin-bottom:16px;color:var(--color-text-caption);font-size:12px;font-weight:500;line-height:1.3}
-.st-t{grid-column:1;font-size:40px;line-height:1.12;font-weight:500;letter-spacing:-.02em;max-width:20ch;text-wrap:balance}
-.st-by{grid-column:2;color:var(--color-text-caption);font-size:13px;line-height:1.5}
-.rqs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;align-items:stretch;margin-top:40px}
-.rqs li{display:flex}
+/* Prop Grader's own post, the featured card right under the H2 (brief 8), opening with its own source label so it never reads as
+   a member quote; one column, the caption under the headline (critic round 7) */
+.story{display:block;max-width:760px;margin-top:24px;padding:40px 48px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:16px}
+.st-k{margin-bottom:16px;color:var(--color-text-caption);font-size:12px;font-weight:500;line-height:1.3}
+.st-t{font-size:40px;line-height:1.12;font-weight:600;letter-spacing:-.02em;max-width:26ch;text-wrap:balance}
+.st-by{margin-top:16px;color:var(--color-text-caption);font-size:13px;line-height:1.5}
+.rqs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;align-items:start;margin-top:24px}
+.rqs li{display:block}
 .rqs.n2{grid-template-columns:repeat(2,minmax(0,1fr));max-width:760px}
 .rqs.n1{grid-template-columns:minmax(0,1fr);max-width:480px}
-.rq{flex:1;display:flex;flex-direction:column;gap:20px;padding:24px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:16px}
+.rq{display:flex;flex-direction:column;gap:20px;padding:24px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:16px}
 .rq p{font-size:17px;line-height:1.5;color:var(--color-text);text-wrap:pretty}
-.rq figcaption{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:20px;margin-top:auto;color:var(--color-text-caption);font-size:13px;line-height:1.5}
+.rq figcaption{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:20px;color:var(--color-text-caption);font-size:13px;line-height:1.5}
 .rq figcaption .tl{display:inline-flex;flex:none;align-items:center;min-height:44px;margin:-12px 0;font-weight:400;text-decoration:underline;text-underline-offset:3px}
 
 /* pricing: one card */
@@ -415,7 +432,7 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 .ap.anim{transition:height var(--dur-ui) var(--ease-ui)}
 
 /* final + footer */
-.final{padding:96px 0;border-top:1px solid var(--color-border);text-align:center}
+.final{padding:96px 0;text-align:center}
 .final .wrap{display:flex;flex-direction:column;align-items:center}
 .final h2{font-size:68px;line-height:1.04;letter-spacing:-.032em;max-width:16ch}
 .final .btn{margin-top:32px}
@@ -456,10 +473,9 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 @media (max-width:1215px){
   .phone{margin-right:0;width:280px}
   .pcol{margin-right:48px}
-  .island{width:76px;height:24px;margin-left:-38px;top:12px}
-  .ph-st{padding:0 16px 0 20px}
-  .sg{gap:4px}
-  .sg svg.bat{width:22px}
+  .island{width:72px;height:24px;margin-left:-36px;top:12px}
+  .ph-st{padding:0 20px}
+  .sg svg.bat{width:20px}
   .board{padding-right:256px}
   .bw-body{grid-template-columns:120px minmax(0,1fr)}
   .side{padding:16px 12px}
@@ -481,7 +497,7 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
   .faq-hd{position:static}
   .acc{margin-top:32px}
   .hero-cap{margin-top:16px}
-  .story{padding:40px;grid-template-columns:minmax(0,1fr) 220px;column-gap:32px}
+  .story{padding:40px}
   .rqs{grid-template-columns:minmax(0,1fr)}
   .rqs.n2{grid-template-columns:minmax(0,1fr)}
   .slip-hd{margin-bottom:24px}
@@ -556,7 +572,8 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
   .sec,.sec.slip,.sec.pricing{padding:64px 0}
   .rec-wrap,.acc,.slip-stage{margin-top:40px}
   .steps{display:block;margin-top:32px;border-bottom:1px solid var(--color-divider)}
-  .steps li{display:grid;grid-template-columns:40px minmax(0,1fr);align-items:baseline;padding:18px 0}
+  .steps li{display:grid;grid-template-columns:40px minmax(0,1fr);align-items:baseline;padding:18px 0;border-top:1px solid var(--color-divider)}
+  .frag{display:none}
   .steps h3{margin:0;font-size:19px;line-height:28px}
   .sn{line-height:28px}
   .steps p{grid-column:2;margin-top:6px;font-size:15px;line-height:1.55;color:var(--color-text-body)}
@@ -583,15 +600,19 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
   .slip-copy>*{grid-column:1 / -1}
   .slip-stage{order:1}
   .ss-cta-p{display:none}                            /* phones: the pill under the stage is the one Try here */
-  .ss-go{grid-column:1;margin-top:4px}   /* 16 px under the stage (12 gap + 4), always shown (D41) */
+  .ss-go{display:flex;grid-column:1;margin-top:4px}   /* 16 px under the stage (12 gap + 4), always shown (D41) */
   .stage.run .ss-go{opacity:1;visibility:visible;transition:none}
   .ss-fig{grid-template-columns:1fr;gap:12px}
   .ss-board{padding:12px}
   .ss-board .ss-h{margin-bottom:10px}
   .ss-board .ss-list{grid-template-columns:1fr 1fr}
   .ss-board .sbx{height:48px}
+  .ss-board .ss-list{grid-auto-rows:auto}
   .ss-board .sc{grid-template-columns:16px minmax(0,1fr);column-gap:10px;padding:0 10px}
   .ss-board .sc small,.ss-board .sc .sv{display:none}
+  .ss-board .sc{padding-right:32px}
+  .insl{right:8px;padding:0;background:none}
+  .insl-t{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
   .mem-hd{display:block}
   .rv-line{margin-top:4px}
   .story{display:block;margin-top:16px;padding:24px}
@@ -605,8 +626,8 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
   .price b{font-size:44px}
   .acc button{font-size:16px;padding:18px 0}
   .rec th,.rec td{height:56px;padding:0 8px}
-  .rec .nc-d{display:none}
-  .rec .nc-s{display:block}
+  .rec tbody th .lg{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+  .rec tbody th .sh{display:inline}
   .final{padding:56px 0}
   .final .btn{width:100%}
   .foot-in{flex-direction:column;align-items:flex-start;gap:16px}

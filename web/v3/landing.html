@@ -56,7 +56,7 @@
     <div class="product">
       <div class="pcol">
       <div class="browser" aria-hidden="true">
-        <div class="bw-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">propsgrader.com/board</span><span class="tag">Example</span></div>
+        <div class="bw-bar"><span class="bw-l"><span class="dots"><i></i><i></i><i></i></span><span class="tag">Example</span></span><span class="url">propsgrader.com/board</span><span></span></div>
         <div class="bw-body">
           <div class="side">
             <p class="sk">Board</p>
@@ -120,9 +120,9 @@
   <div class="wrap">
     <div class="how-hd"><p class="eb">How it works</p><h2 id="how-title">Open the board. Read the grade. Play your line.</h2></div>
     <ol class="steps">
-      <li><span class="sn" aria-hidden="true">01</span><div><h3>Pick your app and sport</h3><p><span translate="no">PrizePicks</span> and <span translate="no">Underdog</span> on one row, for {{SPORT_SUB}}.</p></div></li>
-      <li><span class="sn" aria-hidden="true">02</span><div><h3>See the grade at your exact line</h3><p>A letter, a model estimate, the break-even for your entry, and the reasons in plain English.</p></div></li>
-      <li><span class="sn" aria-hidden="true">03</span><div><h3>Build the slip, check the record</h3><p>Slip Studio rechecks every leg. Every call is saved before the game and scored after.</p></div></li>
+      <li><div class="frag fr-tabs" aria-hidden="true"><span class="ftabs">{{HOW_TABS}}</span></div><span class="sn" aria-hidden="true">01</span><div><h3>Pick your app and sport</h3><p><span translate="no">PrizePicks</span> and <span translate="no">Underdog</span> on one row, every sport on the board.</p></div></li>
+      <li><div class="frag fr-est" aria-hidden="true"><span class="fest">{{HOW_EST}}</span><small>model estimate</small></div><span class="sn" aria-hidden="true">02</span><div><h3>See the grade at your exact line</h3><p>A letter, a model estimate, the break-even for your entry, and the reasons in plain English.</p></div></li>
+      <li><div class="frag fr-slip" aria-hidden="true"><span class="fslot"><svg class="lk" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg><span>All legs hit vs break-even</span><span class="bl">00.0%</span></span></div><span class="sn" aria-hidden="true">03</span><div><h3>Build the slip, check the record</h3><p>Slip Studio rechecks every leg. Every call is saved before the game and scored after.</p></div></li>
     </ol>
   </div>
 </section>
@@ -195,8 +195,7 @@
     </div>
     <div class="slip-copy">
       <p class="lead">Pull graded props from any sport on the board into one slip. Slip Studio rechecks every leg and prints the chance they all hit beside the break-even for your entry.</p>
-      <p class="sports">{{SPORT_LONG}}</p>
-      <p class="ss-cta-p"><a class="tl ss-cta" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a></p>
+      <p class="ss-cta-p"><a class="btn ss-cta" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a></p>
     </div>
     <div class="slip-stage">
       <div class="stage" id="ss">
@@ -233,11 +232,10 @@
     <div class="rec-wrap rv">
       <table class="rec">
         <caption>{{LEDGER_TOTAL}} decided picks, by sport</caption>
-        <thead><tr><th scope="col">Sport</th><th scope="col">Won</th><th scope="col">Lost</th><th scope="col" class="nc">Push<span class="nc-d"> · </span><span class="nc-s">not counted</span></th></tr></thead>
+        <thead><tr><th scope="col">Sport</th><th scope="col">Won</th><th scope="col">Lost</th><th scope="col">Push<span class="sr-only"> (not counted)</span></th></tr></thead>
         <tbody>{{LEDGER_ROWS}}</tbody>
       </table>
-      <p class="cap">From {{REC_SRC}}, {{LEDGER_ASOF}}.</p>
-      <!--if:LGAP--><p class="cap rec-gap">{{LEDGER_GAP}}</p><!--/if:LGAP-->
+      <p class="cap">From {{REC_SRC}}, {{LEDGER_ASOF}}. {{LEDGER_NOTE}}</p>
     </div>
   </div>
 </section>
@@ -246,11 +244,11 @@
 <section class="sec members" id="members" aria-labelledby="rv-title">
   <div class="wrap">
     <div class="mem-hd"><h2 id="rv-title">{{RV_H2}}</h2><!--if:REVIEWS--><p class="rv-line"><a href="/reviews">{{RV_LINE}}</a></p><!--/if:REVIEWS--></div>
-    <!--if:RVCARDS--><ul class="rqs{{RQS_CLS}}">{{RV_CARDS}}</ul><!--/if:RVCARDS-->
     <div class="story">
       <p class="st-k">From Prop Grader on X</p>
       <p class="st-t">{{OWNER_STORY}}</p><p class="st-by">{{OWNER_STORY_BY}}</p>
     </div>
+    <!--if:RVCARDS--><ul class="rqs{{RQS_CLS}}">{{RV_CARDS}}</ul><!--/if:RVCARDS-->
   </div>
 </section>
 
