@@ -156,3 +156,16 @@ def test_started_canonical_event_and_future_context_cannot_publish():
     assert model.fit(offer,facts,NOW)[1]=='canonical_event_not_scheduled'
     offer,facts=fixture('tennis');facts['context']={'surface':'Hard','surface_known_at':'2026-11-19T00:00:00Z'}
     assert model.fit(offer,facts,NOW)[1]=='future_context'
+
+
+def test_st1_attach_names_the_publication_time(tmp_path, monkeypatch):
+    """sweep 2026-11-23 ST-1: the member board tests the publication's freshness (forecasts_at), not the frozen made_at."""
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    offer, facts = fixture()
+    monkeypatch.setattr(boards, 'board', lambda req: (200, {'offers': [offer]}))
+    monkeypatch.setattr(research, 'saved', lambda sport: {'players': {research.key(offer): facts}})
+    model.publish('soccer', NOW)
+    model.publish('soccer', '2026-11-18T17:30:00Z')            # 18.5 h later, same revision: the frozen made_at stays
+    out = model.attach('soccer', {'offers': [offer]})
+    (f,) = out['forecasts'].values()
+    assert out['forecasts_at'] == '2026-11-18T17:30:00Z' and f['made_at'] <= NOW

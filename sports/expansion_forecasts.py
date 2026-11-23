@@ -720,7 +720,8 @@ def attach(sport, data):
         if saved.get('sport') != sport:
             return data
         eligible = {offer_key(o) for o in data['offers']}
-        return {**data, 'forecasts':{k:v for k,v in saved['forecasts'].items() if k in eligible}}
+        # forecasts_at: the publication time, the member board's freshness test (made_at is the frozen first-issue time)
+        return {**data, 'forecasts':{k:v for k,v in saved['forecasts'].items() if k in eligible}, 'forecasts_at': saved.get('at')}
     except (OSError, ValueError, KeyError):
         return data
 
