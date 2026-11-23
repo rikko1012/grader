@@ -1,240 +1,213 @@
-/* v3 landing (the line terminal). Inlined by landing_v3.py. Everything on the page is server-rendered at its final value; this only adds:
-   - the terminal: tap a player to open or close the full read; tap an app's line to see the model estimate, grade, last 10 and break-even
-     at that line (all values already in the row's markup);
-   - "Pick two maps": the pooled kills per map from the two chosen maps (numbers in the markup, weighted by maps played);
-   - "Move the line": the grader's CS2 kills chance and letter as the line moves (formula, spread, cap, cut points and the per-letter record
-     come from the server in data-gw; at the real line it prints the board's own number);
-   - the hero board's chances count in once (html.motion only);
-   - a failed sign-in (/?signin_error=<code>) shown as the page's fixed message for that code; freshness said by the browser (the cached HTML only says "as of");
-   - reveal-once on view (html.motion only) and the phone bar ("Try free for 1 day") after the hero buttons scroll away (the page keeps
-     static room for it at the bottom, so it never covers content). */
+/* Prop Grader landing (DESIGN_RULES.md section 6). Inlined by landing_v3.py. The page is view-only and server-rendered at its final
+   values, so with no JS (or reduced motion) everything is already in its final frame. This adds only:
+   - the fixed message for a failed sign-in code (/?signin_error=<code>), never text from the URL;
+   - one-time reveals on the Inside panels (+ their text, 80 ms later, and the kills bars) and the record table;
+   - count-up on two proof numbers (+46U and the decided count; the review score never ticks);
+   - the Slip Studio timeline: plays once at 35% on screen (cards fly into the slip, FLIP + WAAPI, transform/opacity only), holds
+     "Slip ready", replays only after the stage has fully left the screen; a hidden tab jumps it to the final frame;
+   - the FAQ accordion (WAI-ARIA buttons, one open at a time, hidden="until-found" so find-in-page opens a panel);
+   - the phone bar: after the hero button has left the screen, hidden over the Slip button, the pricing card, the final call to
+     action and any focused element near the bottom.
+   Motion runs only when html.motion is set (prefers-reduced-motion is not "reduce"). */
 (function () {
   'use strict';
-  var D = document;
+  var D = document, W = window, R = D.documentElement;
+  var IO = 'IntersectionObserver' in W;
+  var MOTION = R.classList.contains('motion') && IO;
   function $(s, r) { return (r || D).querySelector(s); }
   function $$(s, r) { return Array.prototype.slice.call((r || D).querySelectorAll(s)); }
-  function safe(f) { try { f(); } catch (e) { if (window.console) console.warn('landing', e); } }
+  function safe(f) { try { f(); } catch (e) { if (W.console) console.warn('landing', e); } }
+  function io(els, opts, fn) {
+    var o = new IntersectionObserver(function (es) { es.forEach(function (e) { fn(e, o); }); }, opts);
+    els.forEach(function (el) { o.observe(el); });
+    return o;
+  }
 
-  /* a failed sign-in comes back as /?signin_error=<code> (server.py, whop_auth.error_code): the page shows its own fixed message for
-     the code, never text from the URL (a crafted link cannot put words on the page); an unknown code gets the generic message */
-  var SIGNIN_ERRORS = {
-    expired: 'Sign-in expired - please try again',
-    whop: 'Whop sign-in did not complete - please try again',
-    no_account: "Whop didn't return your account - please try again"
-  };
   safe(function () {
-    var e = new URLSearchParams(location.search).get('signin_error');
-    if (e) {
-      var el = D.getElementById('signin-error');
-      el.textContent = Object.prototype.hasOwnProperty.call(SIGNIN_ERRORS, e) ? SIGNIN_ERRORS[e] : 'Sign-in did not complete - please try again';
-      el.hidden = false;
-    }
+    var code = new URLSearchParams(location.search).get('signin_error');
+    if (!code) return;
+    var msg = { expired: 'Sign-in expired. Please try again.', whop: 'Whop sign-in did not complete. Please try again.',
+      no_account: 'Whop did not return your account. Please try again.' };
+    var el = D.getElementById('signin-error');
+    el.textContent = Object.prototype.hasOwnProperty.call(msg, code) ? msg[code] : 'Sign-in did not complete. Please try again.';
+    el.hidden = false;
   });
 
-  /* freshness: the cached HTML says "as of <time>". The browser says it relative to now from data-at: "checked N min ago" (and lights
-     the dots) while the board is younger than data-fresh minutes, else "Board from today, 14:05 UTC" / "yesterday" (a saved board says
-     "Saved board from ..."). Re-checked every minute, so an open tab never keeps a stale claim. */
-  var term = D.getElementById('terminal');
+  /* reveals */
   safe(function () {
-    var at = term && Date.parse(term.getAttribute('data-at') || ''), atEl = D.getElementById('term-at');
-    if (!term || !atEl || !isFinite(at)) return;
-    var asOf = atEl.textContent, saved = term.getAttribute('data-state') === 'saved', stEl = D.getElementById('term-st');
-    function hm(d) { return ('0' + d.getUTCHours()).slice(-2) + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' UTC'; }
-    function fresh() {
-      var now = Date.now(), min = (now - at) / 60000, lim = +term.getAttribute('data-fresh') || 30, live = !saved && min >= -2 && min <= lim;
-      var d = new Date(at), day = Math.floor(now / 864e5) - Math.floor(at / 864e5), lead = saved ? 'Saved board from ' : 'Board from ';
-      atEl.textContent = live ? (min < 1 ? 'checked just now' : 'checked ' + Math.floor(min) + ' min ago')
-        : day === 0 ? lead + 'today, ' + hm(d) : day === 1 ? lead + 'yesterday, ' + hm(d) : day > 1 ? (saved ? 'Saved board, ' : 'Board, ') + day + ' days old' : asOf;
-      if (!saved) term.setAttribute('data-state', live ? 'live' : 'dated');
-      if (stEl) stEl.textContent = live ? 'Live sample · CS2 board' : 'Sample · CS2 board';   /* "Live" only beside a fresh board */
-      D.documentElement.classList.toggle('live', live);
-    }
-    fresh();
-    setInterval(fresh, 60000);
-  });
-
-  function gcls(g) { return g.charAt(0) === 'A' ? 'ga' : g.charAt(0) === 'B' ? 'gb' : ''; }
-
-  D.addEventListener('click', function (ev) {
-    var t = ev.target;
-    var who = t.closest && t.closest('.tr button.who');
-    if (who) {
-      var open = who.getAttribute('aria-expanded') !== 'true', dt = D.getElementById(who.getAttribute('aria-controls'));
-      who.setAttribute('aria-expanded', open ? 'true' : 'false');
-      who.closest('.tr').classList.toggle('open', open);
-      if (dt) dt.hidden = !open;
-      return;
-    }
-    var b = t.closest && t.closest('.tr button.bk');
-    if (!b) return;
-    var row = b.closest('.tr');
-    $$('button.bk', row).forEach(function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); });
-    /* a line under the B- cut keeps Lean wording ("Lean Over"), the same words the member board and "Move the line" use; never a dash */
-    var d = b.dataset, gv = d.g || (d.side ? 'Lean ' + d.side : '');
-    var pv = $('.pv', row), mt = $('.mt', row), sd = $('.sd', row), g = $('.gr b', row);
-    if (d.p && pv) pv.firstChild.nodeValue = d.p;
-    if (d.p && mt) mt.style.setProperty('--p', d.p);
-    if (sd && d.side) sd.textContent = d.side;
-    if (g) { g.textContent = gv; g.className = gcls(gv); }
-    /* the row's last 10 and break-even, and the meter's break-even tick, follow the tapped line (hidden when that line has none) */
-    var l10 = $('.rc .l10', row), bes = $('.rc small', row), tick = $('.mt u', row);
-    if (l10) { l10.hidden = !d.n; $('b', l10).textContent = d.h || ''; $('i', l10).textContent = d.n || ''; }
-    if (bes) { bes.hidden = !d.be; $('b', bes).textContent = d.be || ''; }
-    if (tick) { tick.hidden = !d.be; if (d.be) tick.style.setProperty('--b', d.be); }
-    /* the open read: every value and label comes from the tapped line; a cell whose value that line lacks is hidden, never kept */
-    var map = { p: d.p, side: d.side, g: gv, line: d.line, app: d.app, l10: d.l10, be: d.be, entry: d.entry, seen: d.seen, graded: d.graded };
-    $$('.dt [data-k]', row).forEach(function (n) {
-      var k = n.getAttribute('data-k'), v = map[k];
-      n.textContent = v == null ? '' : v;
-      if (k === 'g' && n.classList.contains('gt')) n.className = 'gt ' + gcls(gv);
+    var els = $$('.rv');
+    if (!MOTION) { els.forEach(function (el) { el.classList.add('in'); }); return; }
+    io(els, { threshold: 0.1 }, function (e, o) {
+      if (!e.isIntersecting) return;
+      o.unobserve(e.target);
+      e.target.classList.add('in');
+      var row = e.target.closest('.irow');
+      if (row) row.classList.add('in');
     });
-    $$('.dt [data-c]', row).forEach(function (n) { n.hidden = !map[n.getAttribute('data-c')]; });
-    /* the tier link only for a letter the public record has a tier for (data-rec, set by the server from the record's 57% rule):
-       a B- line or a Lean line links to no tier */
-    var rec = $('.dt-rec', row);
-    if (rec) rec.hidden = !(d.g && d.rec === '1');
   });
 
-  /* pick two maps: the pooled kills per map = sum(kills/map x maps) / sum(maps) over the two chosen; pace = line / 2 */
+  /* proof tickers */
   safe(function () {
-    var pool = D.getElementById('pool');
-    if (!pool) return;
-    var btns = $$('button.map', pool), order = btns.filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; });
-    var pace = (+pool.getAttribute('data-line')) / 2, vE = D.getElementById('pool-v'), dE = D.getElementById('pool-d'), nE = D.getElementById('pool-names');
-    var pairs = {};
-    try { pairs = JSON.parse(pool.getAttribute('data-pairs') || '{}') || {}; } catch (e) { pairs = {}; }
-    function draw() {
-      /* the server's own strings for this pair (data-pairs: pooled, delta, class), so a pair never reads two ways (load vs re-pick) */
-      var ix = order.map(function (b) { return +b.getAttribute('data-i'); }).sort(function (a, b) { return a - b; }), got = pairs[ix.join('-')];
-      if (got && got.length === 3) {
-        vE.textContent = got[0]; dE.textContent = got[1]; dE.className = got[2];
-      } else {
-        var k = 0, n = 0;
-        order.forEach(function (b) { k += (+b.getAttribute('data-k')) * (+b.getAttribute('data-n')); n += +b.getAttribute('data-n'); });
-        var v = n ? k / n : 0, dlt = v - pace;
-        vE.textContent = v.toFixed(2);
-        dE.textContent = (dlt >= 0 ? '+' : '−') + Math.abs(dlt).toFixed(2);
-        dE.className = dlt >= 0 ? 'up' : 'dn';
+    if (!MOTION) return;
+    var nf = new Intl.NumberFormat('en-US');
+    io($$('.tk[data-to]'), { threshold: 0.6 }, function (e, o) {
+      if (!e.isIntersecting) return;
+      o.unobserve(e.target);
+      var el = e.target, to = parseFloat(el.getAttribute('data-to')), fin = el.textContent;
+      var pre = el.getAttribute('data-pre') || '', suf = el.getAttribute('data-suf') || '', t0 = null;
+      if (!isFinite(to) || to <= 0) return;
+      function step(t) {
+        if (t0 === null) t0 = t;
+        var k = Math.min(1, (t - t0) / 1000);
+        el.textContent = k < 1 ? pre + nf.format(Math.round(to * (1 - Math.pow(1 - k, 3)))) + suf : fin;
+        if (k < 1) requestAnimationFrame(step);
       }
-      nE.textContent = order.map(function (b) { return $('.mn', b).textContent; }).join(' + ');
+      el.textContent = pre + '0' + suf;
+      requestAnimationFrame(step);
+    });
+  });
+
+  /* Slip Studio timeline */
+  safe(function () {
+    var st = D.getElementById('ss');
+    if (!st || !MOTION || !st.animate) return;
+    var cards = $$('.ss-board .sc', st), slots = $$('.slot', st), pill = D.getElementById('ss-st');
+    var LEG = [300, 1300, 2300, 3300], READY = 4400, CTA = 4600, FLY = 650;
+    var timers = [], ghosts = [], state = 'idle', seen = false;           /* idle -> playing -> done; done -> idle once fully off screen */
+    function later(ms, f) { timers.push(setTimeout(f, ms)); }
+    function clear() {
+      timers.forEach(clearTimeout); timers = [];
+      ghosts.forEach(function (g) { if (g.parentNode) g.parentNode.removeChild(g); }); ghosts = [];
     }
-    btns.forEach(function (b) {
-      b.addEventListener('click', function () {
-        if (order.indexOf(b) >= 0) return;
-        order.push(b);
-        if (order.length > 2) order.shift().setAttribute('aria-pressed', 'false');
-        b.setAttribute('aria-pressed', 'true');
-        draw();
+    function start() {
+      clear();
+      st.classList.add('run'); st.classList.remove('ready', 'cta');
+      cards.forEach(function (c) { c.classList.remove('dim'); });
+      slots.forEach(function (s) { s.classList.remove('on'); });
+      pill.textContent = 'Building 0 of 4';
+      state = 'idle';
+    }
+    function land(i) {
+      var s = slots[i];
+      s.classList.add('on');
+      pill.textContent = 'Building ' + (i + 1) + ' of 4';
+      var sc = $('.sc', s);
+      if (sc) sc.animate([{ transform: 'scale(.95)' }, { transform: 'scale(1)' }], { duration: 240, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    }
+    function fly(i) {
+      var c = cards[i], s = slots[i];
+      if (!c || !s) return;
+      var sr = st.getBoundingClientRect(), a = c.getBoundingClientRect(), b = s.getBoundingClientRect();
+      var g = c.cloneNode(true);
+      g.classList.add('ghost'); g.classList.remove('dim');
+      g.style.width = a.width + 'px';
+      st.appendChild(g); ghosts.push(g);
+      c.classList.add('dim');
+      var x0 = a.left - sr.left, y0 = a.top - sr.top, x1 = b.left - sr.left, y1 = b.top - sr.top;
+      var an = g.animate([
+        { transform: 'translate(' + x0 + 'px,' + y0 + 'px) rotate(0deg)' },
+        { transform: 'translate(' + (x0 + x1) / 2 + 'px,' + ((y0 + y1) / 2 - 12) + 'px) rotate(-2deg)' },
+        { transform: 'translate(' + x1 + 'px,' + y1 + 'px) rotate(0deg)' }
+      ], { duration: FLY, easing: 'cubic-bezier(.77,0,.175,1)', fill: 'forwards' });
+      an.onfinish = function () { land(i); if (g.parentNode) g.parentNode.removeChild(g); };
+    }
+    function finish() {                                      /* the final frame: what a still page shows */
+      clear();
+      st.classList.remove('run', 'ready', 'cta');
+      cards.forEach(function (c) { c.classList.remove('dim'); });
+      slots.forEach(function (s) { s.classList.remove('on'); });
+      pill.textContent = 'Slip ready';
+      state = 'done';
+    }
+    function play() {
+      start(); state = 'playing';
+      LEG.forEach(function (t, i) { later(t, function () { fly(i); }); });
+      later(READY, function () { pill.textContent = 'Slip ready'; st.classList.add('ready'); });
+      later(CTA, function () { st.classList.add('cta'); state = 'done'; if (!seen) start(); });  /* ended off screen: replay on the next entry */
+    }
+    start();
+    io([st], { threshold: [0, 0.35] }, function (e) {
+      seen = e.isIntersecting;
+      if (e.intersectionRatio >= 0.35 && state === 'idle' && !D.hidden) play();
+      else if (!e.isIntersecting && state === 'done') start();  /* fully off screen: ready to replay on the next entry */
+    });
+    D.addEventListener('visibilitychange', function () { if (D.hidden && state === 'playing') finish(); });
+  });
+
+  /* FAQ accordion */
+  safe(function () {
+    var acc = D.getElementById('acc');
+    if (!acc) return;
+    var items = $$('.ai', acc);
+    function btn(it) { return $('button', it); }
+    function panel(it) { return $('.ap', it); }
+    function set(it, open, animate) {
+      var b = btn(it), p = panel(it);
+      if ((b.getAttribute('aria-expanded') === 'true') === open) return;
+      b.setAttribute('aria-expanded', open ? 'true' : 'false');
+      it.classList.toggle('open', open);
+      if (!animate || !MOTION) {
+        p.style.height = '';
+        if (open) p.removeAttribute('hidden'); else p.setAttribute('hidden', 'until-found');
+        return;
+      }
+      p.classList.remove('anim');
+      if (open) {
+        p.removeAttribute('hidden');
+        p.style.height = '0px';
+      } else {
+        p.style.height = p.scrollHeight + 'px';
+      }
+      void p.offsetHeight;
+      p.classList.add('anim');
+      p.style.height = open ? p.scrollHeight + 'px' : '0px';
+      var done = function (ev) {
+        if (ev && ev.target !== p) return;
+        p.removeEventListener('transitionend', done);
+        p.classList.remove('anim');
+        if (b.getAttribute('aria-expanded') === 'true') p.style.height = '';
+        else { p.setAttribute('hidden', 'until-found'); p.style.height = ''; }
+      };
+      p.addEventListener('transitionend', done);
+      setTimeout(done, 400);
+    }
+    items.forEach(function (it) {
+      if (btn(it).getAttribute('aria-expanded') !== 'true') panel(it).setAttribute('hidden', 'until-found');
+      btn(it).addEventListener('click', function () {
+        var open = btn(it).getAttribute('aria-expanded') !== 'true';
+        items.forEach(function (o) { if (o !== it) set(o, false, true); });
+        set(it, open, true);
+      });
+      panel(it).addEventListener('beforematch', function () {
+        items.forEach(function (o) { if (o !== it) set(o, false, false); });
+        set(it, true, false);
       });
     });
+    acc.classList.add('ready');
   });
 
-  /* move the line */
+  /* phone bar */
   safe(function () {
-    var box = D.getElementById('gw');
-    if (!box) return;
-    var cfg = JSON.parse(box.getAttribute('data-gw'));
-    var svg = D.getElementById('gw-svg'), L = D.getElementById('gw-line'), NS = 'http://www.w3.org/2000/svg';
-    function erf(x) {
-      var s = x < 0 ? -1 : 1; x = Math.abs(x);
-      var t = 1 / (1 + 0.3275911 * x), y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
-      return s * y;
+    var dock = D.getElementById('dock'), hero = D.getElementById('hero-cta');
+    if (!dock || !hero || !IO) return;
+    var link = $('a', dock), past = false, over = {}, low = false;
+    function set() {
+      var show = past && !low && !Object.keys(over).some(function (k) { return over[k]; });
+      if (dock.classList.contains('show') === show) return;
+      dock.classList.toggle('show', show);
+      if (show) link.removeAttribute('tabindex'); else link.setAttribute('tabindex', '-1');
     }
-    function phi(z) { return 0.5 * (1 + erf(z / Math.SQRT2)); }
-    var lam = cfg.proj, sd = cfg.spread * Math.sqrt(Math.max(lam, 1));
-    function chance(line) {
-      var whole = line % 1 === 0, up = whole ? line + 0.5 : Math.floor(line) + 0.5, dn = whole ? line - 0.5 : up;
-      var po = 1 - phi((up - lam) / sd), pu = phi((dn - lam) / sd), raw = po + pu > 0 ? po / (po + pu) : 0.5;
-      var p = Math.min(cfg.cap, Math.max(1 - cfg.cap, raw)), side = p >= 0.5 ? 'Over' : 'Under', ch = Math.max(p, 1 - p), g = 'Lean';
-      for (var i = 0; i < cfg.cuts.length; i++) if (ch >= cfg.cuts[i][0]) { g = cfg.cuts[i][1]; break; }
-      return { up: up, dn: dn, side: side, ch: ch, g: g };
+    io([hero], { threshold: 0 }, function (e) { past = !e.isIntersecting && e.boundingClientRect.top < 0; set(); });
+    var cover = $$('.slip-copy .btn, #plan, #final');
+    cover.forEach(function (el, i) { el.setAttribute('data-dock', i); });
+    io(cover, { threshold: 0 }, function (e) { over[e.target.getAttribute('data-dock')] = e.isIntersecting; set(); });
+    function focusCheck() {
+      var a = D.activeElement;
+      low = !!(a && a !== D.body && !dock.contains(a) && a.getBoundingClientRect().bottom > innerHeight - 96);
+      set();
     }
-    var W = (svg.clientWidth || 640) < 520 ? 360 : 640, H = W < 640 ? 210 : 200, base = H - 30, X0 = Math.max(0, lam - 3.2 * sd), X1 = lam + 3.2 * sd, YM = 1 / (sd * Math.sqrt(2 * Math.PI)) * 1.12;
-    function x(v) { return 16 + (v - X0) / (X1 - X0) * (W - 32); }
-    function y(d) { return base - d / YM * (base - 26); }
-    function pdf(v) { return Math.exp(-0.5 * Math.pow((v - lam) / sd, 2)) / (sd * Math.sqrt(2 * Math.PI)); }
-    function area(a, b) {
-      a = Math.max(a, X0); b = Math.min(b, X1); if (b <= a) return '';
-      var d = 'M' + x(a).toFixed(1) + ' ' + base;
-      for (var i = 0; i <= 48; i++) { var v = a + (b - a) * i / 48; d += 'L' + x(v).toFixed(1) + ' ' + y(pdf(v)).toFixed(1); }
-      return d + 'L' + x(b).toFixed(1) + ' ' + base + 'Z';
-    }
-    function el(tag, attrs, txt) { var n = D.createElementNS(NS, tag); for (var k in attrs) n.setAttribute(k, attrs[k]); if (txt != null) n.textContent = txt; return n; }
-    var gU = el('path', { 'class': 'c-u' }), gO = el('path', { 'class': 'c-o' }), mk = el('line', { 'class': 'c-mk', y1: 14, y2: base }),
-        mkt = el('text', { 'class': 'c-t', y: 11, 'text-anchor': 'middle' }), pj = el('line', { 'class': 'c-pj', x1: x(lam), x2: x(lam), y1: 30, y2: base }),
-        pjt = el('text', { 'class': 'c-t2', y: 42, x: x(lam) + 6 }, 'Projection ' + lam.toFixed(1));
-    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-    svg.appendChild(el('line', { 'class': 'c-ax', x1: 16, x2: W - 16, y1: base, y2: base }));
-    var step = (X1 - X0) > 30 ? 10 : 5;
-    for (var t = Math.ceil(X0 / step) * step; t <= X1; t += step) svg.appendChild(el('text', { 'class': 'c-tk', x: x(t), y: base + 20, 'text-anchor': 'middle' }, String(t)));
-    [gU, gO, pj, pjt, mk, mkt].forEach(function (n) { svg.appendChild(n); });
-    var pE = D.getElementById('gw-p'), gE = D.getElementById('gw-g'), sE = D.getElementById('gw-side'), lv = D.getElementById('gw-lv'),
-        lad = $$('#gw-ladder li');
-    function fill() { L.style.setProperty('--p', ((L.value - L.min) / (L.max - L.min) * 100) + '%'); }
-    function draw() {
-      var line = parseFloat(L.value), r = chance(line), lx = x(line), txt = 'Line ' + line.toFixed(1), w = txt.length * 7, bd = cfg.board;
-      var pTxt = (r.ch * 100).toFixed(1);
-      if (bd && Math.abs(line - cfg.line) < 1e-9) { r.side = bd.side; r.g = bd.g; pTxt = bd.p; }   /* the board's own number at the real line */
-      gU.setAttribute('d', area(X0, r.dn)); gO.setAttribute('d', area(r.up, X1));
-      gU.setAttribute('class', 'c-u' + (r.side === 'Under' ? ' on' : '')); gO.setAttribute('class', 'c-o' + (r.side === 'Over' ? ' on' : ''));
-      mk.setAttribute('x1', lx); mk.setAttribute('x2', lx);
-      mkt.setAttribute('x', Math.min(W - 4 - w / 2, Math.max(4 + w / 2, lx))); mkt.textContent = txt;
-      var right = x(lam) + 6 + 100 < W && (x(lam) >= lx || x(lam) - 106 < 0);
-      pjt.setAttribute('x', right ? x(lam) + 6 : x(lam) - 6); pjt.setAttribute('text-anchor', right ? 'start' : 'end');
-      lv.textContent = line.toFixed(1);
-      sE.textContent = r.side + ' ' + line.toFixed(1) + ' kills';
-      pE.textContent = pTxt;
-      gE.textContent = r.g; gE.className = 'gw-g ' + gcls(r.g);
-      lad.forEach(function (li) { li.classList.toggle('on', li.getAttribute('data-g') === r.g); });
-      L.setAttribute('aria-valuetext', 'Line ' + line.toFixed(1) + ', ' + r.side + ' ' + pTxt + ' percent, ' + (r.g === 'Lean' ? 'Lean ' + r.side : 'grade ' + r.g));
-      fill();
-    }
-    L.addEventListener('input', draw);
-    draw();
-  });
-
-  safe(function () {
-    var motion = D.documentElement.classList.contains('motion');
-    var targets = $$('.sec-head, .lg, .vs, .tile, .rv, .story, .step, .qs, .pool, .gw-box, .plan-card');
-    if (motion && 'IntersectionObserver' in window) {
-      targets.forEach(function (t) { t.classList.add('rv-on'); });
-      var io = new IntersectionObserver(function (es) {
-        es.forEach(function (x) { if (x.isIntersecting) { x.target.classList.add('in'); io.unobserve(x.target); } });
-      }, { rootMargin: '0px 0px -8% 0px' });
-      targets.forEach(function (t) { io.observe(t); });
-      if (term) io.observe(term);
-    } else if (term) term.classList.add('in');
-  });
-
-  /* the one motion moment: the hero board's chances count in from zero once, beside their meters (html.motion only; the server
-     already printed the final values, so without motion or JS nothing changes) */
-  safe(function () {
-    if (!term || !D.documentElement.classList.contains('motion') || !('IntersectionObserver' in window) || !window.requestAnimationFrame) return;
-    /* each row counts in to the chance of its pressed line (read every frame), so a line tapped before or during the count-in keeps
-       its own number; the lead line's value is never put back over it */
-    var nums = $$('.tr .pv', term).map(function (b) { return { n: b.firstChild, row: b.closest('.tr'), v: parseFloat(b.firstChild.nodeValue) }; })
-      .filter(function (x) { return x.n && isFinite(x.v); });
-    function target(x) { var on = x.row && $('button.bk.on', x.row), p = on ? parseFloat(on.getAttribute('data-p')) : NaN; return isFinite(p) ? p : x.v; }
-    nums.forEach(function (x) { x.n.nodeValue = '0.0'; });
-    var go = new IntersectionObserver(function (es) {
-      if (!es[0].isIntersecting) return;
-      go.disconnect();
-      var t0 = performance.now();
-      (function tick(t) {
-        var k = Math.min(1, (t - t0) / 800), e = 1 - Math.pow(1 - k, 3);
-        nums.forEach(function (x) { var v = target(x); x.n.nodeValue = k >= 1 ? v.toFixed(1) : (v * e).toFixed(1); });
-        if (k < 1) requestAnimationFrame(tick);
-      })(t0);
-    });
-    go.observe(term);
-  });
-
-  safe(function () {
-    var dock = D.getElementById('dock'), ctas = $('.hero .ctas'), close = $('.close');
-    if (!dock || !ctas || !('IntersectionObserver' in window)) return;
-    var seen = { hero: true, close: false };
-    var paint = function () { dock.classList.toggle('show', !seen.hero && !seen.close); };
-    new IntersectionObserver(function (es) { es.forEach(function (x) { seen.hero = x.isIntersecting; }); paint(); }).observe(ctas);
-    if (close) new IntersectionObserver(function (es) { seen.close = es[0].isIntersecting; paint(); }).observe(close);
+    D.addEventListener('focusin', focusCheck);
+    D.addEventListener('focusout', function () { setTimeout(focusCheck, 0); });
+    W.addEventListener('scroll', function () { if (low) focusCheck(); }, { passive: true });
   });
 })();

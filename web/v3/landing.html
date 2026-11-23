@@ -1,323 +1,300 @@
 <!doctype html>
-<html lang="en" data-ui-v3="1" data-v3-page="landing" data-sc-sport="cs2" data-theme="dark">
+<html lang="en" data-ui-v3="1" data-v3-page="landing" data-sc-sport="cs2" data-theme="dark" style="color-scheme:dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Prop Grader · Know the chance before you pick</title>
-<meta name="description" content="Prop Grader gives every PrizePicks and Underdog line a model estimate and a letter grade, with the reason in plain English. {{SPORT_SUB}}. Try it free for 1 day.">
+<title>Prop Grader · Grade every prop before you lock it in</title>
+<meta name="description" content="Every PrizePicks and Underdog line gets a letter grade and a model estimate, with the reason in plain English. For {{SPORT_SUB}}. Try Prop Grader free for 1 day.">
 <meta name="theme-color" content="#080B13">
 <meta name="color-scheme" content="dark">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Prop Grader">
-<meta property="og:title" content="Prop Grader · Know the chance before you pick">
-<meta property="og:description" content="A model estimate and a letter grade at the exact line your app shows, with the reason. Every call saved before the game and scored in public. Try it free for 1 day.">
+<meta property="og:title" content="Prop Grader · Grade every prop before you lock it in">
+<meta property="og:description" content="A letter grade and a model estimate at the exact line your app shows, with the reason. Every call saved before the game and scored in public. Try it free for 1 day.">
 <!--if:BASE--><link rel="canonical" href="{{BASE}}/">
 <meta property="og:url" content="{{BASE}}/">
 <meta property="og:image" content="{{BASE}}/landing/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Prop Grader: know the chance before you pick">
+<meta property="og:image:alt" content="Prop Grader: grade every prop before you lock it in">
 <meta name="twitter:image" content="{{BASE}}/landing/og.png"><!--/if:BASE-->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Prop Grader · Know the chance before you pick">
-<meta name="twitter:description" content="A model estimate and a letter grade at the exact line your app shows, with the reason. Every call saved before the game and scored in public. Try it free for 1 day.">
+<meta name="twitter:title" content="Prop Grader · Grade every prop before you lock it in">
+<meta name="twitter:description" content="A letter grade and a model estimate at the exact line your app shows, with the reason. Every call saved before the game and scored in public. Try it free for 1 day.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap"></noscript>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap"></noscript>
 <script>(function(){var r=document.documentElement;r.className+=' js';if(window.matchMedia&&!matchMedia('(prefers-reduced-motion: reduce)').matches)r.className+=' motion';})();</script>
 <style>
-{{TOKENS_CSS}}
 {{PAGE_CSS}}
 </style>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-<header class="top dk" id="top">
-  <div class="wrap top-in">
-    <a class="brand" href="/" aria-label="Prop Grader home"><span class="mark" aria-hidden="true"><i></i></span><b>Prop<em>Grader</em></b></a>
-    <nav class="nav" aria-label="Page">
-      <!--if:TERM--><a href="#terminal">Board</a><!--/if:TERM--><a href="#how">How it works</a><!--if:LEDGER--><a href="#record">Record</a><!--/if:LEDGER--><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
-    </nav>
-    <div class="top-cta"><a class="lnk" href="/auth/login">Sign in</a><a class="btn primary sm" href="{{TRIAL_URL}}">Try free</a></div>
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="/" aria-label="Prop Grader home"><span class="mark" aria-hidden="true">1T</span><span translate="no">Prop Grader</span></a>
+    <nav class="links" aria-label="Sections"><a href="#how">How it works</a><a href="#inside">Inside</a><!--if:SLIP--><a href="#slip">Slip Studio</a><!--/if:SLIP--><!--if:LEDGER--><a href="#record">Record</a><!--/if:LEDGER--><a href="#pricing">Pricing</a></nav>
+    <div class="nav-cta"><a class="tl" href="/auth/login">Sign in</a><a class="btn btn-nav" href="{{TRIAL_URL}}">Try free</a></div>
   </div>
 </header>
 
 <main id="main">
-<section class="hero dk" aria-labelledby="hero-title">
-  <div class="glow" aria-hidden="true"></div>
+<section class="hero" aria-labelledby="hero-title">
   <div class="wrap hero-in">
-    <div class="hero-copy">
-      <p class="eyebrow"><span class="pulse" id="pulse" aria-hidden="true"></span>Free for 1 day</p>
-      <h1 id="hero-title">Know the chance <span class="ac">before you pick.</span></h1>
-      <p class="sub">Prop Grader gives every PrizePicks and Underdog line a model estimate and a letter grade, with the reason in plain English. {{SPORT_SUB}}.</p>
-      <div class="ctas">
-        <a class="btn primary" href="{{TRIAL_URL}}">Try Prop Grader free for 1 day</a>
+    <p class="hero-for">For {{SPORT_SUB}}</p>
+    <h1 id="hero-title">Grade every prop before you <span class="ac nw">lock it in.</span></h1>
+    <p class="lead">Every <span translate="no">PrizePicks</span> and <span translate="no">Underdog</span> line gets a letter grade and a model estimate, with the reason in plain English.</p>
+    <a class="btn btn-lg" id="hero-cta" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a>
+    <p class="terms">Then {{PRICE_M}}/month. Cancel anytime.</p>
+    <p class="err" id="signin-error" role="alert" hidden></p>
+  </div>
+  <!--if:FRAME-->
+  <div class="wrap">
+    <div class="product">
+      <div class="browser" aria-hidden="true">
+        <div class="bw-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">propsgrader.com/board</span><span class="tag">Example</span></div>
+        <div class="bw-body">
+          <div class="side">
+            <p class="sk">Board</p>
+            <ul>{{SPORT_NAV}}</ul>
+            <p class="sk">Tools</p>
+            <ul><li>Slip Studio</li><li>Line moves</li><li>Public record</li></ul>
+          </div>
+          <div class="board">
+            <div class="bh">
+              <div><b>CS2 board</b><small>{{FRAME_FEEDS}}, graded at each app's own line</small></div>
+              <span class="tabs"><i class="on">All props</i><i>Kills</i></span>
+            </div>
+            <div class="bt">
+              <div class="br br-h"><span>Player · prop</span><span>Line by app</span><span>Pick</span><span class="r">Model estimate</span><span class="r">Grade</span></div>
+              {{FRAME_ROWS}}
+            </div>
+          </div>
+        </div>
       </div>
-      <p class="terms">Then {{PRICE_M}}/month. Cancel anytime from your Whop account.</p>
-      <p class="alt"><a class="tlnk" href="/record">See the public record <span aria-hidden="true">→</span></a><span class="signin">Already a member? <a href="/auth/login">Sign in with Whop</a></span></p>
-      <p class="err" id="signin-error" role="alert" hidden></p>
+      <!--if:PHONE-->
+      <div class="phone" aria-hidden="true">
+        <div class="ph-scr">
+          <span class="island"></span>
+          <p class="ph-st"><b>9:41</b><b>5G</b></p>
+          <p class="ph-back"><span><svg viewBox="0 0 16 16"><path d="M10 3.5L5.5 8l4.5 4.5"/></svg>Board</span><span class="tag">Example</span></p>
+          <p class="ph-m">{{PH_MATCH}} · CS2</p>
+          <p class="ph-who">{{PH_WHO}}</p>
+          <p class="ph-prop">{{PH_PROP}} on {{PH_APP}}</p>
+          <div class="ph-est">
+            <p class="ph-pr"><b>{{PH_P}}%</b><i class="gb {{PH_GCLS}}">{{PH_G}}</i></p>
+            {{PH_METER}}
+            <p class="ph-at">Model estimate at exactly {{PH_LINE}}</p>
+          </div>
+          <p class="ph-k">Why</p>
+          <ul class="ph-why">{{PH_WHY}}</ul>
+          <div class="ph-add">Add to Slip Studio</div>
+        </div>
+      </div>
+      <p class="sr-only">{{PH_SR}}</p>
+      <!--/if:PHONE-->
+      <p class="sr-only">{{FRAME_SR}}</p>
     </div>
+    <p class="cap hero-cap">{{FRAME_CAP}}</p>
+  </div>
+  <!--/if:FRAME-->
+</section>
 
-    <ul class="proof" id="proof" aria-label="Proof">
-      <li class="pf-post"><blockquote>{{OWNER_POST}}</blockquote><small>{{OWNER_POST_BY}}</small></li>
-      <!--if:TOTAL--><li><b>{{LEDGER_TOTAL}}</b><span>decided picks on the public record, losses included</span></li><!--/if:TOTAL-->
-      <!--if:RVN--><li>{{RV_TILE}}</li><!--/if:RVN-->
-      <!--if:APPS--><li>{{APP_TILE}}</li><!--/if:APPS-->
-    </ul>
-
-    <!--if:TERM-->
-    <div class="term" id="terminal" data-state="{{TERM_STATE}}" data-at="{{TERM_AT}}" data-fresh="{{FRESH_MIN}}">
-      <div class="term-bar">
-        <span class="st"><i class="dot" aria-hidden="true"></i><b id="term-st">Sample · CS2 board</b></span>
-        <span class="src">{{TERM_FEEDS}} <i>·</i> <span id="term-at">{{TERM_META}}</span></span>
-      </div>
-      <div class="th" aria-hidden="true"><span>Player · line by app</span><span>Model estimate · grade</span></div>
-      <ol class="rows">{{TERM_ROWS}}</ol>
-      <div class="term-foot">
-        <a class="gate" href="{{TRIAL_URL}}"><b><!--if:MORE--><span class="n-d">{{TERM_MORE}}</span><span class="n-m">{{TERM_MORE_PHONE}}</span> more letter-graded CS2 props on this board<!--/if:MORE--><!--if:NOMORE-->Every sport, every graded line<!--/if:NOMORE--></b><span>Open the full board, free for 1 day <i aria-hidden="true">→</i></span></a>
-        <!--if:SAVED--><p class="saved">A saved board: real rows exactly as members saw them at the time above.</p><!--/if:SAVED-->
-        <p>Rows picked by one rule: {{TERM_RULE}}. Tap a player for the full read. A model estimate is a chance, not a promise.</p>
-      </div>
+<section class="proof" aria-label="Proof">
+  <div class="wrap">
+    <div class="pf">
+      <div class="pc"><p class="pn"><span class="tk" aria-hidden="true" data-to="{{OWNER_UNITS}}" data-pre="+" data-suf="U" style="min-width:{{OWNER_UNITS_W}}ch">{{OWNER_UNITS_S}}</span><span class="sr-only">{{OWNER_UNITS_S}}</span></p><p class="pl">{{OWNER_POST}}</p><p class="cap">{{OWNER_POST_BY}}</p></div>
+      <!--if:TOTAL--><div class="pc"><p class="pn"><span class="tk" aria-hidden="true" data-to="{{LEDGER_N}}" style="min-width:{{LEDGER_W}}ch">{{LEDGER_TOTAL}}</span><span class="sr-only">{{LEDGER_TOTAL}}</span></p><p class="pl">decided picks on the public record, saved before the game, losses included.</p><p class="cap"><a class="tl" href="/record">{{REC_LINK}}</a></p></div><!--/if:TOTAL-->
+      <!--if:REVIEWS--><div class="pc"><p class="pn"><span aria-hidden="true">{{RV_BIG}}</span><span class="sr-only">{{RV_BIG_SR}}</span></p><p class="pl">{{RV_PROOF}}</p><p class="cap"><a class="tl" href="/reviews">{{RV_LINK}}</a></p></div><!--/if:REVIEWS-->
     </div>
-    <!--/if:TERM-->
   </div>
 </section>
 
-<section class="how sec" id="how" aria-labelledby="how-title">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="kicker">How it works</p>
-      <h2 id="how-title">Three steps, one board.</h2>
+<section class="sec how" id="how" aria-labelledby="how-title">
+  <div class="wrap g12">
+    <div class="hd4">
+      <p class="eb">How it works</p>
+      <h2 id="how-title"><span class="ln">Open the board.</span> <span class="ln">Read the grade.</span> <span class="ln">Play your line.</span></h2>
     </div>
     <ol class="steps">
-      <li class="step"><span class="sn" aria-hidden="true">1</span><h3>Pick your app and sport</h3><p>{{STEP1}}</p><ul class="sp-row" aria-label="Sports graded">{{SPORT_CHIPS}}</ul></li>
-      <li class="step"><span class="sn" aria-hidden="true">2</span><h3>See the grade and model estimate at your exact line, with the why</h3><p>The letter, the chance at that line, the break-even for your entry and the reasons in plain English.</p><!--if:HANDBE--><div class="ui">{{HAND_BE}}</div><!--/if:HANDBE--></li>
-      <li class="step"><span class="sn" aria-hidden="true">3</span><h3>Build your slip in Slip Studio and check the record after</h3><p>Slips from graded lines, every leg rechecked. Every call is saved before the game and scored after.</p><div class="ui"><em class="chip saved-chip">Saved before the game</em></div></li>
+      <li><span class="sn" aria-hidden="true">01</span><div><h3>Pick your app and sport</h3><p><span translate="no">PrizePicks</span> and <span translate="no">Underdog</span> on one row, for {{SPORT_SUB}}.</p></div></li>
+      <li><span class="sn" aria-hidden="true">02</span><div><h3>See the grade at your exact line</h3><p>A letter, a model estimate, the break-even for your entry, and the reasons in plain English.</p></div></li>
+      <li><span class="sn" aria-hidden="true">03</span><div><h3>Build the slip, check the record</h3><p>Slip Studio rechecks every leg. Every call is saved before the game and scored after.</p></div></li>
     </ol>
   </div>
 </section>
 
-<!--if:GW-->
-<section class="gw sec lt" id="grade" aria-labelledby="gw-title">
+<section class="sec inside" id="inside" aria-labelledby="inside-title">
   <div class="wrap">
-    <div class="sec-head">
-      <p class="kicker">The grade</p>
-      <h2 id="gw-title">Move the line, and the grade moves with it.</h2>
-      <p class="lede">The model's projection for {{GW_WHO}} is <b>{{GW_PROJ}}</b> kills for Maps 1-2. Drag the line: a grade belongs to a line, not a player.</p>
+    <div class="hd-c">
+      <p class="eb">Inside Prop Grader</p>
+      <h2 id="inside-title">What members see when they log in.</h2>
     </div>
-    <div class="gw-box" id="gw" data-gw="{{GW_DATA}}">
-      <div class="gw-plot">
-        <svg id="gw-svg" viewBox="0 0 640 200" role="img" aria-label="Prop Grader's kills distribution with the line marked"></svg>
-        <div class="ctl"><label for="gw-line">Line <b id="gw-lv">{{GW_LINE}}</b></label><input type="range" id="gw-line" min="{{GW_MIN}}" max="{{GW_MAX}}" step="0.5" value="{{GW_LINE}}"></div>
-      </div>
-      <div class="gw-out" aria-live="polite">
-        <p class="gw-side" id="gw-side">{{GW_SIDE}} {{GW_LINE}} kills</p>
-        <div class="gw-read"><p class="gw-big"><b id="gw-p">{{GW_P}}</b><i>%</i></p><b class="gw-g {{GW_GCLS}}" id="gw-g">{{GW_G}}</b></div>
-        <p class="gw-k">Model estimate</p>
-        <ol class="ladder" id="gw-ladder" aria-hidden="true">{{GW_LADDER}}</ol>
-        <p class="gw-rec"><a href="/record#cs2">See every grade tier on the public record, losses included <span aria-hidden="true">→</span></a></p>
-        <p class="fine">The grader's CS2 kills formula with the spread members' cards use. At the real line, {{GW_LINE}}, it prints the board's own number (board of {{GW_ASOF}}). Below the B- cut it reads Lean.</p>
-      </div>
-    </div>
-  </div>
-</section>
-<!--/if:GW-->
-
-<section class="tools sec" id="tools" aria-labelledby="tools-title">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="kicker">The tools</p>
-      <h2 id="tools-title">The sharp side of the board.</h2>
-      <p class="lede">Everything below exists so you play the right line.</p>
-    </div>
-    <div class="bento{{TOOLS_FLAG}}">
-      <article class="tile t-gap">
-        <p class="tk">Line gaps</p>
-        <h3>When apps disagree, see it.</h3>
-        <p>A chip marks every prop where two apps list different lines. Each line is graded on its own.</p>
-        <!--if:GAP--><div class="mini gap">{{GAP_MINI}}</div><!--/if:GAP--><!--if:NOGAP--><div class="mini demo"><em class="chip gap">Line gap</em><span>shows on a row when two apps list different lines</span></div><!--/if:NOGAP-->
-      </article>
-      <article class="tile t-move">
-        <p class="tk">Line moves</p>
-        <h3>Know the opener.</h3>
-        <p>When an app bumps a line, the row keeps the opening number beside the new one.</p>
-        <!--if:MOVE--><div class="mini">{{MOVE_MINI}}</div><!--/if:MOVE-->
-      </article>
-      <article class="tile t-be">
-        <p class="tk">Break-even</p>
-        <h3>Estimate against price.</h3>
-        <p>Each entry type pays differently. Every leg shows the chance it needs beside the model estimate.</p>
-        <!--if:BE--><div class="mini be">{{BE_MINI}}</div><!--/if:BE-->
-      </article>
-      <!--if:EV--><article class="tile t-ev"><p class="tk">Best prices</p><h3>Market fair, at the app's line.</h3><p>Where two independent books price the exact same line, their fair chance shows beside the model estimate and the break-even for your entry. One feed never counts twice.</p></article><!--/if:EV-->
-      <!--if:ARB--><article class="tile t-arb"><p class="tk">Price check</p><h3>Both sides, two books.</h3><p>The price check lists a pair only when two different books price the identical line, with each quote's age. Quotes go stale fast and the sheet says so.</p></article><!--/if:ARB-->
-      <article class="tile t-slip">
-        <div>
-          <p class="tk">Slip Studio</p>
-          <h3>Slips, built and rechecked.</h3>
-          <p>Pick the app and the number of legs. Slip Studio builds from graded lines, rechecks every leg and prints the model estimate that all of them hit. Parlays are long shots, and the slip says so.</p>
+    <!--if:GAP-->
+    <div class="irow">
+      <div class="itxt"><h3>When the apps disagree, you see it first.</h3><p>Every prop shows the <span translate="no">PrizePicks</span> and <span translate="no">Underdog</span> line side by side. Each line is graded on its own, so half a point shows up as a different chance.</p></div>
+      <div class="ipanel rv">
+        <div class="panel" aria-hidden="true">
+          <p class="pnh"><span>{{GAP_WHO}}</span><span class="tag">Example</span></p>
+          <div class="lts">{{GAP_TILES}}</div>
+          <div class="gap">
+            <p class="gk">Line gap</p>
+            <p class="gd"><b>{{GAP_D}}</b><span>{{GAP_PICK}}</span></p>
+            {{GAP_METER}}
+            <p class="ge">{{GAP_P}}% model estimate</p>
+          </div>
         </div>
-        <!--if:SLIP--><figure class="slip"><div class="sl">{{SLIP}}</div><figcaption>{{SLIP_CAP}}</figcaption></figure><!--/if:SLIP-->
-      </article>
-    </div>
-    <div class="cta-row"><a class="btn primary" href="{{TRIAL_URL}}">Start my free day</a><span class="micro">Then {{PRICE_M}}/month · cancel anytime from your Whop account</span></div>
-  </div>
-</section>
-
-<section class="cs2 sec" id="cs2" aria-labelledby="cs2-title">
-  <div class="wrap cs2-in{{CS2_CLS}}">
-    <div class="cs2-copy">
-      <p class="kicker">Esports first</p>
-      <h2 id="cs2-title">Built for CS2, not bolted on.</h2>
-      <p class="lede">CS2 came first, and its card reads the game the way a CS2 player does.</p>
-      <ul class="feat">
-        <li><b>Map chances</b><span>HLTV veto history says which maps get played</span></li>
-        <li><b>Map pool</b><span>The player's own numbers on every map</span></li>
-        <li><b>Roles and stand-ins</b><span>Entry, AWPer, support; a stand-in is flagged on the card</span></li>
-        <li><b>Headshots</b><span>Graded on their own, AWPers apart</span></li>
-        <li><b>LoL</b><span>Its own model for kills and assists</span></li>
-      </ul>
-    </div>
-    <!--if:POOL--><div class="pool" id="pool" data-line="{{POOL_LINE}}" data-pairs="{{POOL_PAIRS}}">
-      <div class="pool-h"><b>Pick two maps. See the pace.</b><small>{{POOL_WHO}} · Kills · Maps 1-2 · line {{POOL_LINE}} on {{POOL_APP}}</small></div>
-      <ul class="maps">{{POOL_MAPS}}</ul>
-      <div class="pool-out" aria-live="polite">
-        <p><span id="pool-names">{{POOL_NAMES}}</span>, pooled</p>
-        <p class="pool-v"><b id="pool-v">{{POOL_V}}</b><span>kills per map against a line pace of <b>{{POOL_PACE}}</b></span><i id="pool-d" class="{{POOL_DCLS}}">{{POOL_D}}</i></p>
+        <p class="sr-only">{{GAP_SR}}</p>
       </div>
-      <p class="cap">{{POOL_CAP}}</p>
-    </div><!--/if:POOL-->
+    </div>
+    <!--/if:GAP-->
+    <div class="irow flip">
+      <div class="itxt"><h3>Built for CS2, not bolted on.</h3><p><span translate="no">HLTV</span> veto history, each player's map pool, roles and stand-ins all feed the CS2 card. League of Legends has its own model.</p></div>
+      <!--if:POOL--><div class="ipanel rv">
+        <div class="panel" aria-hidden="true">
+          <p class="pnh"><span>{{POOL_WHO}} · Kills per map, last 12 months</span><span class="tag">Example</span></p>
+          <ul class="kbars">{{POOL_BARS}}</ul>
+        </div>
+        <p class="sr-only">{{POOL_SR}}</p>
+      </div><!--/if:POOL-->
+    </div>
   </div>
 </section>
 
-<section class="hand sec" aria-labelledby="hand-title">
+<!--if:SLIP-->
+<section class="sec slip" id="slip" aria-labelledby="slip-title">
+  <div class="wrap g12">
+    <div class="slip-copy">
+      <p class="eb">Slip Studio</p>
+      <h2 id="slip-title">Slips, built from graded lines.</h2>
+      <p class="lead">Pull graded props from any sport on the board into one slip. Slip Studio rechecks every leg and prints the chance they all hit beside the break-even for your entry.</p>
+      <p class="sports">{{SPORT_LONG}}</p>
+      <a class="btn btn-md" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a>
+    </div>
+    <div class="slip-stage">
+      <div class="stage" id="ss">
+        <div class="ss-fig" role="img" aria-label="Example animation: four graded props from different sports move from the board into a 4-pick slip.">
+          <div class="ss-col ss-board">
+            <p class="ss-h"><b>Graded board</b><span class="tag">Example</span></p>
+            <div class="ss-list">{{SS_CARDS}}</div>
+          </div>
+          <div class="ss-col ss-slip" id="ss-slip">
+            <p class="ss-h"><b>Slip Studio · 4-pick</b><span class="st" id="ss-st">Slip ready</span></p>
+            <div class="ss-list">{{SS_SLOTS}}</div>
+            <div class="ss-all"><svg class="lk" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg><span>All legs hit vs break-even</span><span class="bl">00.0% vs 00.0%</span></div>
+          </div>
+        </div>
+        <div class="ss-cta" id="ss-cta"><a class="btn btn-md" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a></div>
+      </div>
+      <p class="cap">Example animation. {{SS_WHO}} is from the public sample board; the other cards are placeholders, and members-only numbers are blurred.</p>
+    </div>
+  </div>
+</section>
+<!--/if:SLIP-->
+
+<section class="sec why" aria-labelledby="why-title">
   <div class="wrap">
-    <div class="sec-head">
-      <p class="kicker">By hand vs Grader</p>
-      <h2 id="hand-title">{{HAND_H}}</h2>
-      <ul class="chips books" aria-label="Lines read from">{{BOOK_CHIPS}}</ul>
-    </div>
-    <div class="vs" role="table" aria-label="By hand compared with Prop Grader">
-      <div class="vs-h" role="row"><span role="columnheader">The job</span><span role="columnheader">By hand</span><span role="columnheader" class="sc">With Grader</span></div>
-      <div class="vs-r" role="row"><b role="cell">Find the line</b><span role="cell" class="bh">{{HAND_OPEN}}</span><span role="cell" class="sc">{{HAND_ROW1}}</span></div>
-      <div class="vs-r" role="row"><b role="cell">Spot a gap</b><span role="cell" class="bh">Only if you happen to compare the right two apps</span><span role="cell" class="sc"><!--if:HANDPILLS--><span class="ui">{{HAND_PILLS}}</span><!--/if:HANDPILLS-->{{HAND_ROW}}</span></div>
-      <div class="vs-r" role="row"><b role="cell">Price the entry</b><span role="cell" class="bh">Payout table, then a calculator</span><span role="cell" class="sc"><span class="ui">{{HAND_BE}}</span>Break-even for your entry beside the model estimate</span></div>
-      <div class="vs-r" role="row"><b role="cell">Keep score</b><span role="cell" class="bh">Screenshots of the good nights</span><span role="cell" class="sc"><span class="ui"><em class="chip saved-chip">Saved before the game</em></span>Every call scored after, losses included</span></div>
-    </div>
-    <div class="cta-row"><a class="btn primary" href="{{TRIAL_URL}}">Try it free for 1 day</a><span class="micro">Then {{PRICE_M}}/month · cancel anytime from your Whop account</span></div>
+    <h2 id="why-title">One row instead of six apps.</h2>
+    <table class="cmp">
+      <thead><tr><th scope="col">The job</th><th scope="col">By hand</th><th scope="col" class="ac">With <span translate="no">Prop Grader</span></th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Find the line</th><td><span class="lbl">By hand: </span>Open each app and write the numbers down</td><td><span class="lbl">With Prop Grader: </span>PrizePicks and Underdog on one row, graded at each app's own line</td></tr>
+        <tr><th scope="row">Spot a gap</th><td><span class="lbl">By hand: </span>Only if you happen to compare the right two apps</td><td><span class="lbl">With Prop Grader: </span>Flagged on the row when the apps differ</td></tr>
+        <tr><th scope="row">Price the entry</th><td><span class="lbl">By hand: </span>Payout table, then a calculator</td><td><span class="lbl">With Prop Grader: </span>Break-even for your entry beside the model estimate</td></tr>
+        <tr><th scope="row">Keep score</th><td><span class="lbl">By hand: </span>Screenshots of the good nights</td><td><span class="lbl">With Prop Grader: </span>Every call saved before the game, scored after, losses included</td></tr>
+        <tr><th scope="row">Esports</th><td><span class="lbl">By hand: </span>Season averages</td><td><span class="lbl">With Prop Grader: </span>HLTV veto history, map pool, roles and stand-ins on every CS2 card</td></tr>
+      </tbody>
+    </table>
   </div>
 </section>
 
 <!--if:LEDGER-->
-<section class="ledger sec band" id="record" aria-labelledby="ledger-title">
-  <div class="band-bg" aria-hidden="true"></div>
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="kicker">The public record</p>
-      <h2 id="ledger-title">Saved before the game. Scored after. Losses included.</h2>
-      <p class="lede">Screenshots show the good nights. The record shows every night: <b>{{LEDGER_TOTAL}}</b> decided picks across {{REC_SPORTS}}, each sport counted by its own written rule.</p>
+<section class="sec record" id="record" aria-labelledby="rec-title">
+  <div class="wrap g12">
+    <div class="hd4">
+      <p class="eb">The public record</p>
+      <h2 id="rec-title">Saved before the game. Scored after.</h2>
+      <p class="body">Screenshots show the good nights. The record shows every night, losses included, and anyone can read it without an account.</p>
+      <p class="more"><a class="tl" href="/record">See every pick on the record</a></p>
     </div>
-    <div class="lg-grid">{{LEDGER}}</div>
-    <p class="fine">As of {{LEDGER_ASOF}}. Bars: the last 30 days, one per day, wins up, losses down, no day left out. <a href="/record#cs2">Why the rules differ <span aria-hidden="true">→</span></a></p>
-    <div class="cta-row"><a class="btn primary" href="{{TRIAL_URL}}">Try it free for 1 day</a><a class="tlnk" href="/record">See every pick on the record <span aria-hidden="true">→</span></a></div>
+    <div class="rec-wrap rv">
+      <table class="rec">
+        <thead><tr><th scope="col">Sport</th><th scope="col">Won</th><th scope="col">Lost</th><th scope="col">Push</th></tr></thead>
+        <tbody>{{LEDGER_ROWS}}</tbody>
+      </table>
+      <p class="cap">From {{REC_SRC}}, {{LEDGER_ASOF}}. Each sport is counted by its own written rule.</p>
+    </div>
   </div>
 </section>
 <!--/if:LEDGER-->
 
-<section class="proofwall sec" id="members" aria-labelledby="rv-title">
+<section class="sec members" id="members" aria-labelledby="rv-title">
   <div class="wrap">
-    <div class="sec-head split">
-      <div>
-        <p class="kicker">Members</p>
-        <h2 id="rv-title"><!--if:REVIEWS-->Members, in their words.<!--/if:REVIEWS--><!--if:NOREVIEWS-->From the members.<!--/if:NOREVIEWS--></h2>
-      </div>
-      <!--if:REVIEWS--><div class="rv-sum">{{RV_HEAD}}</div><!--/if:REVIEWS-->
-    </div>
-    <div class="rv-grid">
-      <!--if:REVIEWS--><div class="rv-set" id="reviews">{{RV_CARDS}}</div><!--/if:REVIEWS-->
-      <figure class="story"><p class="story-k">Shared by Prop Grader on X</p><blockquote>{{OWNER_STORY}}</blockquote><figcaption>{{OWNER_STORY_BY}}</figcaption></figure>
-    </div>
-    <!--if:REVIEWS--><p class="fine">{{RV_NOTE}} Shown here: the reviews about using the product; a sentence about money or slips is left out of a quote (marked …).<!--if:RVREST--> {{RV_REST}} more, one-liners and reviews with slips included, are on the reviews page.<!--/if:RVREST--> <a href="/reviews">Read all {{RV_N}} reviews <span aria-hidden="true">→</span></a></p><!--/if:REVIEWS-->
+    <h2 id="rv-title">Members, in their words.</h2>
+    <!--if:REVIEWS--><p class="rvh">{{RV_HEAD}}</p><!--/if:REVIEWS-->
+    <figure class="story"><blockquote><p>&ldquo;{{OWNER_STORY}}&rdquo;</p></blockquote><figcaption>{{OWNER_STORY_BY}}</figcaption></figure>
+    <!--if:RVCARDS--><ul class="rqs">{{RV_CARDS}}</ul><!--/if:RVCARDS-->
   </div>
 </section>
 
-<section class="pricing sec" id="pricing" aria-labelledby="plan-title">
+<section class="sec pricing" id="pricing" aria-labelledby="plan-title">
   <div class="wrap">
-    <div class="sec-head">
-      <p class="kicker">Pricing</p>
-      <h2 id="plan-title">Start with a free day.</h2>
+    <h2 id="plan-title">Start with a free day.</h2>
+    <p class="lead">One plan with everything. Cancel anytime from your Whop account.</p>
+    <div class="plan" id="plan">
+      <p class="pl-h"><b>Monthly</b><span class="chip">1&nbsp;day free</span></p>
+      <p class="price"><b>{{PRICE_M}}</b><span>/month</span></p>
+      <p class="pl-t">Your first day is free. Then {{PRICE_M}}/month until you cancel.</p>
+      <a class="btn btn-lg btn-wide" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a>
+      <ul class="chk">
+        <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>The board: {{SPORT_SUB}}</li>
+        <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>A grade and model estimate at every line</li>
+        <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>Line gaps and line moves across apps</li>
+        <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>Slip Studio, every leg rechecked</li>
+        <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>Player pages and the public record</li>
+      </ul>
     </div>
-    <div class="plans">
-      <article class="plan-card feat-plan">
-        <div class="plan-copy">
-          <p class="badge">1-day free trial</p>
-          <h3>Monthly</h3>
-          <p class="price"><b>{{PRICE_M}}</b><span>/month</span></p>
-          <a class="btn primary" href="{{TRIAL_URL}}">Start free, then {{PRICE_M}}/mo</a>
-          <p class="micro">Your first day is free. Then {{PRICE_M}}/month until you cancel from your Whop account.</p>
-        </div>
-        <ul class="plan-list">
-          <li><b>The board</b><span>{{SPORT_LIST}}, each app's line on one row</span></li>
-          <li><b>Grades at every line</b><span>The model estimate at the exact line, the letter and the reason</span></li>
-          <li><b>Line gaps and moves</b><span>Which apps disagree, and the opening line beside the new one</span></li>
-          <li><b>Slip Studio</b><span>Slips built from graded lines, each leg rechecked, the all-hit estimate printed</span></li>
-          <li><b>Player pages</b><span>Last 10 at the line, form, head-to-head; map pool and roles for CS2</span></li>
-          <li><b>The public record</b><span>Every graded call saved before the game and scored after</span></li>
-        </ul>
-      </article>
-      <article class="plan-card wk-plan">
-        <h3>Weekly</h3>
-        <p class="price"><b>{{PRICE_W}}</b><span>/week</span></p>
-        <p class="micro">The same board and tools, billed weekly.</p>
-        <a class="btn ghost" href="{{WEEKLY_URL}}">Choose Weekly</a>
-      </article>
-    </div>
-    <p class="secure">Secure checkout on Whop · cancel anytime</p>
+    <p class="wk"><a class="tl" href="{{WEEKLY_URL}}">Weekly plan</a>: {{PRICE_W}}/week</p>
+    <p class="wk2">Secure checkout on Whop.</p>
   </div>
 </section>
 
-<section class="faq sec" id="faq" aria-labelledby="faq-title">
-  <div class="wrap faq-in">
-    <div class="sec-head">
-      <p class="kicker">Questions</p>
-      <h2 id="faq-title">Before you start.</h2>
-    </div>
-    <div class="qs">
-      <details><summary>Is this a picks group?</summary><p>No. Prop Grader is a board you read yourself. Every graded prop shows the model estimate at the exact line, a letter grade and the reasons in plain English. You decide what to play.</p></details>
-      <details><summary>What happens after my free day?</summary><p>Your membership renews at {{PRICE_M}}/month unless you cancel from your Whop account before the free day ends.</p></details>
-      <details><summary>How do I know the grades are honest?</summary><p>Every graded call is saved before the game starts and scored after it on the public record, losses included. Each sport states its rule, and anyone can read it without an account.<!--if:UNREC--> {{UNREC_SENT}}<!--/if:UNREC--></p></details>
-      <details><summary>Will I win every day?</summary><p>No. A grade is a chance, not a certainty, and the record shows the losing days next to the good ones. Parlays multiply the risk, which is why Slip Studio prints the estimate that every leg hits.</p></details>
-      <details><summary>Do I need a big bankroll?</summary><p>No. Grades are chances, not promises, so play only what you can afford to lose and stay within your limits. For adults 21 and over. If gambling stops being fun, call <span class="nw">1-800-GAMBLER</span>.</p></details>
-      <details><summary>Which apps does it cover?</summary><p>{{APP_FAQ}}</p></details>
-      <details><summary>Is esports an afterthought?</summary><p>No. CS2 came first: HLTV map chances and veto history, roles, stand-ins and headshots all feed the CS2 card, and LoL has its own model. {{SPORT_LIST}} share one board.</p></details>
-      <details><summary>What happens after I sign up?</summary><p>Checkout runs on Whop. Then sign in with Whop on this page and the board, player pages, Slip Studio and your saved picks open in the browser, on phone or desktop.</p></details>
-      <details><summary>Can I cancel?</summary><p>Yes, anytime from your Whop account.</p></details>
+<section class="sec faq" id="faq" aria-labelledby="faq-title">
+  <div class="wrap g12">
+    <div class="hd4"><h2 id="faq-title">Questions.</h2></div>
+    <div class="acc" id="acc">
+      <div class="ai open"><h3><button type="button" id="q1" aria-expanded="true" aria-controls="a1">Is this a picks group?<i aria-hidden="true"></i></button></h3><div class="ap" id="a1"><p>No. Prop Grader is a board you read yourself. Every graded prop shows a model estimate at the exact line, a letter grade and the reasons. You decide what to play.</p></div></div>
+      <div class="ai"><h3><button type="button" id="q2" aria-expanded="false" aria-controls="a2">What happens after my free day?<i aria-hidden="true"></i></button></h3><div class="ap" id="a2"><p>Your membership renews at {{PRICE_M}}/month unless you cancel from your Whop account before the free day ends.</p></div></div>
+      <div class="ai"><h3><button type="button" id="q3" aria-expanded="false" aria-controls="a3">How do I know the grades are honest?<i aria-hidden="true"></i></button></h3><div class="ap" id="a3"><p>Every graded call is saved before the game starts and scored after it on the public record, losses included. Each sport states its rule, and anyone can read it without an account.</p></div></div>
+      <div class="ai"><h3><button type="button" id="q4" aria-expanded="false" aria-controls="a4">Will I win every day?<i aria-hidden="true"></i></button></h3><div class="ap" id="a4"><p>No. A grade is a chance, not a certainty, and the record shows the losing days next to the good ones. Parlays multiply the risk, which is why Slip Studio prints the estimate that every leg hits.</p></div></div>
+      <div class="ai"><h3><button type="button" id="q5" aria-expanded="false" aria-controls="a5">Can I cancel?<i aria-hidden="true"></i></button></h3><div class="ap" id="a5"><p>Yes, anytime from your Whop account.</p></div></div>
     </div>
   </div>
 </section>
 
-<section class="close dk" aria-labelledby="close-title">
-  <div class="glow" aria-hidden="true"></div>
-  <div class="wrap close-in">
-    <h2 id="close-title">Know the chance <span class="ac">before you pick.</span></h2>
-    <div class="ctas center"><a class="btn primary" href="{{TRIAL_URL}}">Try it free for 1 day</a></div>
-    <p class="terms">Then {{PRICE_M}}/month. Cancel anytime from your Whop account.</p>
-    <p class="signin">Already a member? <a href="/auth/login">Sign in with Whop</a></p>
-    <p class="rg-close">For adults 21 and over. Prop Grader gives chances, not certainties. If gambling stops being fun, call <span class="nw">1-800-GAMBLER</span>.</p>
+<section class="final" id="final" aria-labelledby="final-title">
+  <div class="wrap">
+    <h2 id="final-title" class="display">Grade every prop before you <span class="ac nw">lock it in.</span></h2>
+    <a class="btn btn-lg" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a>
+    <p class="terms">Then {{PRICE_M}}/month. Cancel anytime.</p>
   </div>
 </section>
 </main>
 
 <footer class="foot">
   <div class="wrap foot-in">
-    <a class="brand" href="/" aria-label="Prop Grader home"><span class="mark" aria-hidden="true"><i></i></span><b>Prop<em>Grader</em></b></a>
-    <nav aria-label="Footer"><a href="/record">Record</a><a href="/reviews">Reviews</a><a href="#pricing">Pricing</a><a href="/auth/login">Sign in</a></nav>
-    <p class="rg">Prop Grader gives chances, not certainties. Play only what you can afford to lose. For adults 21 and over. If gambling stops being fun, call <span class="nw">1-800-GAMBLER</span>.</p>
+    <a class="brand" href="/" aria-label="Prop Grader home"><span class="mark" aria-hidden="true">1T</span><span><span translate="no">Prop Grader</span> by 1Time Esports</span></a>
+    <p class="rg">Prop Grader gives chances, not certainties. Play only what you can afford to lose.</p>
+    <nav aria-label="Footer"><a href="/record">Record</a><a href="/reviews">Reviews</a><a href="/auth/login">Sign in</a></nav>
   </div>
 </footer>
-<div class="dock" id="dock"><a class="btn primary" href="{{TRIAL_URL}}">Try free for 1 day · then {{PRICE_M}}/mo</a></div>
+<div class="dock" id="dock">
+  <p class="dk-t"><b>1&nbsp;day free</b><span>Then {{PRICE_M}}/mo</span></p>
+  <a class="btn btn-dock" href="{{TRIAL_URL}}" tabindex="-1">Try free for 1&nbsp;day</a>
+</div>
 <script>
 {{PAGE_JS}}
 </script>
