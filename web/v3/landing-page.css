@@ -326,6 +326,7 @@ h2{font:600 clamp(30px,6.4vw,46px)/1.05 var(--sc-font);letter-spacing:var(--sc-t
 .cs2-in{display:grid;gap:24px}
 @media (min-width:1060px){
   .cs2-in{grid-template-columns:minmax(0,.82fr) minmax(0,1.18fr);gap:56px;align-items:center}
+  .cs2-in.no-pool{grid-template-columns:minmax(0,760px)}   /* no map module this build: the copy alone, at a reading width */
   .pool{margin-right:calc((100vw - min(100vw, var(--sc-max))) / -2 - var(--sc-gutter));border-radius:var(--sc-r-xl) 0 0 var(--sc-r-xl);padding:24px 48px 24px 24px}
 }
 .cs2-copy .lede{margin-top:10px}

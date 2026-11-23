@@ -84,6 +84,20 @@ REVIEWS = {"summary": {"count": 12, "average": 4.8, "breakdown": {"5": 10, "4": 
 ]}
 
 
+def hltv_off(monkeypatch, loader=None):
+    """No HLTV database in tests: fresh hltv caches, nothing saved to / loaded from disk, the map totals from `loader` only (None: no
+    database configured, so hltv_maps.for_player answers "unavailable" without a read)."""
+    import hltv
+    import hltv_maps
+    import hltv_store
+    for name in ("_CACHE", "_META", "_FLIGHTS"):
+        monkeypatch.setattr(hltv, name, {})
+    monkeypatch.setattr(hltv_store, "save", lambda *a, **k: None)
+    monkeypatch.setattr(hltv_store, "load", lambda *a, **k: None)
+    monkeypatch.setattr(hltv, "dsn", lambda: "")
+    monkeypatch.setattr(hltv_maps, "LOADER", loader)
+
+
 @pytest.fixture
 def srv(monkeypatch, tmp_path):
     monkeypatch.setattr(whop_auth, "enabled", lambda: True)
@@ -100,6 +114,7 @@ def srv(monkeypatch, tmp_path):
         monkeypatch.setattr(server, name, val)
     monkeypatch.setattr(workspace_api, "_SNAP", dict(workspace_api._SNAP, body=None))
     monkeypatch.setattr(workspace_api, "snapshot", lambda s: workspace_api._SNAP if workspace_api._SNAP.get("body") is not None else None)
+    hltv_off(monkeypatch)
     landing_v3.reset()
     yield server
     landing_v3.reset()
@@ -464,3 +479,201 @@ def test_one_changed_input_makes_exactly_one_new_page(srv, monkeypatch):
     wait_builder()
     new = landing_v3.page(srv, JOIN)
     assert len(builds) == 1 and new is not a and b"Zeta" not in new and landing_v3.page(srv, JOIN) is new
+
+
+# ------------------------------------------------------------------------------------------- the CS2 map module (HLTV, live)
+from datetime import date  # noqa: E402
+
+MOVER_MAPS = {"Mirage": 21, "Dust 2": 18, "Inferno": 16, "Ancient": 11, "Nuke": 8, "Anubis": 5, "Overpass": 20}   # Overpass: outside the pool
+EARLY_MAPS = {"Mirage": 14, "Inferno": 12, "Nuke": 9, "Ancient": 7, "Anubis": 6}                                   # 3 pool maps with 8+
+
+
+def map_rows(spec, today=None):
+    """Real-shaped hltv_maps rows (name, date, matchid, k, d, hs, own, opp, rating, adr, kast), newest first, all inside 12 months."""
+    today = today or date.today()
+    out, i = [], 0
+    for name, n in spec.items():
+        for _j in range(n):
+            k = 12 + (i * 7) % 11
+            own, opp = (13, 5 + i % 8) if i % 3 else (9 + i % 4, 13)
+            out.append((name, (today - timedelta(days=2 + (i * 3) % 340)).isoformat(), 9000 + i, k, 10 + i % 7, k // 2, own, opp,
+                        round(0.9 + (i % 5) * 0.06, 2), 70.0 + i % 20, 68.0 + i % 9))
+            i += 1
+    out.sort(key=lambda r: r[1], reverse=True)
+    return out
+
+
+def map_totals(spec):
+    by = {}
+    for r in map_rows(spec):
+        t = by.setdefault(r[0], [0, 0])
+        t[0] += r[3]
+        t[1] += 1
+    return by
+
+
+def pm_board():
+    """board() + a sooner lettered kills row whose HLTV maps fall short (Early), a PrizePicks line on Mover's kills, an unlettered
+    sooner kills row (NoLetter2) and a sooner lettered headshots row (never a kills candidate)."""
+    b = board()
+    at = landing_v3._ts(b["board_at"])
+    s = at + timedelta(hours=2)
+    b["records"] += [rec("Early", "kills", 28.5, "underdog", .600, "B", s - timedelta(minutes=30)),
+                     rec("Mover", "kills", 31.5, "prizepicks", .560, "B", s, side="under"),
+                     rec("NoLetter2", "kills", 25.5, "underdog", .505, None, s - timedelta(minutes=50)),
+                     rec("HsOnly", "headshots", 10.5, "underdog", .600, "B", s - timedelta(minutes=40))]
+    return b
+
+
+@pytest.fixture
+def maps_loader(monkeypatch):
+    import hltv_maps
+    calls = []
+    data = {"Mover": map_rows(MOVER_MAPS), "Early": map_rows(EARLY_MAPS), "Zeta": map_rows(MOVER_MAPS)}
+
+    def loader(nick, team, since):
+        calls.append(nick)
+        rows = data.get(nick)
+        return (77000 + len(nick), [r for r in rows if r[1] >= since]) if rows else (None, [])
+    hltv_off(monkeypatch, loader)
+    monkeypatch.setattr(hltv_maps, "pool_for", lambda mid=None: (list(hltv_maps.ACTIVE_DUTY), "constant"))
+    loader.calls = calls
+    loader.data = data
+    return loader
+
+
+def pool_html(page):
+    m = re.search(r'(?s)<div class="pool" id="pool".*?<p class="cap">.*?</p>\s*</div>', page.decode("utf-8"))
+    return m.group(0) if m else None
+
+
+def test_map_module_renders_the_rule_subject_from_hltv_totals(srv, monkeypatch, maps_loader):
+    seed(srv, monkeypatch, pm_board())
+    page = landing_v3.build(srv, JOIN, fetch=True)
+    pool = pool_html(page)
+    assert pool is not None and 'class="wrap cs2-in"' in page.decode()
+    assert maps_loader.calls == ["Early", "Mover"]                    # soonest lettered kills first; Early falls short; Zeta never read
+    assert 'data-line="32.5"' in pool and "Mover · Kills · Maps 1-2 · line 32.5 on Underdog" in pool      # the lettered Underdog line
+    tot = map_totals(MOVER_MAPS)
+    names = re.findall(r'<span class="mn">([^<]+)</span>', pool)
+    assert names == ["Mirage", "Dust 2", "Inferno", "Ancient"]          # top 4 pool maps by maps played (Overpass outside, Nuke 5th)
+    for nm in names:
+        k, n = tot[nm]
+        assert f'data-k="{k / n:.6f}" data-n="{n}"' in pool and f"<b>{k / n:.2f}</b>" in pool and f"<span>Maps</span><b>{n}</b>" in pool
+    assert pool.count('aria-pressed="true"') == 2                       # the two most played start chosen
+    (k1, n1), (k2, n2) = tot["Mirage"], tot["Dust 2"]
+    v, pace = (k1 + k2) / (n1 + n2), 32.5 / 2
+    assert f'<b id="pool-v">{v:.2f}</b>' in pool and f"line pace of <b>{pace:.2f}</b>" in pool
+    d = v - pace
+    assert f'class="{"up" if d >= 0 else "dn"}">{"+" if d >= 0 else "\u2212"}{abs(d):.2f}</i>' in pool
+    assert '<span id="pool-names">Mirage + Dust 2</span>' in pool
+    newest = date.today() - timedelta(days=2)
+    cap = html.unescape(re.search(r'<p class="cap">([^<]+)</p>', pool).group(1))
+    assert f"(newest map {newest.strftime('%b')} {newest.day}, read " in cap and re.search(r"read [A-Z][a-z]{2} \d{1,2}, \d\d:\d\d UTC\)", cap)
+    assert "Mover's HLTV numbers for the last 12 months" in cap and "on the four maps of the current pool Mover has played most." in cap
+    assert cap.endswith("The pool today: Ancient, Anubis, Cache, Dust 2, Inferno, Mirage and Nuke.")
+    assert "sml" not in page.decode()
+
+
+def test_map_module_pool_is_the_sites_current_pool(srv, monkeypatch, maps_loader):
+    import hltv_maps
+    pool7 = ["ancient", "anubis", "dust2", "mirage", "nuke", "overpass", "train"]       # a pool without Inferno (and with Overpass)
+    monkeypatch.setattr(hltv_maps, "pool_for", lambda mid=None: (pool7, "recent"))
+    seed(srv, monkeypatch, pm_board())
+    pool = pool_html(landing_v3.build(srv, JOIN, fetch=True))
+    assert re.findall(r'<span class="mn">([^<]+)</span>', pool) == ["Mirage", "Overpass", "Dust 2", "Ancient"]
+    assert "Inferno" not in pool and "The pool today: Ancient, Anubis, Dust 2, Mirage, Nuke, Overpass and Train." in html.unescape(pool)
+
+
+def test_map_module_visitor_request_never_reads_hltv(srv, monkeypatch, maps_loader):
+    seed(srv, monkeypatch, pm_board())
+    first = build(srv)
+    assert pool_html(first) is None and maps_loader.calls == []         # fetch=False with nothing cached: no read, no module
+    assert 'class="wrap cs2-in no-pool"' in first.decode()
+    landing_v3.build(srv, JOIN, fetch=True)                             # the background builder reads (bounded)
+    n = len(maps_loader.calls)
+    with ThreadPoolExecutor(max_workers=200) as pool:                  # 200 request-path builds: cached answers only
+        pages = list(pool.map(lambda _: build(srv), range(200)))
+    assert len(maps_loader.calls) == n and all(pool_html(p) for p in pages)
+
+
+def test_map_module_reads_are_bounded_and_single_flight(srv, monkeypatch, maps_loader):
+    b = pm_board()
+    at = landing_v3._ts(b["board_at"])
+    b["records"] += [rec(f"Extra{i}", "kills", 20.5, "underdog", .6, "B", at + timedelta(minutes=10 + i)) for i in range(20)]
+    seed(srv, monkeypatch, b)
+    assert pool_html(landing_v3.build(srv, JOIN, fetch=True)) is None   # 20 sooner players without HLTV maps: POOL_TRIES reads, no module
+    assert len(maps_loader.calls) == landing_v3.POOL_TRIES
+    with ThreadPoolExecutor(max_workers=50) as pool:
+        list(pool.map(lambda _: landing_v3.build(srv, JOIN, fetch=True), range(50)))
+    assert len(maps_loader.calls) == len(set(maps_loader.calls))         # each player read once (cached "none" answers)
+
+
+@pytest.mark.parametrize("case", ["error", "none", "no_letter", "saved_board", "stale_read", "short"])
+def test_map_module_is_omitted_cleanly(srv, monkeypatch, maps_loader, case):
+    import hltv
+    import hltv_maps
+    b = pm_board()
+    if case == "error":
+        monkeypatch.setattr(hltv_maps, "LOADER", lambda *a: (_ for _ in ()).throw(RuntimeError("db down")))
+    elif case == "none":
+        maps_loader.data.clear()
+    elif case == "no_letter":
+        for r in b["records"]:
+            if r["market"]["stat"] == "kills":
+                r["scout"]["grade"] = None
+    elif case == "short":
+        for k in ("Mover", "Zeta"):
+            maps_loader.data[k] = map_rows(EARLY_MAPS)
+    seed(srv, monkeypatch, b if case != "saved_board" else None)
+    if case == "saved_board":
+        workspace_api._SNAP["body"] = None                              # no live board: the saved board shows, never the module
+        maps_loader.data["sml"] = map_rows(MOVER_MAPS)
+    page = landing_v3.build(srv, JOIN, fetch=True)
+    if case == "stale_read":
+        assert pool_html(page) is not None
+        maps_loader.data.pop("Zeta")                                    # the next candidate has no HLTV maps either
+        for k in list(hltv._META):
+            hltv._META[k]["as_of"] = time.time() - (landing_v3.POOL_MAX_AGE_H * 3600 + 60)
+        page = landing_v3.build(srv, JOIN, fetch=True)
+    s = page.decode("utf-8")
+    assert pool_html(page) is None and '<div class="pool"' not in s and "Pick two maps" not in text(page) and not re.search(r"\{\{[A-Z_0-9]+\}\}", s)
+    assert 'class="wrap cs2-in no-pool"' in s and "Built for CS2, not bolted on." in s and 'id="terminal"' in s
+
+
+def test_map_module_never_shows_zero_for_a_missing_value(srv, monkeypatch, maps_loader):
+    import hltv
+    import hltv_maps
+    doc = hltv_maps.build(map_rows(MOVER_MAPS), date.today(), 77005)
+    win = doc["windows"]["12m"]["maps"]
+    win["mirage"]["kills"] = None                                       # a missing total: the map is left out, never 0
+    win["dust2"] = dict(win["dust2"], maps=0, kills=0)
+    win["anubis"] = dict(win["anubis"], maps=9, kills=0)                # no kills recorded on 9 maps: left out, never 0.00
+    hltv._remember(hltv_maps._key("Mover", None), dict(doc, state="ok"))
+    seed(srv, monkeypatch, pm_board())
+    pool = pool_html(landing_v3.build(srv, JOIN, fetch=False))
+    assert pool is None                                                  # only Inferno, Ancient, Nuke remain: under 4, no module
+    hltv._remember(hltv_maps._key("Mover", None), dict(doc, state="ok"))
+    monkeypatch.setattr(hltv_maps, "pool_for", lambda mid=None: (["ancient", "anubis", "dust2", "inferno", "mirage", "nuke", "overpass"], "match"))
+    pool = pool_html(landing_v3.build(srv, JOIN, fetch=False))
+    assert re.findall(r'<span class="mn">([^<]+)</span>', pool) == ["Overpass", "Inferno", "Ancient", "Nuke"]
+    assert ">Mirage<" not in pool and ">Dust 2<" not in pool and ">Anubis<" not in pool.split('class="cap"')[0]
+    assert not re.search(r"<b>0(\.0+)?</b>|data-k=\"0(\.0+)?\"|data-n=\"0\"", pool)
+
+
+def test_template_carries_no_hardcoded_player_stats():
+    raw = landing_v3.TEMPLATE.read_text(encoding="utf-8")
+    block = re.search(r"(?s)<!--if:POOL-->(.*?)<!--/if:POOL-->", raw).group(1)
+    bare = re.sub(r"\{\{[A-Z_0-9]+\}\}", "", block)
+    assert not re.search(r"\d", re.sub(r'(style|class|id)="[^"]*"', "", bare).replace("Maps 1-2", "")), "a number typed into the map module"
+    assert "data-k=" not in block and "sml" not in raw and "33.5" not in raw and "Mirage" not in block
+    assert all(tok in block for tok in ("{{POOL_LINE}}", "{{POOL_WHO}}", "{{POOL_APP}}", "{{POOL_MAPS}}", "{{POOL_V}}", "{{POOL_CAP}}"))
+
+
+def test_map_module_survives_an_idle_rebuild_after_the_hltv_cache_lapses(srv, monkeypatch, maps_loader):
+    import hltv
+    seed(srv, monkeypatch, pm_board())
+    a = pool_html(landing_v3.build(srv, JOIN, fetch=True))
+    n = len(maps_loader.calls)
+    hltv._CACHE.clear()                                                  # hltv's 15-min cache lapsed while nobody visited
+    assert pool_html(build(srv)) == a and len(maps_loader.calls) == n    # the request path keeps the subject, still no read

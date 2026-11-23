@@ -11,6 +11,8 @@ Every number on the page comes from a body the server already keeps for its own 
 - "Move the line": seeded from a real CS2 kills Maps 1-2 row, drawn only when its formula prints that row's own chance;
 - the record ledger: the same shared answer /api/record serves (key and compute identical), per sport;
 - the review wall: the same shared answer /api/reviews serves (newest first page), member text escaped here.
+- the CS2 map module: one live-board player picked by a fixed rule (pool_subject), his HLTV per-map kills from hltv_maps.for_player
+  (the member player card's read and cache) and the current pool from hltv_maps.pool_for; no subject or any error drops the module.
 
 Capacity (700 visitors at once): the request path only returns the last built bytes object (send_shared keys its ETag + gzip on
 that object's identity). One builder at a time rebuilds it at most every REBUILD_S seconds in a background thread, from cached
@@ -482,6 +484,164 @@ def grade_seed(board):
     return None
 
 
+# ------------------------------------------------------------------------------------------------------------- the map module
+
+# "Pick two maps. See the pace." (the CS2 band): one real board player's HLTV kills per map, picked by a fixed rule (pool_subject):
+#   candidates = the LIVE board's letter-graded standard CS2 Kills Maps 1-2 props that lock after the board's time (never the saved
+#   board: its line is not current), one per player per match, the lettered Underdog line first (the terminal's order);
+#   order = soonest lock, then the player's name (case-insensitive), then the event id;
+#   the subject = the first candidate whose HLTV per-map totals (hltv_maps.for_player: exact HLTV id via hltv._player_ids, the
+#   same read and 15-min cache the member player card uses) hold >= POOL_MIN_MAPS current-pool maps with >= POOL_MIN_N maps
+#   each in the 12-month window; the module shows the top POOL_SHOW of those by maps played (ties: higher kills/map, then the key).
+# HLTV only (owner 2026-11-20), never BO3.gg; a map missing a value is left out, never shown as 0. The current pool is
+# hltv_maps.pool_for (the match's HLTV veto pool, else the last 7 days of HLTV vetoes, else Active Duty), as on the player card.
+# Reads: the background builder (fetch=True) may ask hltv_maps.for_player for at most POOL_TRIES uncached players per build (its own
+# single flight, bounded read slots, failures kept FAIL_TTL); a visitor's request (fetch=False) only peeks at cached answers. No
+# subject, a read older than POOL_MAX_AGE_H, or any error: the whole module is left out (the page still serves).
+POOL_MIN_MAPS = 4
+POOL_MIN_N = 8
+POOL_SHOW = 4
+POOL_TRIES = 8
+POOL_MAX_AGE_H = 24
+WORDS = {2: "two", 3: "three", 4: "four"}
+MAP_COLOR = {"mirage": "#E5A653", "dust2": "#D8BD72", "inferno": "#E86A4E", "ancient": "#5DB884", "anubis": "#4FB3C8",
+             "nuke": "#7FA8E8", "cache": "#B89BE0", "overpass": "#8FC27A", "train": "#C9A27E", "vertigo": "#E58FB0"}
+
+
+def _pool_candidates(board):
+    """[(lock, record)] by the rule above (lettered Kills Maps 1-2, standard, ok, lock after the board's time), one per player per match."""
+    recs = (board or {}).get("records") or []
+    at = _ts((board or {}).get("board_at"))
+    best = {}
+    for r in recs:
+        sc, mk, ev, pl, of = r.get("scout") or {}, r.get("market") or {}, r.get("event") or {}, r.get("player") or {}, r.get("offer") or {}
+        line = of.get("line")
+        if (mk.get("stat") != "kills" or mk.get("period") != "maps12" or mk.get("line_type") != "standard" or not sc.get("grade")
+                or (r.get("state") or {}).get("kind") != "ok" or not pl.get("name") or isinstance(line, bool)
+                or not isinstance(line, (int, float)) or line <= 0):
+            continue
+        lock = _ts(ev.get("lock_utc") or ev.get("start_utc"))
+        if lock is None or (at and lock <= at):
+            continue
+        k = (ev.get("id"), pl.get("key") or pl.get("name"))
+        rank = 0 if of.get("platform") == "underdog" else 1
+        if k not in best or rank < best[k][0]:
+            best[k] = (rank, lock, r)
+    out = [(lock, r) for _rk, lock, r in best.values()]
+    out.sort(key=lambda x: (x[0], str((x[1].get("player") or {}).get("name")).lower(), str((x[1].get("event") or {}).get("id"))))
+    return out
+
+
+def _pool_maps(doc, pool):
+    """The current-pool maps of an HLTV doc with >= POOL_MIN_N maps and real totals: [(key, kills, maps)], most maps first."""
+    win = (((doc or {}).get("windows") or {}).get("12m") or {}).get("maps") or {}
+    out = []
+    for k in pool:
+        t = win.get(k) or {}
+        n, kills = t.get("maps"), t.get("kills")
+        if (isinstance(n, int) and not isinstance(n, bool) and isinstance(kills, int) and not isinstance(kills, bool)
+                and n >= POOL_MIN_N and kills > 0):
+            out.append((k, kills, n))
+    out.sort(key=lambda x: (-x[2], -x[1] / x[2], x[0]))
+    return out
+
+
+def _match_id(r):
+    """The board row's own match id (workspace_api's index: the row the member card reads), or None."""
+    try:
+        import workspace_api
+        of = r.get("offer") or {}
+        x = (workspace_api._SNAP.get("index") or {}).get((of.get("platform"), str(of.get("offer_id"))))
+        return (x or {}).get("match_id")
+    except Exception:
+        return None
+
+
+def _read_at(key):
+    """When the cached HLTV answer under key was read (aware datetime), or None."""
+    try:
+        import hltv
+        st = hltv.read_status(key) or {}
+        return _ts(st.get("as_of")) if st.get("state") != "failed" else None
+    except Exception:
+        return None
+
+
+def pool_subject(board, fetch):
+    """(record, doc, maps, pool keys, read time) for the module by the rule above, or None. fetch=False: cached answers only."""
+    import hltv
+    import hltv_maps
+    tries = 0
+    now = datetime.now(timezone.utc)
+    for _lock, r in _pool_candidates(board):
+        pl = r.get("player") or {}
+        nick, team = pl.get("name"), pl.get("team") or None
+        key = hltv_maps._key(nick, team)
+        doc = hltv._peek(key)
+        memo = _STATE["last"].get(("pool",))
+        if doc is hltv.MISS and not fetch and memo and memo[0] == key:
+            doc = memo[1]                                # the last subject's answer (hltv's 15-min cache may have lapsed while idle)
+        if doc is hltv.MISS:
+            if not fetch or tries >= POOL_TRIES:
+                continue
+            tries += 1
+            doc = hltv_maps.for_player(nick, team)
+        if not isinstance(doc, dict) or doc.get("state") != "ok" or not doc.get("hltv_id") or doc.get("source") != "HLTV":
+            continue
+        read = _read_at(key)
+        if read is None or (now - read).total_seconds() > POOL_MAX_AGE_H * 3600:
+            continue
+        pool, _src = hltv_maps.pool_for(_match_id(r))
+        maps = _pool_maps(doc, pool)
+        if len(maps) >= POOL_MIN_MAPS:
+            _STATE["last"][("pool",)] = (key, doc)
+            return r, doc, maps[:POOL_SHOW], pool, read
+    return None
+
+
+def pace(maps2, line):
+    """(pooled kills per map, line pace, delta) exactly as the page script draws it: summed kills / summed maps, pace = line / 2."""
+    k, n = sum(m[1] for m in maps2), sum(m[2] for m in maps2)
+    v = k / n
+    pc = float(line) / 2
+    return v, pc, v - pc
+
+
+def pool_module(board, fetch):
+    """The fills for the map module ({} = no module)."""
+    try:
+        got = pool_subject(board, fetch)
+        if not got:
+            return {}
+        import hltv_maps
+        r, doc, maps, pool, read = got
+        pl, of = r.get("player") or {}, r.get("offer") or {}
+        newest = _day(str(doc.get("newest_map") or "")[:10])
+        app = of.get("platform_label") or ""
+        if not newest or not app:
+            return {}
+        line = float(of.get("line"))
+        btns = []
+        for i, (k, kills, n) in enumerate(maps):
+            kpm = kills / n
+            btns.append(f'<li><button type="button" class="map" aria-pressed="{"true" if i < 2 else "false"}" data-k="{kpm:.6f}" data-n="{n}"'
+                        f' style="--mc:{MAP_COLOR.get(k, "#9AA4B8")}"><span class="mn">{esc(hltv_maps.display(k))}</span>'
+                        f'<span class="kv"><span>Kills/map</span><b>{kpm:.2f}</b></span><span class="kv"><span>Maps</span><b>{n}</b></span></button></li>')
+        v, pc, d = pace(maps[:2], line)
+        names = sorted(hltv_maps.display(k) for k in pool)
+        who = str(pl.get("name"))
+        cap = (f"{who}'s HLTV numbers for the last 12 months (newest map {newest}, read {_when(read)}) on the "
+               f"{WORDS.get(len(maps), len(maps))} maps of the current pool {who} has played most. The pool today: {_list(names)}.")
+        return {
+            "POOL_LINE": esc(_num(line)), "POOL_WHO": esc(who), "POOL_APP": esc(app), "POOL_MAPS": "".join(btns),
+            "POOL_NAMES": esc(f"{hltv_maps.display(maps[0][0])} + {hltv_maps.display(maps[1][0])}"),
+            "POOL_V": f"{v:.2f}", "POOL_PACE": f"{pc:.2f}", "POOL_D": ("+" if d >= 0 else "\u2212") + f"{abs(d):.2f}",
+            "POOL_DCLS": "up" if d >= 0 else "dn", "POOL_CAP": esc(cap),
+        }
+    except Exception:
+        return {}
+
+
 # ------------------------------------------------------------------------------------------------------------------ the ledger
 
 def _first_sentence(s):
@@ -678,6 +838,7 @@ def build(srv, join_url, fetch=True):
     nfeat = len(featured(inp["reviews"])) if nrv else 0
     seed = grade_seed(board) if nrows else None
     gw = _widget(seed, _when(_ts((board or {}).get("board_at"))))
+    pm = pool_module(board, fetch) if (nrows and not saved) else {}     # live board only: the saved board's line is not current
     more = ntotal - nrows if (nrows and not saved) else 0
     mi = minis(board) if nrows else {}
     slip, slip_cap = slip_card()
@@ -719,12 +880,14 @@ def build(srv, join_url, fetch=True):
         "GAP_MINI": mi.get("GAP", ""), "MOVE_MINI": mi.get("MOVE", ""), "BE_MINI": mi.get("BE", ""),
         "TOOLS_FLAG": (" has-ev" if tools[1] else "") + (" has-arb" if tools[0] else ""),
         "BASE": esc(base),
+        "CS2_CLS": "" if pm else " no-pool",
         **gw,
+        **pm,
     }
     out = _template()
     # optional blocks: <!--if:NAME--> ... <!--/if:NAME--> kept only when NAME has content
     for name, on in (("TERM", nrows > 0), ("NOTERM", nrows == 0), ("SAVED", saved), ("MORE", more > 0), ("LEDGER", bool(cells)),
-                     ("REVIEWS", bool(nrv)), ("TOTAL", bool(total)), ("RVN", bool(nrv)), ("GW", bool(gw)), ("EV", tools[1]),
+                     ("REVIEWS", bool(nrv)), ("TOTAL", bool(total)), ("RVN", bool(nrv)), ("GW", bool(gw)), ("POOL", bool(pm)), ("EV", tools[1]),
                      ("ARB", tools[0]), ("GAP", "GAP" in mi), ("NOGAP", "GAP" not in mi), ("MOVE", "MOVE" in mi), ("BE", "BE" in mi), ("BASE", bool(base)),
                      ("SLIP", bool(slip)), ("UNREC", bool(unrec and rec_names)), ("RVREST", nrv - nfeat > 0)):
         out = re.sub(rf"<!--if:{name}-->(.*?)<!--/if:{name}-->", (lambda m: m.group(1)) if on else "", out, flags=re.S)

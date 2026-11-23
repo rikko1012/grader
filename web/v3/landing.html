@@ -133,7 +133,7 @@
 <!--/if:GW-->
 
 <section class="cs2 sec" id="cs2" aria-labelledby="cs2-title">
-  <div class="wrap cs2-in">
+  <div class="wrap cs2-in{{CS2_CLS}}">
     <div class="cs2-copy">
       <p class="kicker">Esports first</p>
       <h2 id="cs2-title">Built for CS2, not bolted on.</h2>
@@ -146,20 +146,15 @@
         <li><b>LoL</b><span>Its own model for kills and assists</span></li>
       </ul>
     </div>
-    <div class="pool" id="pool" data-line="33.5">
-      <div class="pool-h"><b>Pick two maps. See the pace.</b><small>sml · Kills · Maps 1-2 · line 33.5 on Underdog</small></div>
-      <ul class="maps">
-        <li><button type="button" class="map" aria-pressed="true" data-k="15.90" data-n="21" style="--mc:#E5A653"><span class="mn">Mirage</span><span class="kv"><span>Kills/map</span><b>15.90</b></span><span class="kv"><span>Maps</span><b>21</b></span></button></li>
-        <li><button type="button" class="map" aria-pressed="true" data-k="16.67" data-n="18" style="--mc:#D8BD72"><span class="mn">Dust 2</span><span class="kv"><span>Kills/map</span><b>16.67</b></span><span class="kv"><span>Maps</span><b>18</b></span></button></li>
-        <li><button type="button" class="map" aria-pressed="false" data-k="17.50" data-n="16" style="--mc:#E86A4E"><span class="mn">Inferno</span><span class="kv"><span>Kills/map</span><b>17.50</b></span><span class="kv"><span>Maps</span><b>16</b></span></button></li>
-        <li><button type="button" class="map" aria-pressed="false" data-k="15.64" data-n="11" style="--mc:#5DB884"><span class="mn">Ancient</span><span class="kv"><span>Kills/map</span><b>15.64</b></span><span class="kv"><span>Maps</span><b>11</b></span></button></li>
-      </ul>
+    <!--if:POOL--><div class="pool" id="pool" data-line="{{POOL_LINE}}">
+      <div class="pool-h"><b>Pick two maps. See the pace.</b><small>{{POOL_WHO}} · Kills · Maps 1-2 · line {{POOL_LINE}} on {{POOL_APP}}</small></div>
+      <ul class="maps">{{POOL_MAPS}}</ul>
       <div class="pool-out" aria-live="polite">
-        <p><span id="pool-names">Mirage + Dust 2</span>, pooled</p>
-        <p class="pool-v"><b id="pool-v">16.26</b><span>kills per map against a line pace of <b>16.75</b></span><i id="pool-d" class="dn">−0.49</i></p>
+        <p><span id="pool-names">{{POOL_NAMES}}</span>, pooled</p>
+        <p class="pool-v"><b id="pool-v">{{POOL_V}}</b><span>kills per map against a line pace of <b>{{POOL_PACE}}</b></span><i id="pool-d" class="{{POOL_DCLS}}">{{POOL_D}}</i></p>
       </div>
-      <p class="cap">sml's HLTV numbers for the last 12 months (newest map Nov 20, read Nov 22) on the four maps of the current pool he has played most. The pool today: Ancient, Anubis, Cache, Dust 2, Inferno, Mirage and Nuke.</p>
-    </div>
+      <p class="cap">{{POOL_CAP}}</p>
+    </div><!--/if:POOL-->
   </div>
 </section>
 

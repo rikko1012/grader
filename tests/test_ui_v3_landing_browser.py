@@ -19,7 +19,7 @@ import whop_auth
 import workspace_api
 from tests import test_landing_browser as L
 from tests.test_landing_browser import seed, JOIN  # noqa: F401
-from tests.test_landing_v3 import board
+from tests.test_landing_v3 import board, hltv_off, map_rows, map_totals, MOVER_MAPS
 from tests.test_upgrade_browser import env, context, no_h_scroll  # noqa: F401
 
 PHONE, DESK = {"width": 390, "height": 844}, {"width": 1280, "height": 900}
@@ -88,6 +88,7 @@ def lbase(base, monkeypatch):
     """base + a real-shaped CS2 board snapshot (no feed reads) and a fresh landing build."""
     monkeypatch.setattr(workspace_api, "_SNAP", dict(workspace_api._SNAP, body=json.dumps(board()).encode()))
     monkeypatch.setattr(workspace_api, "snapshot", lambda s: workspace_api._SNAP)
+    hltv_off(monkeypatch)                                               # no HLTV database: the map module stays out unless a test gives maps
     landing_v3.reset()
     yield base
     landing_v3.reset()
@@ -315,16 +316,25 @@ def test_landing_v3_row_opens_in_place_and_a_line_tap_updates_the_read(browser, 
 
 
 def test_landing_v3_two_maps_pool_and_move_the_line(browser, lbase, monkeypatch):
+    import hltv_maps
     monkeypatch.setattr(workspace_api, "_SNAP", dict(workspace_api._SNAP, body=json.dumps(gw_board()).encode()))
+    rows = {"Mover": map_rows(MOVER_MAPS)}                              # Mover: the soonest lettered Kills Maps 1-2 row on gw_board()
+    hltv_off(monkeypatch, lambda nick, team, since: (77005, rows[nick]) if nick in rows else (None, []))
+    monkeypatch.setattr(hltv_maps, "pool_for", lambda mid=None: (list(hltv_maps.ACTIVE_DUTY), "constant"))
     landing_v3.reset()
     warm(lbase, 0)
+    tot = map_totals(MOVER_MAPS)
+    pooled = lambda a, b: (tot[a][0] + tot[b][0]) / (tot[a][1] + tot[b][1])
     for size in (PHONE, DESK):
         ctx, page = open_page(browser, lbase, size, "dark")
         try:
-            assert page.locator("#pool-v").text_content() == "16.26"                    # Mirage + Dust 2, weighted by maps played
+            assert page.locator(".pool-h small").text_content() == "Mover · Kills · Maps 1-2 · line 32.5 on Underdog"
+            assert page.locator("#pool-v").text_content() == f"{pooled('Mirage', 'Dust 2'):.2f}"   # Mirage + Dust 2: summed kills / summed maps
             page.locator("button.map", has_text="Inferno").click()                        # the oldest choice drops out
             assert page.locator("#pool-names").text_content() == "Dust 2 + Inferno"
-            assert page.locator("#pool-v").text_content() == f"{(16.67 * 18 + 17.50 * 16) / 34:.2f}"
+            assert page.locator("#pool-v").text_content() == f"{pooled('Dust 2', 'Inferno'):.2f}"
+            d = pooled('Dust 2', 'Inferno') - 32.5 / 2
+            assert page.locator("#pool-d").text_content() == ("+" if d >= 0 else "−") + f"{abs(d):.2f}"
             p0 = page.locator("#gw-p").text_content()
             assert p0 == f"{landing_v3.kills_chance(30.5, 32.4) * 100:.1f}"           # at the real line: the board's number
             slider = page.locator("#gw-line")
