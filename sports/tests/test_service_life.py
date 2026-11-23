@@ -99,3 +99,29 @@ def test_research_body_is_byte_identical_to_the_former_per_request_encoding(monk
     assert eb.http_board(req)[1] is body                                          # shared, not re-encoded
     (tmp_path / "soccer/research.json").write_text(json.dumps({"sport": "soccer", "at": "x", "players": {}}))
     assert eb.http_board(req)[1] != body                                          # new research file, new body
+
+
+def test_so5_high_water_record_names_what_was_served_and_is_rate_limited(data_dir, monkeypatch):
+    """sweep 2026-11-23 SO-5: the Nov 21 rss_over_max restart left only the exit record (7 min after RSS jumped). Crossing
+    the trim threshold now writes one record (at most every 10 min) that ops lists as rss_high."""
+    from types import SimpleNamespace
+    monkeypatch.setattr(service, "_HIGH", {"at": 0.0})
+    started = []
+    monkeypatch.setattr(service.threading, "Thread", lambda **kw: started.append(kw) or SimpleNamespace(start=lambda: None))
+    assert service._note_high(378.0, now=10_000.0) is True
+    started[-1]["target"]()                                       # run the record synchronously for the check
+    assert service._note_high(386.0, now=10_300.0) is False       # inside 10 min: nothing new
+    assert service._note_high(390.0, now=10_700.0) is True
+    started[-1]["target"]()
+    recs = service_life.high_recent(5)
+    assert [r["rss_mb"] for r in recs[-2:]] == [378.0, 390.0]
+    assert {"serving", "inflight", "web_cache", "children", "rss_tail"} <= set(recs[-1])
+    assert service.ops()["rss_high"][-1]["rss_mb"] == 390.0
+
+
+def test_so5_high_water_never_raises(data_dir, monkeypatch):
+    monkeypatch.setattr(service, "_HIGH", {"at": 0.0})
+    monkeypatch.setattr(service_life, "_dir", lambda: (_ for _ in ()).throw(OSError("disk full")))
+    assert service_life.high_water({"rss_mb": 1}) is None and service_life.high_recent() == []
+    monkeypatch.setattr(service.threading, "Thread", lambda **kw: (_ for _ in ()).throw(RuntimeError("no threads")))
+    assert service._note_high(390.0, now=1.0) is False

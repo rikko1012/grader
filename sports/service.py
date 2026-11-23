@@ -628,7 +628,7 @@ def ops():
             "expansion_pp_soccer": expansion_pp_soccer(),
             "token_configured": authtoken.configured(), "feeds": feed_state(),
             "encoding": dict(ENC_STATS, cached_bodies=len(_ENC)),
-            "restarts": service_life.recent(10), "cgroup": service_life.cgroup()}
+            "restarts": service_life.recent(10), "rss_high": service_life.high_recent(5), "cgroup": service_life.cgroup()}
 
 
 def ops_with_alerts():
@@ -955,12 +955,36 @@ def _stop_children(join_s=None):
         pass
 
 
+HIGH_EVERY_S = 600.0                                    # at most one high-water record per 10 min
+_HIGH = {"at": 0.0}
+
+
+def _note_high(mb, now=None):
+    """SO-5 (sweep 2026-11-23): RSS passed the trim threshold - record what the service holds now (the exit record's cheap
+    fields; no heap walk) from a daemon thread, so a lock held by a request never delays the watchdog. -> True when started."""
+    now = time.time() if now is None else now
+    if now - _HIGH["at"] < HIGH_EVERY_S:
+        return False
+    _HIGH["at"] = now
+    try:
+        def run():
+            rec = service_life.high_water(_exit_detail(mb), now)
+            if rec is not None:
+                sys.stderr.write(f"sports service rss {mb:.0f} MB > {TRIM_FRAC * MAX_MB:.0f} MB: serving {rec.get('serving')}\n")
+        threading.Thread(target=run, daemon=True, name="sports-rss-high").start()
+        return True
+    except Exception:                                   # noqa: BLE001 - never break the watchdog
+        return False
+
+
 def _watchdog(srv, every=5.0):
     last_trim = 0.0
     while True:
         time.sleep(every)
         mb = rss_mb()
         service_life.sample(mb)
+        if mb and mb > TRIM_FRAC * MAX_MB:
+            _note_high(mb)
         if mb and mb > TRIM_FRAC * MAX_MB and time.time() - last_trim >= 60:
             last_trim = time.time()                     # freed heap back to the OS before deciding to restart
             if service_life.trim():
