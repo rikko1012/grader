@@ -99,7 +99,11 @@ DISAGREE = 0.05
 COHERENCE = 0.05
 FORECAST_EVERY = 1800    # shadow log: also re-log an unchanged baseline every 30 min
 HEARTBEAT = 600          # ml_quotes: an unchanged quote is re-written at most every 10 min
-SNAPSHOT_MAX_MB = float(os.environ.get("ML_SNAPSHOT_MAX_MB") or 900)   # cap on LIVE pages of ml_snapshots.db (+ WAL)
+SNAPSHOT_MAX_MB = float(os.environ.get("ML_SNAPSHOT_MAX_MB") or 1500)  # cap on LIVE pages of ml_snapshots.db (+ WAL)
+# 900 -> 1500 on 2026-11-23 (storage-1123 R3a): writes had stopped since 2026-11-10 at 1,072 MB because the rows the
+# evaluation keeps live (ml_quotes keep set ~305 MB incl. indexes) plus the never-archived ml_forecasts shadow log
+# (~767 MB incl. index, +~13 MB/day) exceed 900 MB on their own (E4 dbstat). No row is removed; DISK_FLOOR_MB still
+# protects the disk. The durable fix (archive settled matches' keep set + forecasts) is mlstore-3 (R3b), not this.
 DISK_FLOOR_MB = float(os.environ.get("ML_DISK_FLOOR_MB") or 400)     # no quote write below this free space on the disk
 LEGACY_FILE_CAP_MB = 500  # the pre-mlstore-1 guard: file size > 500 MB paused every quote write
 GAP_MIN_S = 1800          # no saved quote for a platform this long (3 heartbeats) = a recorded gap (ml_gaps)
