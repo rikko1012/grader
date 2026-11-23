@@ -97,6 +97,7 @@ def test_no_grade_no_panel_and_board_failure_is_harmless():
 
 def test_snapshots_append_only_on_change(tmp_path, monkeypatch):
     monkeypatch.setattr(cmp, "snapshot_path", lambda: tmp_path / "s.jsonl"); monkeypatch.setattr(cmp, "_LAST", {})
+    monkeypatch.setattr(cmp, "_disk_free_mb", lambda p: 10_000.0)          # SO-2 floor: never the test host's free disk
     res = _res()
     p1 = cmp.panel(res, [_row()], now=NOW)
     assert cmp.snapshot(res, p1, "TAG") is True
