@@ -99,7 +99,7 @@
       </div>
       <p class="sr-only">{{PH_SR}}</p>
       <!--/if:PHONE-->
-      <p class="cap hero-cap">{{FRAME_CAP}}</p>
+      <p class="cap hero-cap"><span class="cap-d">{{FRAME_CAP}}</span><span class="cap-m">{{FRAME_CAP_PH}}</span></p>
       <p class="sr-only">{{FRAME_SR}}</p>
     </div>
   </div>
@@ -130,7 +130,8 @@
 <!--if:INSIDE-->
 <section class="sec inside" id="inside" aria-labelledby="inside-title">
   <div class="wrap">
-    <div class="hd">
+    <div class="hd ins-hd">
+      <p class="eb">Inside Prop Grader</p>
       <h2 id="inside-title">What members see when they log in.</h2>
     </div>
     <div class="ipair">
@@ -153,7 +154,7 @@
     </div>
     <!--/if:GAP-->
     <div class="icol{{POOL_ROW}}">
-      <div class="itxt"><h3>Built for CS2, not bolted on.</h3><p><span translate="no">HLTV</span> veto history, each player’s map pool, roles and stand-ins all feed the CS2 card. League of Legends has its own model.</p></div>
+      <div class="itxt"><h3>Built for CS2, not bolted on.</h3><p><span translate="no">HLTV</span> veto history, each player’s map pool, roles and <span class="nw">stand-ins</span> all feed the CS2 card. League of Legends has its own model.</p></div>
       <!--if:POOL--><div class="ipanel rv">
         <div class="panel" aria-hidden="true">
           <p class="pnh"><span>{{POOL_WHO}} · Kills per map, past year</span><span class="tag">Example</span></p>
@@ -170,7 +171,6 @@
 
 <section class="sec why" id="why" aria-labelledby="why-title">
   <div class="wrap">
-    <p class="eb">Why Prop Grader</p>
     <h2 id="why-title">One row instead of six apps.</h2>
     <p class="cmp-key" aria-hidden="true"><span>By hand</span><svg viewBox="0 0 16 16"><path d="M3 8h10M9.5 4.5L13 8l-3.5 3.5"/></svg><span class="ac">With <span translate="no">Prop Grader</span></span></p>
     <table class="cmp">
@@ -179,8 +179,8 @@
         <tr><th scope="row">Find the line</th><td><span class="lbl">By hand: </span>Open each app and write the numbers down</td><td><span class="lbl">With <span translate="no">Prop Grader</span>: </span><span translate="no">PrizePicks</span> and <span translate="no">Underdog</span> on one row, graded at each app’s own line</td></tr>
         <tr><th scope="row">Spot a gap</th><td><span class="lbl">By hand: </span>Only if you happen to compare the right two apps</td><td><span class="lbl">With <span translate="no">Prop Grader</span>: </span>Flagged on the row when the apps differ</td></tr>
         <tr><th scope="row">Price the entry</th><td><span class="lbl">By hand: </span>Payout table, then a calculator</td><td><span class="lbl">With <span translate="no">Prop Grader</span>: </span>Break-even for your entry beside the model estimate</td></tr>
-        <tr><th scope="row">Keep score</th><td><span class="lbl">By hand: </span>Screenshots of the good nights</td><td><span class="lbl">With <span translate="no">Prop Grader</span>: </span>Every call saved before the game, scored after, losses included</td></tr>
-        <tr><th scope="row">Esports</th><td><span class="lbl">By hand: </span>Season averages</td><td><span class="lbl">With <span translate="no">Prop Grader</span>: </span><span translate="no">HLTV</span> veto history, map pool, roles and stand-ins on every CS2 card</td></tr>
+        <tr class="ph-off"><th scope="row">Keep score</th><td><span class="lbl">By hand: </span>Screenshots of the good nights</td><td><span class="lbl">With <span translate="no">Prop Grader</span>: </span>Every call saved before the game, scored after, losses included</td></tr>
+        <tr class="ph-off"><th scope="row">Esports</th><td><span class="lbl">By hand: </span>Season averages</td><td><span class="lbl">With <span translate="no">Prop Grader</span>: </span><span translate="no">HLTV</span> veto history, map pool, roles and <span class="nw">stand-ins</span> on every CS2 card</td></tr>
       </tbody>
     </table>
   </div>
@@ -196,7 +196,7 @@
     <div class="slip-copy">
       <p class="lead">Pull graded props from any sport on the board into one slip. Slip Studio rechecks every leg and prints the chance they all hit beside the break-even for your entry.</p>
       <p class="sports">{{SPORT_LONG}}</p>
-      <a class="btn btn-md ss-cta" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a>
+      <p class="ss-cta-p"><a class="tl ss-cta" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a></p>
     </div>
     <div class="slip-stage">
       <div class="stage" id="ss">
@@ -211,11 +211,11 @@
             <div class="ss-list">{{SS_SLOTS}}</div>
             <div class="ss-all"><svg class="lk" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg><span>All legs hit vs break-even</span><span class="bl">00.0% vs 00.0%</span></div>
             </div>
-            <a class="btn ss-go" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a>
           </div>
+          <a class="btn ss-go" href="{{TRIAL_URL}}">Try Prop Grader free for 1&nbsp;day</a>
         </div>
       </div>
-      <p class="cap">Example animation. {{SS_WHO}} is a real row from the public sample board; the other legs are examples.</p>
+      <p class="cap">Example animation. {{SS_WHO}} is a real row from the public sample board; the other legs are placeholders, and members-only numbers are blurred.</p>
     </div>
   </div>
 </section>
@@ -232,11 +232,12 @@
     </div>
     <div class="rec-wrap rv">
       <table class="rec">
-        <caption>Every decided pick, by sport</caption>
-        <thead><tr><th scope="col">Sport</th><th scope="col">Won</th><th scope="col">Lost</th><th scope="col">Push</th></tr></thead>
+        <caption>{{LEDGER_TOTAL}} decided picks, by sport</caption>
+        <thead><tr><th scope="col">Sport</th><th scope="col">Won</th><th scope="col">Lost</th><th scope="col" class="nc">Push<span class="nc-d"> · </span><span class="nc-s">not counted</span></th></tr></thead>
         <tbody>{{LEDGER_ROWS}}</tbody>
       </table>
       <p class="cap">From {{REC_SRC}}, {{LEDGER_ASOF}}.</p>
+      <!--if:LGAP--><p class="cap rec-gap">{{LEDGER_GAP}}</p><!--/if:LGAP-->
     </div>
   </div>
 </section>
@@ -245,10 +246,11 @@
 <section class="sec members" id="members" aria-labelledby="rv-title">
   <div class="wrap">
     <div class="mem-hd"><h2 id="rv-title">Members, in their words.</h2><!--if:REVIEWS--><p class="rv-line"><a href="/reviews">{{RV_LINE}}</a></p><!--/if:REVIEWS--></div>
-    <div class="story">
-      <div class="st-q"><p class="st-t">{{OWNER_STORY}}</p><p class="st-by">{{OWNER_STORY_BY}}</p></div>
-    </div>
     <!--if:RVCARDS--><ul class="rqs{{RQS_CLS}}">{{RV_CARDS}}</ul><!--/if:RVCARDS-->
+    <div class="story">
+      <p class="st-k">From Prop Grader on X</p>
+      <p class="st-t">{{OWNER_STORY}}</p><p class="st-by">{{OWNER_STORY_BY}}</p>
+    </div>
   </div>
 </section>
 
@@ -269,7 +271,7 @@
         <li><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>Player pages and the public record</li>
       </ul>
     </div>
-    <p class="wk">Prefer weekly? <a href="{{WEEKLY_URL}}">{{PRICE_W}}/week</a> · Secure checkout on Whop</p>
+    <p class="wk">Prefer weekly? <a href="{{WEEKLY_URL}}">{{PRICE_W}}/week</a><span class="wk-dot"> · </span><span class="nw wk-s">Secure checkout on Whop</span></p>
   </div>
 </section>
 

@@ -180,8 +180,18 @@ def test_landing_v3_product_pictures_are_view_only(browser, lbase):
         assert bad == 0
         before = page.content()
         page.locator(".br:not(.br-h)").first.click()
-        page.locator(".ph-add").click()                                                # an inert members-only note
+        page.locator(".phone .ph-why").click()                                         # the phone picture is inert too
         assert page.content() == before                                                # nothing opens, toggles or reveals
+        # critic round 6: at >=1024 the phone overhangs the browser by at most 48 px whatever the row count; 3 Why rows, no note
+        for w in (1440, 1024):
+            page.set_viewport_size({"width": w, "height": 900})
+            page.wait_for_timeout(100)
+            geo = page.evaluate("""() => { const b = document.querySelector('.browser').getBoundingClientRect(),
+                p = document.querySelector('.phone').getBoundingClientRect(), c = document.querySelector('.hero-cap').getBoundingClientRect();
+                return {over: p.bottom - b.bottom, capGap: c.top - Math.max(p.bottom, b.bottom),
+                        why: [...document.querySelectorAll('.ph-why li')].filter(e => e.offsetParent).length,
+                        note: !!document.querySelector('.ph-add').offsetParent} }""")
+            assert geo["over"] <= 48.5 and geo["capGap"] >= 23.5 and geo["why"] <= 3 and not geo["note"], (w, geo)
         tabbed = []
         for _ in range(40):
             page.keyboard.press("Tab")

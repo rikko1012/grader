@@ -1,6 +1,6 @@
 """The v3 signed-out landing page (Prop Grader, owner brief + DESIGN_RULES.md, Nov 23 2026): web/v3/landing.html filled server-side
 with real data. Hero = a browser frame (the member board) + a phone frame (one prop card), then proof strip, how it works, Inside rows,
-Slip Studio stage, public record, members, pricing, FAQ, final call to action (critic round 1 removed the why table, D16).
+why table, Slip Studio stage, public record, members, pricing, FAQ, final call to action.
 
 Served instead of web/landing.html + the v3 overlay when v3 is on (server.py, the two landing send sites). web/landing.html is
 untouched: flag-off visitors keep its exact bytes (tests/test_ui_v3_gate.py).
@@ -58,7 +58,8 @@ LABEL = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL", "soccer": "Socc
 LONG = {"cs2": "CS2", "lol": "League of Legends", "nba": "NBA", "nfl": "NFL", "soccer": "Soccer", "tennis": "Tennis"}
 SHORT = {"underdog": "UD", "prizepicks": "PP"}
 APP_ORDER = {"prizepicks": 0, "underdog": 1}     # the frame's "Line by app" cell reads PP first, then UD (the owner mockup)
-HERO_ROWS = 4                      # the browser frame shows 4 rows
+HERO_ROWS = 6                      # the browser frame shows up to 6 rows (critic round 6: the board reaches the phone's bottom;
+                                   # a thinner board is held to a 48 px phone overhang by CSS, .pcol stretch)
 
 # Review featuring rule: the reviews that talk about using the product (stats, reasons, breakdowns, design, navigation...). A review
 # with photos (they are slips / calendars) or shouting stays on /reviews only; a sentence with money, result, betting or guarantee talk
@@ -463,14 +464,8 @@ def phone(shown):
                   and (r.get("offer") or {}).get("line") is not None), None)
     if other:
         why.append((f'{(other.get("offer") or {}).get("platform_label") or ""} line', _num((other.get("offer") or {}).get("line"))))
-    # the member card's verdict for this row, last (critic round 5): the record's own stake when it carries one, and the member board's
-    # "Below break-even" chip rule (web/upgrade-hub.js belowBreakEven: the chance on its side under the line's parity break-even)
-    u, ps, b = sc.get("units"), sc.get("p_side"), par.get("be")
-    below = isinstance(ps, (int, float)) and isinstance(b, (int, float)) and 0 < b < 1 and ps < b
-    has_u = isinstance(u, (int, float)) and not isinstance(u, bool)
-    if has_u or below:
-        val = " · ".join(([f"{float(u):g}U"] if has_u else []) + (["below break-even"] if below else []))
-        why.append(("Stake" if has_u else "Verdict", val[0].upper() + val[1:]))
+    # The brief's Why list is exactly these four (critic round 6 removed round 5's Stake / Verdict row: a members-only stake on a live
+    # row is product given away, access rule 0.4). The other app's line carries class "oa" (hidden in the >=1024 phone, rulebook D21).
     g = sc.get("grade") or ""
     prop = f"{side} {line} {mk.get('stat_label') or ''} · {mk.get('period_label') or ''}"
     sr = (f"Example prop card: {pl.get('name')}, {prop.replace(' · ', ', ')} on {app}, model estimate {p}% at the {line} line, grade "
@@ -480,7 +475,8 @@ def phone(shown):
         "PH_PROP": esc(prop), "PH_APP": esc(app),
         "PH_LINE": esc(line), "PH_P": esc(p), "PH_G": esc(_grade_text(g, side)), "PH_GCLS": gcls(g),
         "PH_METER": _meter(sc.get("p_side")),
-        "PH_WHY": "".join(f'<li><span>{esc(k)}</span><b>{esc(v)}</b></li>' for k, v in why),
+        "PH_WHY": "".join(f'<li{" class=oa" if other and i == len(why) - 1 else ""}><span>{esc(k)}</span><b>{esc(v)}</b></li>'
+                          for i, (k, v) in enumerate(why)),
         "PH_SR": esc(sr),
     }
 
@@ -611,7 +607,7 @@ def fallback_board():
 # subject, a read older than POOL_MAX_AGE_H, or any error: the panel is left out (the page still serves).
 POOL_MIN_MAPS = 4
 POOL_MIN_N = 8
-POOL_SHOW = 4
+POOL_SHOW = 7                      # the played pool, up to 7 maps (critic round 6)
 POOL_TRIES = 8
 POOL_MAX_AGE_H = 24
 
@@ -758,6 +754,34 @@ def ledger(record):
     return "".join(rows), total, _date(asof)
 
 
+def ledger_gap(record, sp):
+    """The one line under the record table for the board's sports the table does not show (critic round 6: six sports are promised,
+    the table proves four, and the gap must not read as a hidden record). Two cases, each only when it is true:
+    - a sport the public record does not cover at all (not in SPORTS: soccer, tennis) -> "... graded on the board, not on the public
+      record yet";
+    - a record sport whose ledger LOADED with nothing decided -> "... no decided picks yet".
+    A record sport whose read failed (no doc) is never named: that is an outage, not an empty record. '' when nothing is missing."""
+    if not record:
+        return ""
+    off = [s for s in sp if s not in SPORTS]
+    empty = []
+    for s in sp:
+        d = (record or {}).get(s)
+        t = (d or {}).get("totals") if isinstance(d, dict) else None
+        if isinstance(t, dict) and not (int(t.get("wins") or 0) + int(t.get("losses") or 0)):
+            empty.append(s)
+    out = []
+    low = lambda xs: _list([LONG[x] if x in SPORTS else LONG[x].lower() for x in xs])      # noqa: E731 (mid-sentence: soccer, tennis)
+    up = lambda t: t[:1].upper() + t[1:]                                                  # noqa: E731
+    if off:
+        names = up(low(off))
+        out.append(f"{names} {'are' if len(off) > 1 else 'is'} graded on the board, not on the public record yet.")
+    if empty:
+        names = up(low(empty))
+        out.append(f"{names} {'have' if len(empty) > 1 else 'has'} no decided picks yet.")
+    return " ".join(out)
+
+
 # ----------------------------------------------------------------------------------------------------------------- the reviews
 
 def _sentences(s):
@@ -765,7 +789,8 @@ def _sentences(s):
 
 
 # critic round 4 (reverses D38): complete reviews first; when fewer than FEATURE_N are complete, an excerpt fills the row. An excerpt
-# quotes whole sentences only (5+ words), never an ellipsis inside the quote marks, and its caption links the full review on /reviews.
+# quotes whole sentences only (5+ words); critic round 6: it carries an ellipsis inside the quote marks on each side where sentences were
+# left out (wall), and its caption links the full review on /reviews.
 
 
 def curly(s):
@@ -830,6 +855,9 @@ def wall(doc):
     for r, quote, cut, _old in featured(doc):
         d = _ts(r.get("created"))
         more = ' <a class="tl" href="/reviews">Full review</a>' if cut else ""
+        if cut:                                          # an excerpt says so inside the quote marks (critic round 6): an ellipsis on
+            full = " ".join(_sentences(r.get("body")))   # each side where sentences were left out, so it never reads as the whole review
+            quote = ("…\u00a0" if not full.startswith(quote) else "") + quote + ("\u00a0…" if not full.endswith(quote) else "")   # nbsp: never a lone …
         cards.append(f'<li><figure class="rq"><blockquote><p>&ldquo;{esc(curly(quote))}&rdquo;</p></blockquote>'
                      f'<figcaption>Paying member, {esc(_date(d))}{more}</figcaption></figure></li>')
     head = (f"from {n} reviews, all published" if avg is not None else "reviews, all published")
@@ -927,11 +955,14 @@ def build(srv, join_url, fetch=True):
         "FRAME_MORE": esc(f"Showing {len(shown)} of {live_n:,} graded props on the board.") if more_n > 0 else "",
         "FRAME_CAP": esc(f"Example rows from the public sample board{', ' + bdate if bdate else ''}. "
                          "A model estimate is a chance, not a promise."),
+        # phones show the phone frame only (one prop, no rows): the caption says so (critic round 6); CSS picks one per width
+        "FRAME_CAP_PH": esc(f"Example prop from the public sample board{', ' + bdate if bdate else ''}. "
+                            "A model estimate is a chance, not a promise."),
         **ph, **gp, **pm,
         "POOL_ROW": "" if pm else " solo",
         "SS_CARDS": cards_ss[0], "SS_SLOTS": cards_ss[1], "SS_WHO": real.get("SS_WHO", ""),
         "LEDGER_ROWS": rows, "LEDGER_ASOF": esc(asof),
-        "LEDGER_TOTAL": tot_s, "LEDGER_N": str(total), "LEDGER_W": str(len(tot_s)),
+        "LEDGER_TOTAL": tot_s, "LEDGER_GAP": esc(ledger_gap(inp["record"], sp)), "LEDGER_N": str(total), "LEDGER_W": str(len(tot_s)),
         "REC_SRC": esc(f"{re.sub(r'^https://', '', base)}/record") if base else "the public record",
         "RV_HEAD": head, "RV_CARDS": cards, "RV_N": str(nrv),
         # the one rating line beside the Members H2 (brief 8); the story card carries the 6-man post only (critic round 5)
@@ -947,7 +978,7 @@ def build(srv, join_url, fetch=True):
     out = _template()
     # optional blocks: <!--if:NAME--> ... <!--/if:NAME--> kept only when NAME has content
     for name, on in (("FRAME", bool(pick)), ("PHONE", bool(ph)), ("GAP", bool(gp)), ("POOL", bool(pm)), ("SLIP", bool(real)),
-                     ("LEDGER", bool(rows)), ("TOTAL", bool(total)), ("REVIEWS", bool(nrv)), ("RVCARDS", bool(cards)),
+                     ("LEDGER", bool(rows)), ("TOTAL", bool(total)), ("LGAP", bool(rows and ledger_gap(inp["record"], sp))), ("REVIEWS", bool(nrv)), ("RVCARDS", bool(cards)),
                      ("BASE", bool(base)), ("INSIDE", bool(gp or pm)), ("FMORE", bool(more_n > 0))):
         out = re.sub(rf"<!--if:{name}-->(.*?)<!--/if:{name}-->", (lambda m: m.group(1)) if on else "", out, flags=re.S)
     out = re.sub(r"\{\{([A-Z_0-9]+)\}\}", lambda m: fill.get(m.group(1), ""), out)
