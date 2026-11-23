@@ -382,3 +382,25 @@ def test_recorded_gap_is_immutable_and_survives_archive_passes(store, monkeypatc
     # nothing is backfilled into the gap by the unified lookup either
     inside = ml_store.quotes(platform="polymarket", frm=g0[0][1], to=g0[0][2], limit=1000)
     assert inside["matched"] and {r["received_ts"] for r in inside["rows"]} == {g0[0][1], g0[0][2]}
+
+
+def test_so1_refused_writes_count_from_the_last_save_not_the_restart():
+    """sweep 2026-11-23 SO-1: the store refused every write for 13 days (cap / disk floor) and writes_stopped re-armed its
+    30-minute grace after every deploy. A refusal counts from the last saved quote; a plain restart keeps its grace."""
+    now = NOW.timestamp()
+    st = {"last_received": {"polymarket": iso(NOW - timedelta(days=13))}}
+    f = ml_store.compute_alerts(st, {"polymarket": _src(err="SnapshotCapReached: x")}, now_ts=now, boot_ts=now - 600)
+    assert f["writes_stopped:polymarket"]["on"] and f["writes_stopped:polymarket"]["minutes_without_save"] == 13 * 24 * 60
+    f = ml_store.compute_alerts(st, {"polymarket": _src()}, now_ts=now, boot_ts=now - 600)
+    assert not f["writes_stopped:polymarket"]["on"]                           # no refusal: the restart grace stays
+    f = ml_store.compute_alerts({"last_received": {}}, {"polymarket": _src(err="x")}, now_ts=now, boot_ts=now - 600)
+    assert not f["writes_stopped:polymarket"]["on"]                           # nothing ever saved: from the start as before
+
+
+def test_so1_cap_unrecoverable_when_the_archive_has_nothing_to_move(monkeypatch):
+    monkeypatch.setattr(moneyline, "SNAPSHOT_MAX_MB", 900.0)
+    f = ml_store.compute_alerts({"live_mb": 1067.8, "last_pass": {"pending_days": 0, "kept_old_rows": 300743, "error": None}}, {})
+    assert f["cap_unrecoverable"]["on"] and f["cap_unrecoverable"]["kept_old_rows"] == 300743
+    assert not ml_store.compute_alerts({"live_mb": 1067.8, "last_pass": {"pending_days": 3}}, {})["cap_unrecoverable"]["on"]
+    assert not ml_store.compute_alerts({"live_mb": 800.0, "last_pass": {"pending_days": 0}}, {})["cap_unrecoverable"]["on"]
+    assert "cap_unrecoverable" not in ml_store.compute_alerts({"live_mb": 1067.8}, {})              # no pass yet: no claim
