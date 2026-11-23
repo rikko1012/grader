@@ -46,12 +46,15 @@ FRESH_MIN = 30                     # a board older than this is labelled "as of 
 SPORTS = ("cs2", "lol", "nba", "nfl")
 LABEL = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL", "soccer": "Soccer", "tennis": "Tennis"}
 LONG = {"cs2": "CS2", "lol": "League of Legends", "nba": "NBA", "nfl": "NFL", "soccer": "Soccer", "tennis": "Tennis"}
-# The apps and books named on the page: sources whose lines were on the live member boards when checked (2026-11-22 17:5x UTC: CS2
-# board = Underdog, PrizePicks feed up but empty; NBA / NFL boards = PrizePicks, Underdog, FanDuel, BetRivers, Unibet (the AU feed),
-# Polymarket). Bovada rows were also on the NBA / NFL boards and are deliberately not named (never in the owner's approved list; the
-# landing's banned-word test keeps it off). Sleeper, Dabble, DraftKings and Kalshi had no rows, so they are not named. No paid odds feed
-# (owner 2026-11-09). Text only, no logos. Re-check against the boards before adding one.
-BOOKS = ("PrizePicks", "Underdog", "FanDuel", "BetRivers", "Unibet", "Polymarket")
+# The apps and books named on the page are read live, from the member boards' own snapshots (apps_seen): a source is named only
+# while its rows are on a board read in the last APPS_MAX_AGE_S. Two kinds, kept apart on the page (the product's own split,
+# workspace_sports.PICKEM vs "shown for comparison"): the pick'em apps Slip Studio builds slips for, and the sportsbooks / markets whose
+# lines the NBA / NFL boards show beside them for comparison. Only names on these two lists can appear (owner-approved names; Bovada rows
+# are on the NBA / NFL boards and are deliberately never named - the landing's banned-word test keeps it off). Text only, no logos.
+PICK_APPS = (("prizepicks", "PrizePicks"), ("underdog", "Underdog"))
+COMPARE_BOOKS = (("fanduel", "FanDuel"), ("betrivers", "BetRivers"), ("unibet_au", "Unibet"), ("polymarket", "Polymarket"),
+                 ("draftkings", "DraftKings"), ("kalshi", "Kalshi"))
+APPS_MAX_AGE_S = 24 * 3600
 SHORT = {"underdog": "UD", "prizepicks": "PP"}
 # The "Move the line" widget: Scout's CS2 kills chance (grader.p_more with the live kills spread, chances capped either side) and the
 # letter cut points (grader.grade_from_p; tests/test_landing_v3.py keeps the two in step). The widget is only drawn when this formula,
@@ -68,6 +71,10 @@ _MONEY = re.compile(r"profit|money|\$|cash|paid|payout|\bwon\b|\bwin|hit big|\bb
 _PRODUCT = re.compile(r"stat|breakdown|reason|navigat|design|analy[sz]|matchup|information|\bcards?\b|\bmaps?\b|projection|grader|"
                       r"\bboard\b|explain|\bdata\b", re.I)
 FEATURE_N = 3
+# The landing's brand is Prop Grader. A review that names the site's old name (CS2 Scout, 1time, 1T) is featured only when fewer than
+# FEATURE_N other reviews qualify, after them, and its card says it was written before the rename. Its text is the member's own and is
+# never edited.
+_OLD_BRAND = re.compile(r"\bscout\b|1time|\b1T\b", re.I)
 
 # Pricing and the trial (owner blueprint, Nov 22 2026). Read from the public Whop checkout pages on Nov 23: the free-trial plan
 # (server.LANDING_TRIAL_URL) says "1 day free, then $24.99 per month"; Monthly plan_8d2GVuU7671mD = $24.99/month; Weekly
@@ -344,21 +351,34 @@ def minis(board):
     return out
 
 
-def hand_minis(board):
-    """The by-hand table's real UI chips: the first terminal row's lines by app, and its chance against break-even as the row's meter."""
-    pick = _rows(board, n=HERO_ROWS)[0]
-    if not pick:
-        return "", ""
-    rs = pick[0][0]
-    p, be = _pct((rs[0].get("scout") or {}).get("p_side")), _pct((rs[0].get("parity") or {}).get("be"))
-    bar = (f'<span class="mt big" style="--p:{esc(p)}" aria-hidden="true"><i></i><u style="--b:{esc(be)}"></u></span>'
-           f'<span class="lbl"><b>Model estimate {esc(p)}%</b><b>Break-even {esc(be)}%</b></span>') if p and be else ""
-    return _span_cells(rs), bar
+def hand_minis(board, pair=None):
+    """The by-hand table's real UI chips: (pills, meter, row text). Pills: the first terminal row with two apps' lines; when the CS2
+    sample has none, `pair` (sports_pair: a real NBA / NFL row both pick'em apps list, labelled with its sport); else the first row's
+    single line with wording that says so. Meter: the first terminal row's chance against its break-even."""
+    pick = _rows(board, n=HERO_ROWS)[0] if board else []
+    bar = ""
+    if pick:
+        rs0 = pick[0][0]
+        p, be = _pct((rs0[0].get("scout") or {}).get("p_side")), _pct((rs0[0].get("parity") or {}).get("be"))
+        bar = (f'<span class="mt big" style="--p:{esc(p)}" aria-hidden="true"><i></i><u style="--b:{esc(be)}"></u></span>'
+               f'<span class="lbl"><b>Model estimate {esc(p)}%</b><b>Break-even {esc(be)}%</b></span>') if p and be else ""
+    two = next((rs for rs, _g, _m in pick if len({(r.get("offer") or {}).get("platform") for r in rs}) > 1), None)
+    if two:
+        return _span_cells(two) + _who(two[0], "CS2"), bar, "Each app's line on one row, each graded on its own"
+    if pair:
+        lg, rs = pair
+        return _span_cells(rs) + _who(rs[0], LABEL.get(lg, lg.upper())), bar, "Each app's line on one row, each graded on its own"
+    if pick:
+        rs = pick[0][0]
+        return (_span_cells(rs) + _who(rs[0], "CS2"), bar,
+                "The app's line on the row; when a second app lists the prop, its line sits beside it, graded on its own")
+    return "", bar, "Each app's line on one row, each graded on its own"
 
 
-def _who(r):
+def _who(r, sport=None):
     pl, mk = r.get("player") or {}, r.get("market") or {}
-    return f'<span class="num">{esc(pl.get("name"))} · {esc(mk.get("stat_label"))} · {esc(mk.get("period_label"))}</span>'
+    lead = f"{esc(sport)} · " if sport else ""
+    return f'<span class="num">{lead}{esc(pl.get("name"))} · {esc(mk.get("stat_label"))} · {esc(mk.get("period_label"))}</span>'
 
 
 def _detail(i, lead, opened):
@@ -710,9 +730,10 @@ def _sentences(s):
 
 
 def featured(doc):
-    """[(review, quote, cut)] by the stated rule: reviews that talk about using the product, most specific first. A review with photos
-    (slips) or shouting is not featured; a sentence with money / result / betting / guarantee talk is never quoted (cut = a sentence was
-    left out, shown as an ellipsis with a link to the reviews page)."""
+    """[(review, quote, cut, old)] by the stated rule: reviews that talk about using the product, most specific first. A review with
+    photos (slips) or shouting is not featured; a sentence with money / result / betting / guarantee talk is never quoted (cut = a sentence
+    was left out, shown as an ellipsis with a link to the reviews page). old = the review names the site's old brand (_OLD_BRAND): those
+    come after every other qualifying review, so they only fill a slot nothing else can."""
     out = []
     for r in (doc or {}).get("reviews") or []:
         text = f'{r.get("title") or ""} {r.get("body") or ""}'
@@ -726,9 +747,10 @@ def featured(doc):
         hits = len(_PRODUCT.findall(quote))
         if not hits or len(quote.split()) < 5:
             continue
-        out.append((hits, len(quote), r, quote, len(kept) < len(sents)))
-    out.sort(key=lambda x: (-x[0], -x[1]))
-    return [(r, q, cut) for _h, _n, r, q, cut in out[:FEATURE_N]]
+        old = bool(_OLD_BRAND.search(f'{text} {r.get("name") or ""}'))
+        out.append((old, hits, len(quote), r, quote, len(kept) < len(sents)))
+    out.sort(key=lambda x: (x[0], -x[1], -x[2]))
+    return [(r, q, cut, old) for old, _h, _n, r, q, cut in out[:FEATURE_N]]
 
 
 def wall(doc):
@@ -739,7 +761,7 @@ def wall(doc):
     if not n:
         return "", "", 0, ""
     cards = []
-    for r, quote, cut in featured(doc):
+    for r, quote, cut, old in featured(doc):
         d = _ts(r.get("created"))
         title = r.get("title") if r.get("title") and not _MONEY.search(str(r.get("title"))) else ""
         stars = int(r.get("stars") or 0)
@@ -748,6 +770,7 @@ def wall(doc):
             f'<figure class="rv"><div class="st" aria-label="{stars} of 5 stars">{"★" * stars}<span>{"★" * (5 - stars)}</span></div>'
             f'{"<h3>" + esc(title) + "</h3>" if title else ""}'
             f'<blockquote>{esc(quote)}{" …" if cut else ""}</blockquote>'
+            f'{"<p class=rv-old>Written before the site was renamed Prop Grader. The member’s words are unchanged.</p>" if old else ""}'
             f'<figcaption><b>{esc(r.get("name"))}</b><small>Paying member · {esc(_day(r.get("created")) + (", " + str(d.year) if d else ""))}{" · edited" if r.get("edited") else ""}</small>'
             f'<a href="/reviews">{more} <span aria-hidden="true">→</span></a></figcaption></figure>')
     avg = s.get("average")
@@ -811,6 +834,168 @@ def slip_card():
     return head + f'<ol class="sl-legs">{"".join(rows)}</ol>', cap
 
 
+# ------------------------------------------------------------------------------------------------------------ apps, live
+
+def _snap_platforms(snap, now):
+    """{platform: rows} from one member board snapshot (module memory, never a feed read), or {} when it is missing or not read for
+    APPS_MAX_AGE_S. NBA / NFL keep a per-platform count; LoL and soccer / tennis keep an index keyed (platform, id)."""
+    if not isinstance(snap, dict) or snap.get("body") is None or now - float(snap.get("at") or 0) > APPS_MAX_AGE_S:
+        return {}
+    if isinstance(snap.get("counts"), dict):
+        return {p: n for p, n in snap["counts"].items() if n}
+    out = {}
+    for k in list((snap.get("index") or {}).keys()):
+        if isinstance(k, tuple) and k:
+            out[k[0]] = out.get(k[0], 0) + 1
+    return out
+
+
+def _warm_sports(srv, sp):
+    """Background builder only, once per process: read an NBA / NFL board that no member has opened since the start (single flight with
+    the members' own reads), so the app list is not short after a deploy. Never on a visitor's request."""
+    try:
+        import workspace_sports
+    except Exception:
+        return
+    for lg in workspace_sports.LEAGUES:
+        if lg in sp and (workspace_sports._SNAP.get(lg) or {}).get("body") is None and ("warm", lg) not in _STATE["last"]:
+            _STATE["last"][("warm", lg)] = True
+            try:
+                workspace_sports.snapshot(srv, lg)
+            except Exception:
+                pass
+
+
+def apps_seen(board, sp, now=None):
+    """(pick apps, comparison books, leagues with comparison books): the names on PICK_APPS / COMPARE_BOOKS whose rows are on a member
+    board read in the last APPS_MAX_AGE_S (the live CS2 board passed in, the LoL / NBA / NFL / soccer / tennis snapshots in memory)."""
+    now = time.time() if now is None else now
+    seen, book_lgs = set(), []
+    at = _ts((board or {}).get("board_at"))
+    if board and at and now - at.timestamp() <= APPS_MAX_AGE_S:
+        seen |= {(r.get("offer") or {}).get("platform") for r in board.get("records") or []}
+    snaps = []
+    try:
+        import workspace_lol
+        if "lol" in sp:
+            snaps.append(("lol", workspace_lol._SNAP))
+    except Exception:
+        pass
+    try:
+        import workspace_sports
+        snaps += [(lg, workspace_sports._SNAP.get(lg)) for lg in workspace_sports.LEAGUES if lg in sp]
+    except Exception:
+        pass
+    try:
+        import workspace_expansion
+        snaps += [(x, workspace_expansion._SNAP.get(x)) for x in ("soccer", "tennis") if x in sp]
+    except Exception:
+        pass
+    books = {k for k, _ in COMPARE_BOOKS}
+    for lg, snap in snaps:
+        have = set(_snap_platforms(snap, now))
+        seen |= have
+        if have & books and lg in LABEL:
+            book_lgs.append(LABEL[lg])
+    return ([n for k, n in PICK_APPS if k in seen], [n for k, n in COMPARE_BOOKS if k in seen], book_lgs)
+
+
+def app_fills(picks, books, book_lgs):
+    """The page's app wording from apps_seen: the proof tile, the by-hand headline / chips / row, step 1, the FAQ answer. Pick'em apps
+    (slips) and comparison books are never counted as one kind. Nothing seen: no count and no "and more" (the tile is left out)."""
+    n = len(picks) + len(books)
+    if picks and books:
+        kind = "apps and books"
+    elif picks:
+        kind = "apps" if len(picks) > 1 else "app"
+    else:
+        kind = "books" if len(books) > 1 else "book"
+    lgs = _list(book_lgs) if book_lgs else "sports"
+    apps_word = "apps" if len(picks) > 1 else "app"
+    tile = ""
+    if picks:
+        lead = ", ".join(picks) + " and more" if books else _list(picks)
+        tile = f"<b>{n} {kind}</b><span>Lines from {esc(lead)}</span>"
+    chips = "".join(f"<li>{esc(b)}</li>" for b in picks)
+    if books:
+        chips += f'<li class="cmp-k">For comparison on {esc(lgs)}</li>' + "".join(f'<li class="cmp">{esc(b)}</li>' for b in books)
+    if picks:
+        faq = (f"The boards carry lines from {_list(picks)}, the pick'em {apps_word} Slip Studio builds slips for, "
+               f"and each line is graded at the number that app lists.")
+        if books:
+            faq += f" The {lgs} boards also show lines from {_list(books)} beside them for comparison. Slips cover {_list(picks)} only."
+        hand_open = "Open " + _list(picks + ([f"{len(books)} books"] if books else [])) + " and write the numbers down"
+        step1 = (f"{_list(picks)} lines on one row for every sport on the board"
+                 f"{f', with books beside them for comparison on {lgs}' if books else ''}.")
+    else:
+        faq = "Every row names the app whose line it is and when that line was seen, and each line is graded at that app's own number."
+        hand_open = "Open each app and write the numbers down"
+        step1 = "Every app's line on one row, for every sport on the board."
+    return {
+        "APP_TILE": tile,
+        "HAND_H": esc(f"One row instead of {n} {kind}." if n > 1 else "One row for every line."),
+        "BOOK_CHIPS": chips,
+        "HAND_OPEN": esc(hand_open),
+        "STEP1": esc(step1),
+        "APP_FAQ": esc(faq),
+    }
+
+
+def _pair_rule_key(rs, lock):
+    lines = {(r.get("offer") or {}).get("line") for r in rs}
+    return (0 if len(lines) > 1 else 1, lock, (rs[0].get("player") or {}).get("name") or "")
+
+
+def sports_pair(sp, now=None, compute=True):
+    """A real two-app row for the by-hand table when the CS2 sample has none: from the NBA / NFL snapshots in memory, the props both
+    pick'em apps list where each row has a side and the lead row a letter, locking after now; line gaps first, then the soonest lock,
+    then the name. Only candidates' saved row bytes are parsed (never the whole board). -> (league, rows) or None. Cached per snapshot;
+    compute=False (a visitor's request) only reads that cache."""
+    now = time.time() if now is None else now
+    try:
+        import workspace_sports
+    except Exception:
+        return None
+    best = None
+    for lg in workspace_sports.LEAGUES:
+        snap = workspace_sports._SNAP.get(lg) or {}
+        if lg not in sp or snap.get("body") is None or now - float(snap.get("at") or 0) > APPS_MAX_AGE_S:
+            continue
+        ck = ("pair", lg)
+        hit = _STATE["last"].get(ck)
+        if hit and hit[0] is snap.get("body") and (hit[1] is None or hit[1][0][1].timestamp() > now):
+            cand = hit[1]
+        elif not compute:
+            cand = hit[1] if hit and hit[1] and hit[1][0][1].timestamp() > now else None
+        else:
+            cand = None
+            index, props = snap.get("index") or {}, snap.get("props") or {}
+            for key, lst in list(props.items()):
+                if not {"underdog", "prizepicks"} <= {k[0] for k in lst}:
+                    continue
+                xs = [index.get(k) for k in lst if k[0] in ("underdog", "prizepicks")]
+                if any(x is None or not x.get("lean") or x.get("started") or not x.get("rec") for x in xs):
+                    continue
+                lock = _ts(xs[0].get("start"))
+                if lock is None or lock.timestamp() <= now:
+                    continue
+                try:
+                    rs = [json.loads(x["rec"]) for x in xs]
+                except Exception:
+                    continue
+                rs.sort(key=lambda r: (0 if (r.get("scout") or {}).get("grade") else 1,
+                                       0 if (r.get("offer") or {}).get("platform") == "underdog" else 1))
+                if not (rs[0].get("scout") or {}).get("grade") or any((r.get("scout") or {}).get("p_side") is None for r in rs):
+                    continue
+                rk = _pair_rule_key(rs, lock)
+                if cand is None or rk < cand[0]:
+                    cand = (rk, rs)
+            _STATE["last"][ck] = (snap.get("body"), cand)
+        if cand and cand[0][1].timestamp() > now and (best is None or cand[0] < best[1][0]):
+            best = (lg, cand)
+    return (best[0], best[1][1]) if best else None
+
+
 # --------------------------------------------------------------------------------------------------------------------- build
 
 def sports_on():
@@ -844,11 +1029,17 @@ def _widget(seed, saved_at):
     }
 
 
-def public_base():
-    """The site's configured public origin (PUBLIC_URL, the same value Whop sign-in uses), never the request's Host header: the page
-    is one cached body for everyone. '' when unset (absolute-URL tags are then left out)."""
-    v = (os.environ.get("PUBLIC_URL") or "").strip().rstrip("/")
+def _origin(v):
+    v = (v or "").strip().rstrip("/")
     return v if re.match(r"^https://[A-Za-z0-9.-]+(:\d+)?$", v) else ""
+
+
+def public_base():
+    """The origin the landing's canonical / og:url / og:image / twitter:image name, never the request's Host header (the page is one
+    cached body for everyone): LANDING_PUBLIC_URL (the brand's own domain, e.g. https://propsgrader.com - a landing-only setting, so
+    Whop sign-in keeps PUBLIC_URL and its registered callback), else PUBLIC_URL. '' when neither is a valid https origin (the
+    absolute-URL tags are then left out)."""
+    return _origin(os.environ.get("LANDING_PUBLIC_URL")) or _origin(os.environ.get("PUBLIC_URL"))
 
 
 def weekly_url(srv):
@@ -886,7 +1077,15 @@ def build(srv, join_url, fetch=True):
     more = ntotal - nrows if (nrows and not saved) else 0
     mi = minis(board) if nrows else {}
     slip, slip_cap = slip_card()
-    hp, hb = hand_minis(board) if nrows else ("", "")
+    if fetch and BOARD_READ:
+        _warm_sports(srv, sp)
+    hp, hb, hrow = hand_minis(board if nrows else None, sports_pair(sp, compute=fetch))
+    apps = app_fills(*apps_seen(inp["board"], sp))
+    plats = {(r.get("offer") or {}).get("platform") for rs, _g, _m in (_rows(board, n=HERO_ROWS)[0] if nrows else []) for r in rs}
+    term_rule = ("lettered props, two-app line gaps first, then moved lines, then the soonest" if len(plats) > 1 or
+                 len({(r.get("offer") or {}).get("platform") for r in (board or {}).get("records") or []}) > 1 else
+                 f"lettered props, line gaps between apps first (this sample has {feeds_label(board) or 'one app'} lines only), "
+                 f"then moved lines, then the soonest")
     tools = (os.environ.get("SCOUT_MARKET_TOOLS") == "1", os.environ.get("SCOUT_PICKEM_EV", "").strip() == "1")
     base = public_base()
     unrec = [LONG[s].lower() for s in sp if s not in SPORTS and s in LONG]
@@ -897,7 +1096,6 @@ def build(srv, join_url, fetch=True):
         "OWNER_POST": OWNER_POST, "OWNER_POST_BY": esc(OWNER_POST_BY),
         "OWNER_STORY": esc(OWNER_STORY), "OWNER_STORY_BY": esc(OWNER_STORY_BY),
         "SPORT_SUB": esc(_sport_sub(sp)),
-        "BOOK_TOP": esc(", ".join(BOOKS[:2])),
         "RV_TILE": rating_tile(inp["reviews"]),
         "SPORT_CHIPS": "".join(f'<li data-sport="{s}">{LABEL[s]}</li>' for s in sp),
         "SPORT_LIST": esc(_list([LONG[s] for s in sp])),
@@ -907,9 +1105,9 @@ def build(srv, join_url, fetch=True):
         "REC_SPORTS": esc(_list(rec_names)) if rec_names else "",
         "UNREC": esc(_list(unrec)) if unrec else "",
         "UNREC_SENT": esc(f"{_list(unrec)[:1].upper()}{_list(unrec)[1:]} {'are' if len(unrec) > 1 else 'is'} graded on the board but not on the public record yet.") if unrec else "",
-        "BOOK_N": str(len(BOOKS)),
-        "BOOK_CHIPS": "".join(f"<li>{b}</li>" for b in BOOKS),
-        "BOOK_LIST": esc(_list(list(BOOKS))),
+        **apps,
+        "HAND_ROW": esc(hrow),
+        "TERM_RULE": esc(term_rule),
         "TERM_ROWS": rows,
         "TERM_FEEDS": esc(feeds_label(board)) if nrows else "",
         "TERM_META": esc(meta),
@@ -940,7 +1138,8 @@ def build(srv, join_url, fetch=True):
     for name, on in (("TERM", nrows > 0), ("NOTERM", nrows == 0), ("SAVED", saved), ("MORE", more > 0), ("NOMORE", more <= 0), ("HANDBE", bool(hb)), ("LEDGER", bool(cells)),
                      ("REVIEWS", bool(nrv)), ("NOREVIEWS", not nrv), ("TOTAL", bool(total)), ("RVN", bool(nrv)), ("GW", bool(gw)), ("POOL", bool(pm)), ("EV", tools[1]),
                      ("ARB", tools[0]), ("GAP", "GAP" in mi), ("NOGAP", "GAP" not in mi), ("MOVE", "MOVE" in mi), ("BE", "BE" in mi), ("BASE", bool(base)),
-                     ("SLIP", bool(slip)), ("UNREC", bool(unrec and rec_names)), ("RVREST", nrv - nfeat > 0)):
+                     ("SLIP", bool(slip)), ("UNREC", bool(unrec and rec_names)), ("RVREST", nrv - nfeat > 0),
+                     ("APPS", bool(apps["APP_TILE"])), ("HANDPILLS", bool(hp))):
         out = re.sub(rf"<!--if:{name}-->(.*?)<!--/if:{name}-->", (lambda m: m.group(1)) if on else "", out, flags=re.S)
     out = re.sub(r"\{\{([A-Z_0-9]+)\}\}", lambda m: fill.get(m.group(1), ""), out)
     return out.encode("utf-8")
@@ -948,7 +1147,8 @@ def build(srv, join_url, fetch=True):
 
 def page(srv, join_url):
     """The current page bytes (one object per build). Request path: never computes; at most one background rebuild runs."""
-    key = (join_url, weekly_url(srv), " ".join(sports_on()), _mt(), os.environ.get("SCOUT_PUBLIC_RECORD"), os.environ.get("PUBLIC_URL"))
+    key = (join_url, weekly_url(srv), " ".join(sports_on()), _mt(), os.environ.get("SCOUT_PUBLIC_RECORD"), os.environ.get("PUBLIC_URL"),
+           os.environ.get("LANDING_PUBLIC_URL"))
     pg = _STATE["page"]
     if pg is None or _STATE["key"] != key:
         with _LOCK:

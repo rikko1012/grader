@@ -64,7 +64,7 @@
       <li class="pf-post"><blockquote>{{OWNER_POST}}</blockquote><small>{{OWNER_POST_BY}}</small></li>
       <!--if:TOTAL--><li><b>{{LEDGER_TOTAL}}</b><span>decided picks on the public record, losses included</span></li><!--/if:TOTAL-->
       <!--if:RVN--><li>{{RV_TILE}}</li><!--/if:RVN-->
-      <li><b>{{BOOK_N}}</b><span>Lines from {{BOOK_TOP}} and more</span></li>
+      <!--if:APPS--><li>{{APP_TILE}}</li><!--/if:APPS-->
     </ul>
 
     <!--if:TERM-->
@@ -78,7 +78,7 @@
       <div class="term-foot">
         <a class="gate" href="{{TRIAL_URL}}"><b><!--if:MORE--><span class="n-d">{{TERM_MORE}}</span><span class="n-m">{{TERM_MORE_PHONE}}</span> more letter-graded CS2 props on this board<!--/if:MORE--><!--if:NOMORE-->Every sport, every graded line<!--/if:NOMORE--></b><span>Open the full board, free for 1 day <i aria-hidden="true">→</i></span></a>
         <!--if:SAVED--><p class="saved">A saved board: real rows exactly as members saw them at the time above.</p><!--/if:SAVED-->
-        <p>Rows picked by one rule: lettered props, two-app line gaps first, then moved lines, then the soonest. Tap a player for the full read. A model estimate is a chance, not a promise.</p>
+        <p>Rows picked by one rule: {{TERM_RULE}}. Tap a player for the full read. A model estimate is a chance, not a promise.</p>
       </div>
     </div>
     <!--/if:TERM-->
@@ -92,7 +92,7 @@
       <h2 id="how-title">Three steps, one board.</h2>
     </div>
     <ol class="steps">
-      <li class="step"><span class="sn" aria-hidden="true">1</span><h3>Pick your app and sport</h3><p>PrizePicks, Underdog and the other apps on one row, for every sport on the board.</p><ul class="sp-row" aria-label="Sports graded">{{SPORT_CHIPS}}</ul></li>
+      <li class="step"><span class="sn" aria-hidden="true">1</span><h3>Pick your app and sport</h3><p>{{STEP1}}</p><ul class="sp-row" aria-label="Sports graded">{{SPORT_CHIPS}}</ul></li>
       <li class="step"><span class="sn" aria-hidden="true">2</span><h3>See the grade and model estimate at your exact line, with the why</h3><p>The letter, the chance at that line, the break-even for your entry and the reasons in plain English.</p><!--if:HANDBE--><div class="ui">{{HAND_BE}}</div><!--/if:HANDBE--></li>
       <li class="step"><span class="sn" aria-hidden="true">3</span><h3>Build your slip in Slip Studio and check the record after</h3><p>Slips from graded lines, every leg rechecked. Every call is saved before the game and scored after.</p><div class="ui"><em class="chip saved-chip">Saved before the game</em></div></li>
     </ol>
@@ -196,12 +196,12 @@
   <div class="wrap">
     <div class="sec-head">
       <p class="kicker">By hand vs Grader</p>
-      <h2 id="hand-title">One row instead of {{BOOK_N}} apps.</h2>
+      <h2 id="hand-title">{{HAND_H}}</h2>
       <ul class="chips books" aria-label="Lines read from">{{BOOK_CHIPS}}</ul>
     </div>
     <div class="vs" role="table" aria-label="By hand compared with Prop Grader">
       <div class="vs-h" role="row"><span role="columnheader">The job</span><span role="columnheader">By hand</span><span role="columnheader" class="sc">With Grader</span></div>
-      <div class="vs-r" role="row"><b role="cell">Find the line</b><span role="cell" class="bh">Open {{BOOK_N}} apps and write the numbers down</span><span role="cell" class="sc"><span class="ui">{{HAND_PILLS}}</span>Every supported app's line on one row</span></div>
+      <div class="vs-r" role="row"><b role="cell">Find the line</b><span role="cell" class="bh">{{HAND_OPEN}}</span><span role="cell" class="sc"><!--if:HANDPILLS--><span class="ui">{{HAND_PILLS}}</span><!--/if:HANDPILLS-->{{HAND_ROW}}</span></div>
       <div class="vs-r" role="row"><b role="cell">Spot a gap</b><span role="cell" class="bh">Only if you happen to compare the right two apps</span><span role="cell" class="sc"><span class="ui"><em class="chip gap">Line gap</em></span>Each line graded on its own</span></div>
       <div class="vs-r" role="row"><b role="cell">Price the entry</b><span role="cell" class="bh">Payout table, then a calculator</span><span role="cell" class="sc"><span class="ui">{{HAND_BE}}</span>Break-even for your entry beside the model estimate</span></div>
       <div class="vs-r" role="row"><b role="cell">Keep score</b><span role="cell" class="bh">Screenshots of the good nights</span><span role="cell" class="sc"><span class="ui"><em class="chip saved-chip">Saved before the game</em></span>Every call scored after, losses included</span></div>
@@ -259,7 +259,7 @@
           <p class="micro">Your first day is free. Then {{PRICE_M}}/month until you cancel from your Whop account.</p>
         </div>
         <ul class="plan-list">
-          <li><b>The board</b><span>{{SPORT_LIST}}, every supported app's line on one row</span></li>
+          <li><b>The board</b><span>{{SPORT_LIST}}, each app's line on one row</span></li>
           <li><b>Grades at every line</b><span>The model estimate at the exact line, the letter and the reason</span></li>
           <li><b>Line gaps and moves</b><span>Which apps disagree, and the opening line beside the new one</span></li>
           <li><b>Slip Studio</b><span>Slips built from graded lines, each leg rechecked, the all-hit estimate printed</span></li>
@@ -290,7 +290,7 @@
       <details><summary>How do I know the grades are honest?</summary><p>Every graded call is saved before the game starts and scored after it on the public record, losses included. Each sport states its rule, and anyone can read it without an account.<!--if:UNREC--> {{UNREC_SENT}}<!--/if:UNREC--></p></details>
       <details><summary>Will I win every day?</summary><p>No. A grade is a chance, not a certainty, and the record shows the losing days next to the good ones. Parlays multiply the risk, which is why Slip Studio prints the estimate that every leg hits.</p></details>
       <details><summary>Do I need a big bankroll?</summary><p>No. Grades are chances, not promises, so play only what you can afford to lose and stay within your limits. For adults 21 and over. If gambling stops being fun, call 1-800-GAMBLER.</p></details>
-      <details><summary>Which apps does it cover?</summary><p>The boards carry lines from {{BOOK_LIST}}, and Prop Grader grades the line each app actually lists.</p></details>
+      <details><summary>Which apps does it cover?</summary><p>{{APP_FAQ}}</p></details>
       <details><summary>Is esports an afterthought?</summary><p>No. CS2 came first: HLTV map chances and veto history, roles, stand-ins and headshots all feed the CS2 card, and LoL has its own model. {{SPORT_LIST}} share one board.</p></details>
       <details><summary>What happens after I sign up?</summary><p>Checkout runs on Whop. Then sign in with Whop on this page and the board, player pages, Slip Studio and your saved picks open in the browser, on phone or desktop.</p></details>
       <details><summary>Can I cancel?</summary><p>Yes, anytime from your Whop account.</p></details>
