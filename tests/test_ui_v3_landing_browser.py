@@ -141,7 +141,7 @@ def test_landing_v3_first_screen_passes_the_five_second_test(browser, lbase, siz
             b = page.locator(sel).first.bounding_box()
             return b is not None and b["y"] >= 0 and b["y"] + b["height"] <= h
 
-        for sel in ("h1", ".hero-for", ".hero .lead", "#hero-cta", ".hero .terms"):
+        for sel in (("h1", ".hero .lead", "#hero-cta", ".hero .terms") + ((".hero-for",) if size is DESK else ())):
             assert inside(sel), sel
         assert page.locator("#hero-cta").get_attribute("href") == JOIN
         assert page.locator(".hero .terms").text_content() == "Then $24.99/month. Cancel anytime."
@@ -151,10 +151,10 @@ def test_landing_v3_first_screen_passes_the_five_second_test(browser, lbase, siz
             assert inside(".br:not(.br-h)") and inside(".br:not(.br-h) .gb")          # the first graded row, letter and all
             assert page.locator(".phone").is_visible() and page.locator(".side").is_visible()
         else:
-            assert not page.locator(".browser").is_visible() and inside(".ph-who") and inside(".ph-pr")
+            assert not page.locator(".browser").is_visible() and inside(".ph-who") and inside(".ph-pr") and inside(".ph-at")
+            assert not page.locator(".hero-for").is_visible()                         # <=420 px: the sports line goes, the grade card fits
         assert page.locator(".hero a.btn").count() == 1                                # one call to action in the hero
-        if size is not DESK:                                                           # the phone's first screen carries the proof
-            assert inside(".hero-proof") and page.locator(".hero-proof").get_attribute("href") == "/record"
+        assert page.locator(".hero-proof").count() == 0 and page.locator(".hero a").count() == 1   # brief 3.2: nothing else in the hero
         small = page.evaluate("""() => [...document.querySelectorAll('a,button')].filter(e => e.offsetParent && !e.closest('.dock')
             && !e.classList.contains('btn-nav') && !e.classList.contains('skip') && e.getBoundingClientRect().height < 44).map(e => e.textContent.trim().slice(0, 30))""")
         assert not small, small
@@ -178,7 +178,7 @@ def test_landing_v3_product_pictures_are_view_only(browser, lbase):
         assert bad == 0
         before = page.content()
         page.locator(".br:not(.br-h)").first.click()
-        page.locator(".ph-add").click()
+        page.locator(".ph-add").click()                                                # an inert members-only note
         assert page.content() == before                                                # nothing opens, toggles or reveals
         tabbed = []
         for _ in range(40):
@@ -203,15 +203,18 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
     ctx, page = open_page(browser, lbase, DESK, "dark", motion="no-preference")
     try:
         assert page.evaluate("document.documentElement.classList.contains('motion')")
-        assert page.locator("#ss-st").text_content() == "Building 0 of 4"
+        assert page.locator("#ss-st").text_content() == "Slip ready"                  # off screen: always the final frame
+        assert page.locator("#ss .slot.on").count() == 0 and page.locator("#ss .slot .sc").first.evaluate("e => getComputedStyle(e).opacity") == "1"
         page.locator("#ss").scroll_into_view_if_needed()
-        page.wait_for_function("document.getElementById('ss-st').textContent === 'Slip ready'", timeout=8000)
+        page.wait_for_function("document.getElementById('ss-st').textContent.startsWith('Building')", timeout=4000)
+        page.wait_for_function("document.getElementById('ss').classList.contains('ready')", timeout=8000)
         page.wait_for_timeout(600)
         assert page.locator("#ss .slot.on").count() == 4 and page.locator("#ss a").count() == 0
         page.wait_for_timeout(3000)
         assert page.locator("#ss-st").text_content() == "Slip ready"                  # holds: no loop
         page.evaluate("window.scrollTo(0, 0)")
         page.wait_for_timeout(300)
+        assert page.locator("#ss-st").text_content() == "Slip ready"                  # left the screen: the final frame, re-armed
         page.locator("#ss").scroll_into_view_if_needed()
         page.wait_for_function("document.getElementById('ss-st').textContent.startsWith('Building')", timeout=8000)  # replays after leaving
         page.wait_for_function("document.getElementById('ss').classList.contains('ready')", timeout=8000)
@@ -222,6 +225,7 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
     ctx, page = open_page(browser, lbase, PHONE, "dark", motion="no-preference")
     try:
         page.evaluate("document.querySelector('#ss').scrollIntoView({block:'center'})")
+        page.wait_for_function("document.getElementById('ss-st').textContent === 'Building 2 of 4'", timeout=4000)   # leg 1 in, then 2-4
         page.wait_for_function("document.getElementById('ss').classList.contains('ready')", timeout=6000)   # legs drop in, no board
         assert page.locator("#ss .slot.on").count() == 4 and page.evaluate("[...document.querySelectorAll('.ghost')].length") == 0
         assert not page.errors, page.errors
@@ -297,10 +301,12 @@ def test_landing_v3_phone_bar_never_covers_content(browser, lbase):
         page.wait_for_function("document.getElementById('dock').classList.contains('show')")
         a = dock.locator("a")
         assert a.text_content() == "Try free for 1\u00a0day" and a.get_attribute("href") == JOIN and a.get_attribute("tabindex") is None
-        assert dock.locator(".dk-t").text_content() == "1\u00a0day freeThen $24.99/mo" and a.bounding_box()["height"] >= 48
-        assert page.evaluate("getComputedStyle(document.body).paddingBottom") == "76px"
+        assert dock.locator(".dk-t").text_content() == "Free for 1\u00a0dayThen $24.99/mo" and a.bounding_box()["height"] >= 44
+        assert page.evaluate("getComputedStyle(document.body).paddingBottom") == "64px" and dock.bounding_box()["height"] == 64
         page.wait_for_timeout(300)
         assert not page.locator(".btn-nav").is_visible()                              # one Try on screen: the header pill steps aside
+        si = page.locator(".nav-cta .tl").bounding_box()                              # and Sign in sits flush right (no hole)
+        assert abs(si["x"] + si["width"] - (PHONE["width"] - 20)) <= 1, si
         for sel in (".slip-copy .btn", "#plan", "#final"):
             page.locator(sel).scroll_into_view_if_needed()
             page.evaluate(f"document.querySelector('{sel}').scrollIntoView({{block:'center'}})")

@@ -4,11 +4,13 @@
    - one-time reveals on the Inside panels (+ their text, 80 ms later, and the kills bars) and the record table;
    - count-up on two proof numbers (+46U and the decided count; the review score never ticks);
    - the Slip Studio timeline: plays once at 35% on screen (cards fly into the slip, FLIP + WAAPI, transform/opacity only; on phones,
-     where the board column is hidden, the legs drop into the slip 120 ms apart), holds "Slip ready", replays only after the stage has
-     fully left the screen; a hidden tab jumps it to the final frame;
+     where the board column is hidden, the slip opens with leg 1 in and legs 2-4 drop in 1 s apart, 650 ms each, so "Building 2 of 4"
+     is on screen), holds "Slip ready", re-arms only after the stage has fully left the screen. Off screen the stage always shows
+     its final frame (a full-page capture or a no-data build never shows an empty slip); a hidden tab jumps it to the final frame;
    - the FAQ accordion (WAI-ARIA buttons, one open at a time, hidden="until-found" so find-in-page opens a panel);
    - the phone bar: after the hero button has left the screen, hidden over the Slip button, the pricing card, the final call to
-     action and any focused element near the bottom; while it shows, body.dock-on hides the header's Try pill (one Try per screen).
+     action and any focused element near the bottom; while it shows, body.dock-on hides the header's Try pill (one Try per screen)
+     and slides "Sign in" right by the pill's width (--pill-shift, a transform: no hole in the header, no layout shift).
    Motion runs only when html.motion is set (prefers-reduced-motion is not "reduce"). */
 (function () {
   'use strict';
@@ -74,8 +76,8 @@
     if (!st || !MOTION || !st.animate) return;
     var cards = $$('.ss-board .sc', st), slots = $$('.slot', st), pill = D.getElementById('ss-st');
     var LEG = [300, 1300, 2300, 3300], READY = 4400, FLY = 650;
-    var LEG_M = [300, 420, 540, 660], READY_M = 1200;                     /* phones: no board column, the legs drop in */
-    var timers = [], ghosts = [], state = 'idle', seen = false;           /* idle -> playing -> done; done -> idle once fully off screen */
+    var LEG_M = [1000, 2000, 3000], READY_M = 3800, DROP_M = 650;           /* phones: no board column; leg 1 is in from the start */
+    var timers = [], ghosts = [], state = 'idle', seen = false;           /* idle (final frame, armed) -> playing -> done -> idle off screen */
     function later(ms, f) { timers.push(setTimeout(f, ms)); }
     function clear() {
       timers.forEach(clearTimeout); timers = [];
@@ -102,7 +104,7 @@
       s.classList.add('on');
       pill.textContent = 'Building ' + (i + 1) + ' of 4';
       var sc = $('.sc', s);
-      if (sc) sc.animate([{ transform: 'translateY(12px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 360, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      if (sc) sc.animate([{ transform: 'translateY(-16px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: DROP_M, easing: 'cubic-bezier(.2,.8,.2,1)' });
     }
     function fly(i) {
       var c = cards[i], s = slots[i];
@@ -130,20 +132,26 @@
       pill.textContent = 'Slip ready';
       state = 'done';
     }
+    function rearm() { finish(); state = 'idle'; }             /* the final frame on screen, ready to play on the next entry */
     function play() {
       start(); state = 'playing';
       var phone = cards[0] && !cards[0].offsetParent;
-      (phone ? LEG_M : LEG).forEach(function (t, i) { later(t, function () { phone ? drop(i) : fly(i); }); });
+      if (phone) {
+        slots[0].classList.add('on'); pill.textContent = 'Building 1 of 4';
+        LEG_M.forEach(function (t, i) { later(t, function () { drop(i + 1); }); });
+      } else {
+        LEG.forEach(function (t, i) { later(t, function () { fly(i); }); });
+      }
       later(phone ? READY_M : READY, function () {
         pill.textContent = 'Slip ready'; st.classList.add('ready'); state = 'done';
-        if (!seen) start();                                 /* ended off screen: replay on the next entry */
+        if (!seen) rearm();                                 /* ended off screen: replay on the next entry */
       });
     }
-    start();
+    rearm();
     io([st], { threshold: [0, 0.35] }, function (e) {
       seen = e.isIntersecting;
       if (e.intersectionRatio >= 0.35 && state === 'idle' && !D.hidden) play();
-      else if (!e.isIntersecting && state === 'done') start();  /* fully off screen: ready to replay on the next entry */
+      else if (!e.isIntersecting && state !== 'idle') rearm();  /* fully off screen: final frame, replays on the next entry */
     });
     D.addEventListener('visibilitychange', function () { if (D.hidden && state === 'playing') finish(); });
   });
@@ -205,6 +213,13 @@
     var dock = D.getElementById('dock'), hero = D.getElementById('hero-cta');
     if (!dock || !hero || !IO) return;
     var link = $('a', dock), past = false, over = {}, low = false;
+    var pill = $('.btn-nav'), si = $('.nav-cta .tl');
+    function measure() {                                     /* how far "Sign in" slides to sit flush right while the pill is hidden */
+      if (pill && si && !D.body.classList.contains('dock-on')) R.style.setProperty('--pill-shift', (pill.getBoundingClientRect().right - si.getBoundingClientRect().right) + 'px');
+    }
+    measure();
+    W.addEventListener('resize', measure, { passive: true });
+    if (D.fonts && D.fonts.ready) D.fonts.ready.then(measure);
     function set() {
       var show = past && !low && !Object.keys(over).some(function (k) { return over[k]; });
       if (dock.classList.contains('show') === show) return;

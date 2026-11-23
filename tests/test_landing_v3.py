@@ -5,11 +5,13 @@ DESIGN_RULES.md. No network, no production data: real-shaped board / record / re
   holds no link, button, input, tabindex or toggle; the page's only buttons are the five FAQ triggers;
 - every number comes from the shared bodies (board snapshot, /api/record, /api/reviews); the only typed-in ones are the owner's
   attributed +46U post and 6-man story; the template carries no player stat, percentage or price;
-- frame rows: only markets graded B or better whose model estimate clears their own entry's break-even, ranked grade tier then
-  estimate, never padded (fewer than FRAME_MIN live qualifiers: the dated saved board); lines printed raw; the phone reads the first
-  row and leaves a missing value out (never 0); the line-gap panel is a real two-app row (break-even clearers first) or absent; the
-  Slip stage has one real CS2 card and labelled placeholders (role + an untruncated 'placeholder' label) whose blurred values are
-  glyphs (no real numbers in the source);
+- frame rows (critic round 2): one lettered market per player, ANY letter, in the neutral rule order with two-app markets first;
+  ONE highlighted row (the first two-app market clearing its own break-even, else the first clearer) leads, tinted, its break-even
+  beside its estimate (fewer than FRAME_MIN live rows or no clearer: the dated saved board); the subtitle names one app when one
+  app shows; lines printed raw; the phone reads the highlighted row and leaves a missing value out (never 0); the line-gap panel is a
+  real two-app row of another player than the phone's when there is one, or absent; the Slip stage has one real CS2 card (another
+  frame row than the phone's) and labelled examples (role + an untruncated 'Example' label) whose value slot is a lock and
+  "Members only" (no number in the source);
 - record = Won / Lost / Push counts only; the decided count = the table's Won + Lost; the review score never ticks;
 - copy / CSS hard rules: no banned words, no arrows or middle-dot strings in page copy, curly apostrophes, one uppercase tag, green
   on one selector, no gradient / blur / shadow except the Slip flight token; every Try button (six) opens the free-trial checkout,
@@ -213,63 +215,69 @@ def frames(s):
 
 
 # ------------------------------------------------------------------------------------------------------------ the hero frames
-def test_frame_rows_clear_their_break_even_and_rank_by_grade(srv, monkeypatch):
+def test_frame_rows_any_letter_in_rule_order_with_one_highlighted_clearer(srv, monkeypatch):
     seed(srv, monkeypatch, board())
     s = build(srv).decode("utf-8")
-    rows = re.findall(r'<div class="br"><span class="b-who"><b>([^<]+)</b>', s)
-    assert rows == ["Mover", "Zeta"]                                      # B+ before B; Gap (B-) is never padded in
+    rows = re.findall(r'<div class="br(?: hl)?"><span class="b-who"><b>([^<]+)</b>', s)
+    assert rows == ["Mover", "Gap", "Zeta"]           # the highlight (first clearer) leads; then rule order, two-app first; B- shown
+    assert s.count('<div class="br hl">') == 1 and '<div class="br hl"><span class="b-who"><b>Mover</b>' in s
     assert "NoLetter" not in s.split('class="bt"')[1].split("</div></div></div>")[0] and ">Past<" not in s
-    assert '<p class="bfoot">Showing 2 of 3 graded props on the board.</p>' in s
-    mover = re.search(r'(?s)<div class="br"><span class="b-who"><b>Mover</b>.*?</div>', s).group(0)
-    assert "<b>64.0%</b>" in mover and 'scaleX(0.640)' in mover
+    assert 'class="bfoot"' not in s                   # 3 graded props < MORE_MIN: never a small "of N" count
+    mover = re.search(r'(?s)<div class="br hl"><span class="b-who"><b>Mover</b>.*?</span></div>', s).group(0)
+    assert "<b>64.0%</b>" in mover and 'scaleX(0.640)' in mover and "<small>vs 53.4% break-even</small>" in mover
     assert '<span class="b-pk">Under</span>' in mover and '<i class="gb gc">B+</i>' in mover
+    gap = re.search(r'(?s)<div class="br"><span class="b-who"><b>Gap</b>.*?</div>', s).group(0)
+    assert '<i class="gb gg">B-</i>' in gap and "break-even" not in gap        # only the highlighted row prints its break-even
+    assert "<small>Prizepicks + Underdog, graded at each app’s own line</small>" in s and "<span>Line by app</span>" in s
     cap = re.search(r'<p class="cap hero-cap">([^<]+)</p>', s).group(1)
     today = landing_v3._date(landing_v3._ts(board()["board_at"]))
     assert cap == f"Example rows from the public sample board, {today}. A model estimate is a chance, not a promise."
     sr = html.unescape(re.search(r'<p class="sr-only">(Example rows from the member board:[^<]+)</p>', s).group(1))
     assert sr.startswith("Example rows from the member board: Mover, Kills Maps 1-2, Underdog 32.5, Under, model estimate 64.0%, grade B+;")
-
-
-def test_frame_rule_tier_before_estimate_break_even_and_lines_by_app(srv, monkeypatch):
+def test_highlight_is_the_first_two_app_clearer_and_lines_by_app(srv, monkeypatch):
     b = board()
     for r in b["records"]:
         if r["player"]["name"] == "Gap":
-            r["scout"]["grade"] = "A-" if r["offer"]["platform"] == "underdog" else None    # A- at 58.3% outranks B+ at 64.0%
-        if r["player"]["name"] == "Zeta":
-            r["scout"]["p_side"] = .52                                    # below its own 53.45% break-even: left out
+            r["scout"]["grade"] = "A-" if r["offer"]["platform"] == "underdog" else None    # 58.3% clears 53.45%: a two-app clearer
     b["records"].append(rec("NoBe", "kills", 22.5, "underdog", .700, "A", datetime.now(timezone.utc) + timedelta(hours=3), be=None))
     seed(srv, monkeypatch, b)
     s = build(srv).decode("utf-8")
-    assert re.findall(r'<div class="br"><span class="b-who"><b>([^<]+)</b>', s) == ["Gap", "Mover"]   # no break-even = never shown
-    gap = re.search(r'(?s)<div class="br"><span class="b-who"><b>Gap</b>.*?</div>', s).group(0)
+    assert re.findall(r'<div class="br(?: hl)?"><span class="b-who"><b>([^<]+)</b>', s) == ["Gap", "Mover", "Zeta", "NoBe"]
+    gap = re.search(r'(?s)<div class="br hl"><span class="b-who"><b>Gap</b>.*?</span></div>', s).group(0)
     assert '<span class="b-ln"><span>PP 13.5</span><span>UD 12.5</span></span>' in gap   # each app's line, raw, PrizePicks first
-    assert "<b>58.3%</b>" in gap and '<i class="gb gc">A-</i>' in gap
+    assert "<b>58.3%</b>" in gap and '<i class="gb gc">A-</i>' in gap and "vs 53.4% break-even" in gap
+    nobe = re.search(r'(?s)<div class="br"><span class="b-who"><b>NoBe</b>.*?</div>', s).group(0)
+    assert "break-even" not in nobe                    # no break-even: shown, never highlighted
 
 
-def test_too_few_live_qualifiers_show_the_dated_saved_board_but_inside_stays_live(srv, monkeypatch):
+def test_one_app_frames_never_say_each_apps_own_line():
+    one = [([rec("Solo", "kills", 20.5, "underdog", .6, "B", datetime.now(timezone.utc))], False, False)]
+    assert landing_v3.feeds_label(one) == ("Graded at Underdog’s line", "Line")
+    assert landing_v3.feeds_label([]) == ("", "Line")
+def test_a_live_board_with_no_clearer_shows_the_dated_saved_board_but_inside_stays_live(srv, monkeypatch):
     b = board()
-    b["records"] = [r for r in b["records"] if r["player"]["name"] != "Zeta"]                    # one qualifier left (Mover)
+    b["records"] = [r for r in b["records"] if r["player"]["name"] != "Zeta"]
+    for r in b["records"]:
+        if r["player"]["name"] == "Mover":
+            r["scout"]["p_side"] = .52                                    # below its own break-even: the live board has no clearer
     seed(srv, monkeypatch, b)
     s = build(srv).decode("utf-8")
-    assert "public sample board, Nov 22, 2026." in s and ">Mover<" not in s.split('class="bt"')[1].split("</div></div></div>")[0]
+    frame = s.split('class="bt"')[1].split("</div></div></div>")[0]
+    assert "public sample board, Nov 22, 2026." in s and ">Mover<" not in frame and s.count('<div class="br hl">') == 1
+    assert "<small>Graded at Underdog’s line</small>" in s and "<span>Line</span>" in s and "each app" not in frame
     assert "Gap · Headshots · Maps 1-2" in s                              # the gap panel still reads the live board
-    assert "2 CS2 props are graded on the board right now." in s          # the live count, not the saved board's
-    assert 'class="bfoot"' not in s                                       # the saved file is not a board: no count under it
-
-
+    assert "graded on the board right now" not in s and 'class="bfoot"' not in s
 def test_frame_picks_in_rule_order_never_the_boards_best_grades(srv, monkeypatch):
-    """Owner access rule: the free page is not a top-picks feed. Qualifiers are chosen in the neutral rule order (gaps, moved, the
-    soonest) and only then shown best grade first, so a later A+ never jumps into the frame over four sooner qualifiers."""
+    """Owner access rule: the free page is not a top-picks feed. Rows are chosen in the neutral rule order (two-app markets, gaps,
+    moved, the soonest) with any letter, so a later A+ never jumps into the frame over sooner rows."""
     b = board()
     s0 = datetime.now(timezone.utc) + timedelta(minutes=30)
     b["records"] += [rec(f"Soon{i}", "kills", 20.5, "underdog", .600, "B", s0 + timedelta(minutes=i)) for i in range(3)]
     b["records"].append(rec("Late", "kills", 20.5, "underdog", .800, "A+", datetime.now(timezone.utc) + timedelta(hours=9)))
     seed(srv, monkeypatch, b)
     s = build(srv).decode("utf-8")
-    rows = re.findall(r'<div class="br"><span class="b-who"><b>([^<]+)</b>', s)
-    assert "Late" not in rows and rows[0] == "Mover" and len(rows) == 4    # Mover (moved) leads by rule and by grade; then the soonest B
-
-
+    rows = re.findall(r'<div class="br(?: hl)?"><span class="b-who"><b>([^<]+)</b>', s)
+    assert rows == ["Mover", "Gap", "Soon0", "Soon1"] and "Late" not in rows
 def test_lines_print_as_the_member_board_prints_them(srv, monkeypatch):
     b = board()
     b["records"][0]["offer"]["line"] = 30.0
@@ -281,14 +289,14 @@ def test_lines_print_as_the_member_board_prints_them(srv, monkeypatch):
 
 def test_phone_reads_the_first_row_and_hides_missing_values(srv, monkeypatch):
     seed(srv, monkeypatch, board())
-    ph = block(build(srv).decode("utf-8"), '<div class="phone"', '<p class="cap hero-cap">')
+    ph = block(build(srv).decode("utf-8"), '<div class="phone"', '<p class="sr-only">')
     assert "<p class=\"ph-who\">Mover</p>" in ph and '<p class="ph-prop">Under 32.5 Kills · Maps 1-2</p>' in ph
     assert '<p class="ph-m">Underdog · Alpha vs Beta</p>' in ph
     assert '<b>64.0%</b><i class="gb gc">B+</i>' in ph and "Model estimate at the 32.5 line</p>" in ph and "exactly" not in ph
     why = re.findall(r"<li><span>([^<]+)</span><b>([^<]+)</b></li>", ph)
     assert why == [("Last 10 at this line", "4 / 10 Under"), ("Break-even, standard 2-pick", "53.4%")]   # no projection, no other app
     assert "Projection" not in ph and ">0<" not in ph and "0.0 vs" not in ph
-    assert '<div class="ph-add">Add to Slip Studio</div>' in ph and "<button" not in ph and "<a " not in ph
+    assert "Slip Studio is for members</p>" in ph and "Add to Slip Studio" not in ph and "<button" not in ph and "<a " not in ph
 
 
 def test_phone_lists_projection_and_the_other_apps_line_when_the_row_has_them(srv, monkeypatch):
@@ -299,7 +307,7 @@ def test_phone_lists_projection_and_the_other_apps_line_when_the_row_has_them(sr
             r["scout"]["grade"] = "A" if r["offer"]["platform"] == "underdog" else None
             r["scout"]["projection"] = 13.9
     seed(srv, monkeypatch, b)
-    ph = block(build(srv).decode("utf-8"), '<div class="phone"', '<p class="cap hero-cap">')
+    ph = block(build(srv).decode("utf-8"), '<div class="phone"', '<p class="sr-only">')
     why = dict(re.findall(r"<li><span>([^<]+)</span><b>([^<]+)</b></li>", ph))
     assert why["Projection"] == "13.9 vs 12.5" and why["Prizepicks line"] == "13.5" and "Gap" in ph
 
@@ -318,22 +326,27 @@ def test_line_gap_panel_is_a_real_two_app_row_else_left_out(srv, monkeypatch):
     assert "When the apps disagree" not in s and 'class="lt"' not in s and "{{" not in s
 
 
-def test_slip_stage_has_one_real_row_and_placeholders_with_no_real_numbers(srv, monkeypatch):
+def test_line_gap_panel_prefers_another_player_than_the_phone():
+    t = datetime.now(timezone.utc) + timedelta(hours=2)
+    a = ([rec("Phone", "kills", 20.5, "underdog", .6, "B", t), rec("Phone", "kills", 21.5, "prizepicks", .5, None, t)], True, False)
+    o = ([rec("Other", "kills", 30.5, "underdog", .55, "B-", t), rec("Other", "kills", 29.5, "prizepicks", .5, None, t)], True, False)
+    assert landing_v3.gap_panel([a, o], skip="phone")["GAP_WHO"].startswith("Other")
+    assert landing_v3.gap_panel([a], skip="phone")["GAP_WHO"].startswith("Phone")     # the only gap: still shown
+def test_slip_stage_has_one_real_row_and_examples_with_no_real_numbers(srv, monkeypatch):
     seed(srv, monkeypatch, board())
     s = build(srv).decode("utf-8")
     stage = block(s, '<div class="stage" id="ss">', '<p class="cap">Example animation.')
     cards = re.findall(r'<div class="sc(?: ph)?" data-i="\d">(.*?)</div>', stage)
-    assert len(cards) == 4 and "<b>Mover</b>" in cards[0] and "<b>64.0%</b>" in cards[0]     # the highest real estimate
+    assert len(cards) == 4 and "<b>Zeta</b>" in cards[0] and "<b>61.1%</b>" in cards[0]   # another frame row than the phone's (Mover)
     assert stage.count('<div class="sc ph" data-i=') == 3 and "ss-cta" not in s and 'id="ss-cta"' not in s
     for c, who in zip(cards[1:], ("NBA guard", "LoL mid", "Tennis")):
-        assert f'<b>{who}<em class="phl">placeholder</em></b>' in c and '<span class="sv bl"><b>00.0%</b><i class="gb gg">B</i></span>' in c and 'class="mt"' not in c
+        assert f'<b>{who}<em class="phl">Example</em></b>' in c and '<span class="sv mo">' in c and "<span>Members only</span>" in c
+        assert 'class="mt"' not in c and not re.search(r"\d+(\.\d)?%", c) and "placeholder" not in c
     assert stage.count('class="slot"') == 4 and '<span class="bl">00.0% vs 00.0%</span>' in stage
     blurred = re.findall(r'<span class="(?:sv )?bl">(.*?)</span>', stage)
     assert blurred and all(not re.search(r"[1-9]", re.sub(r"<[^>]+>", "", x)) for x in blurred)    # glyphs only behind every blur
     assert 'role="img" aria-label="Example animation: four graded props from different sports move from the board into a 4-pick slip."' in stage
-    assert "Mover is from the public sample board; the other cards are placeholders" in s
-
-
+    assert "Zeta is from the public sample board; the other three cards are examples, not real rows" in s
 def test_view_only_nothing_inside_a_frame_is_usable(srv, monkeypatch):
     """Owner access rule: no link, button, input, tabindex, toggle or handler inside any product picture."""
     seed(srv, monkeypatch, board())
@@ -367,8 +380,9 @@ def test_proof_strip_is_live_attributed_and_the_score_never_ticks(srv, monkeypat
     s = build(srv).decode("utf-8")
     proof = block(s, '<section class="proof"')
     assert '<span class="tk" aria-hidden="true" data-to="46" data-pre="+" data-suf="U" style="min-width:4ch">+46U</span><span class="sr-only">+46U</span>' in proof
-    assert '<p class="pl">&ldquo;+46U on Grader 4 mans in the past week&nbsp;…&rdquo;</p>' in proof and "only been live" not in s
-    assert "Trey on X, Nov 20, 2026" in proof and 'href="/record">propsgrader.com/record<' in proof and 'href="/reviews">propsgrader.com/reviews<' in proof
+    assert '<p class="pl">on Grader 4 mans in the past week.</p>' in proof and "only been live" not in s and proof.count("46U") == 2
+    assert "Trey on X, Nov 20, 2026. 4 mans are 4-pick slips." in proof
+    assert 'href="/record">See the record<' in proof and 'href="/reviews">Read all reviews<' in proof and '<div class="pf">' in proof
     assert '<span class="star" aria-hidden="true">★</span>&nbsp;4.8</span><span class="sr-only">4.8 out of 5</span>' in proof
     assert proof.count("data-to=") == 2 and "from 12 member reviews. Every review is published, whatever its rating." in proof
     assert "#5BD69A" not in proof and "good" not in proof
@@ -411,38 +425,37 @@ def test_review_cards_escape_feature_by_rule_and_leave_handles_off(srv, monkeypa
     m = block(s, 'id="members"')
     assert "<script>x</script>" not in s and "&lt;script&gt;" in m
     quotes = re.findall(r"<blockquote><p>&ldquo;(.*?)&rdquo;</p></blockquote>", m)
-    assert len(quotes) == 3                                              # 2 member reviews (the 8-word cut stub is skipped) + the story
-    assert quotes[0].startswith("The cards explain every lean") and quotes[1] == "Reasons behind each prop are great for me"
-    caps = re.findall(r"<figcaption>([^<]+)</figcaption>", m)
-    assert caps[:2] == ["Paying member, Nov 16, 2026."] * 2 and not any(n in m for n in ("longform", "slipper", "earner"))
-    assert "Hit big" not in m and "profitable" not in m and "YALL" not in m and "guaranteed" not in m and "…" not in m
-    assert m.count("Paying member, Nov 16, 2026") == 2 and "Paying member ·" not in m
-    assert '<p class="rvh"><a class="tl" href="/reviews"><span class="star" aria-hidden="true">★</span>&nbsp;4.8 from 12 reviews, all published</a></p>' in m
-    assert m.index('class="rqs"') < m.index('class="story"')            # members' own words lead; the owner's post follows
-    assert "A member ran his first ever 6&nbsp;man with Grader and cashed." in m
+    assert len(quotes) == 4                                              # the story, then 3 member reviews (the cut one fills the row)
+    assert quotes[0].startswith("A member ran his first ever 6&nbsp;man")
+    assert quotes[1].startswith("The cards explain every lean") and quotes[2] == "Reasons behind each prop are great for me"
+    assert quotes[3] == "Love the stats and reasons behind each prop.\xa0…"                     # the cut is marked, never silent
+    caps = re.findall(r"<figcaption>(Paying member[^<]*)", m)
+    assert caps == ["Paying member, Nov 16, 2026"] * 2 + ["Paying member, Nov 16, 2026 "] and not any(n in m for n in ("longform", "slipper", "earner"))
+    assert "Hit big" not in m and "profitable" not in m and "YALL" not in m and "guaranteed" not in m and "Paying member ·" not in m
+    assert 'Paying member, Nov 16, 2026 <a class="tl" href="/reviews">Full review</a>' in m and "2026.<" not in m
+    assert ('<p class="st-r"><a href="/reviews"><b><span class="star" aria-hidden="true">★</span>&nbsp;4.8</b>'
+            '<span>from 12 reviews, all published</span></a></p>') in m
+    assert m.index('class="story"') < m.index('class="rqs n3"')        # the featured card leads (brief 8), then a 3-up row
     assert "Shared by Prop Grader on X. One member, one night: a result, not a promise." in m
-
-
 def test_review_order_cut_rule_and_curly_apostrophes():
     rv = {"summary": {"count": 3}, "reviews": [
-        review(1, "a", "Love the stats and the reasons. Paid me big last week, money every day."),            # cut, 6 words left: skipped
+        review(1, "a", "Love the stats and the reasons. Paid me big last week, money every day."),            # cut, 6 words left: fill
         review(2, "b", "The breakdowns on every card are clear and I can read the map data quickly before I build. "
                        "Made money all week with it."),                                                    # cut, 18 words left
         review(3, "c", "You've got the stats right there, it's the best board."),                          # complete
+        review(4, "d", "Love the stats. Made money."),                                                     # cut, 3 words left: never
     ]}
     got = landing_v3.featured(rv)
-    assert [r["id"] for r, _q, _c, _o in got] == [3, 2] and [c for _r, _q, c, _o in got] == [False, True]
+    assert [r["id"] for r, _q, _c, _o in got] == [3, 2, 1] and [c for _r, _q, c, _o in got] == [False, True, True]
     _h, cards, _n, _a = landing_v3.wall(rv)
     assert "You’ve got the stats right there, it’s the best board." in cards and "&#x27;" not in cards
-    assert 'build.&nbsp;…&rdquo;' not in cards and "build. …&rdquo;" in cards and 'Paying member, Nov 16, 2026. <a class="tl" href="/reviews">Full review</a>' in cards
-    assert cards.count("Full review") == 1
-
-
+    assert 'build.&nbsp;…&rdquo;' not in cards and "build.\xa0…&rdquo;" in cards and 'Paying member, Nov 16, 2026 <a class="tl" href="/reviews">Full review</a>' in cards
+    assert cards.count("Full review") == 2
 def test_rating_shows_only_from_ten_reviews(srv, monkeypatch):
     few = dict(REVIEWS, summary={"count": 4, "average": 5.0})
     seed(srv, monkeypatch, board(), rv=few)
     s = build(srv).decode("utf-8")
-    assert "★" not in s and "4 reviews, all published" in s
+    assert "★" not in s and "4 reviews, all published" in text(s.encode())
 
 
 def test_reviews_naming_the_old_brand_are_never_featured(srv, monkeypatch):
@@ -463,19 +476,21 @@ def test_sections_follow_the_brief_order_and_wording(srv, monkeypatch):
     assert pos == sorted(pos)
     t = text(s.encode())
     for line in ("For " + html.unescape(landing_v3._sport_sub(landing_v3.sports_on())), "Grade every prop before you lock it in.",
-                 "Every PrizePicks and Underdog line gets a letter grade and a model estimate, with the reason in plain English.",
+                 "See which PrizePicks and Underdog props the model likes, and which to skip, before you build your slip.",
+                 "Every line gets a letter grade, a model estimate and the reason in plain English.",
                  "Then $24.99/month. Cancel anytime.", "Open the board. Read the grade. Play your line.",
                  "What members see when they log in.", "When the apps disagree, you see it first.", "Built for CS2, not bolted on.",
                  "Slips, built from graded lines.",
-                 "Saved before the game. Scored after.", "See every pick on the record", "Members and results.",
-                 "The board is already graded.",
+                 "Saved before the game. Scored after.", "See every pick on the record", "Members, in their words.",
                  "Start with a free day.", "One plan with everything. Cancel anytime from your Whop account.",
                  "Your first day is free. Then $24.99/month until you cancel.", "Secure checkout on Whop.", "Questions.",
                  "Prop Grader gives chances, not certainties. Play only what you can afford to lose."):
         assert line in t, line
-    assert s.count("<h1") == 1 and t.count("lock it in.") == 1 and '<h2 id="final-title">The board is already graded.</h2>' in s
+    assert s.count("<h1") == 1 and t.count("lock it in.") == 2                              # the final call to action repeats the H1
+    assert '<h2 id="final-title">Grade every prop before you <span class="ac nw">lock it in.</span></h2>' in s
+    assert "graded on the board right now" not in s and "already graded" not in s and 'class="hero-proof"' not in s
     assert "six apps" not in t and 'class="sec why"' not in s and "By hand" not in t
-    assert re.findall(r'<p class="eb">([^<]+)</p>', s) == ["How it works", "Inside Prop Grader", "Slip Studio", "The public record"]
+    assert re.findall(r'<p class="eb[^"]*">([^<]+)</p>', s) == ["Slip Studio", "The public record"]   # eyebrows on two sections only
 
 
 def test_faq_is_a_five_item_button_accordion_with_the_live_answers(srv, monkeypatch):

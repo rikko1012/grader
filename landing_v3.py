@@ -9,21 +9,25 @@ The page is VIEW-ONLY (owner access rule: visitors get no usable product for fre
 the member app, tagged EXAMPLE: no row that opens, no app toggle, no slider, no buildable slip, no calculator. Every number on it comes
 from a body the server already keeps for its own public routes - never typed into the template:
 - the browser frame: up to HERO_ROWS rows of the CS2 board snapshot members read (workspace_api.snapshot, the shared 5 s board),
-  chosen by a stated rule (frame_pick: markets graded B or better whose model estimate clears their own entry's break-even, picked
-  in the neutral rule order, shown highest grade first, never padded), each app's line, the pick, the model estimate and the grade. Fewer than FRAME_MIN
-  live qualifiers: the saved board (FALLBACK, dated), through the same code;
-- the phone frame: the first shown row's own card lines (match, player, side + line, the chance at the line on its app, the grade,
+  chosen by a stated rule (frame_pick: one lettered market per player in the neutral rule order - markets both apps list first,
+  then line gaps, moved lines, the soonest - with ANY letter, so the frame shows the grader saying no as well as yes and is never a
+  list of the board's qualifying plays), each app's line, the pick, the model estimate and the grade. One row is highlighted and
+  shown first: the first two-app market whose model estimate clears its own entry's break-even (else any clearer); it prints its
+  break-even beside the estimate. A live board with fewer than FRAME_MIN rows or no clearer: the saved board (FALLBACK, dated),
+  through the same code, when that has a clearer;
+- the phone frame: the highlighted row's own card lines (match, player, side + line, the chance at the line on its app, the grade,
   the projection, the last 10 at this line, the break-even for the entry, the other app's line); a value the row lacks is left out,
-  never shown as 0; How it works draws three tiny view-only fragments from the same row;
+  never shown as 0;
 - the line-gap panel: the first eligible row of the LIVE board (break-even clearers first, then rule order) whose two apps list
   different lines (opening lines when known), else no panel;
 - the CS2 map bars: one live-board player picked by a fixed rule (pool_subject), his HLTV kills per map (hltv_maps.for_player, the
   member player card's read and cache); no subject or any error drops the panel;
-- the Slip Studio stage's one real card: the frame row with the highest model estimate (a real, public, graded CS2 row); the other
-  sports' cards are labelled placeholders whose values are glyphs under a blur (no digits behind it);
+- the Slip Studio stage's one real card: a frame row other than the phone's (B or better first, then the highest model estimate);
+  the other sports' cards are labelled examples whose values are a lock and "Members only" (no number in the source);
 - the record table and count: the same shared answer /api/record serves (key and compute identical), per sport;
 - the reviews: the same shared answer /api/reviews serves (newest first page), member text escaped here, handles left off;
-- the final call to action's count: letter-graded CS2 markets on the live board (no line without a live board).
+- the frame's "Showing N of M" line: letter-graded CS2 markets on the live member board, printed only from MORE_MIN (a small
+  number on a quiet slate would read as an empty product; the final call to action repeats the H1 and prints no count).
 
 Capacity (700 visitors at once): the request path only returns the last built bytes object (send_shared keys its ETag + gzip on
 that object's identity). One builder at a time rebuilds it at most every REBUILD_S seconds in a background thread, from cached
@@ -77,15 +81,16 @@ PRICE_W = "$9.99"
 # attribution (owner brief Nov 23: "+46U on Grader 4 mans in the past week ..." - Trey on X, Nov 20, 2026 - and the member 6-man
 # story). Nothing else may be typed in (tests/test_landing_v3.py checks the page's other numbers come from data).
 OWNER_UNITS = 46
-# Shown in quotation marks as one verbatim fragment of the post, the omitted rest marked with an ellipsis (critic round 1: the
-# "only been live 2 weeks" clause read as a contradiction beside the multi-month record). Full post: "+46U on Grader 4 mans in the
-# past week, and Grader has only been live 2 weeks."
-OWNER_POST = "+46U on Grader 4 mans in the past week"
-OWNER_POST_BY = "Trey on X, Nov 20, 2026"
+# The line under the big +46U is the rest of the post's first clause, so the number is never printed twice (critic round 2); the
+# "only been live 2 weeks" clause is left off (critic round 1: it read as a contradiction beside the multi-month record). Full post:
+# "+46U on Grader 4 mans in the past week, and Grader has only been live 2 weeks."
+OWNER_POST = "on Grader 4 mans in the past week."
+OWNER_POST_BY = "Trey on X, Nov 20, 2026. 4 mans are 4-pick slips."
 OWNER_STORY = "A member ran his first ever 6 man with Grader and cashed."
 OWNER_STORY_BY = "Shared by Prop Grader on X. One member, one night: a result, not a promise."
-# The Slip Studio stage's other sports: no public sample rows exist for them, so they are labelled placeholders (owner brief 6b) and
-# their estimate and grade are glyphs under a blur - never digits, never a made-up name or stat.
+# The Slip Studio stage's other sports: no public sample rows exist for them, so they are labelled examples (owner brief 6b said
+# "placeholder"; critic round 2: that word read as an unfinished site) and their value slot is a lock + "Members only" - never
+# digits, never a made-up name or stat.
 PLACEHOLDERS = (("nba", "NBA guard", "Over 24.5 Points", ""), ("lol", "LoL mid", "Over 7.5 Kills", "Maps 1-2"),
                 ("tennis", "Tennis", "Over 21.5 Total games", ""))
 
@@ -317,15 +322,15 @@ def _rows(board, n=6):
     return pick, _ts((board or {}).get("board_at")), len(out)
 
 
-# The frame's rows (critic round 1: the showcase pick must clear its own break-even): a market qualifies when its lettered lead is
-# graded B or better (the cyan tiers) AND its model estimate is above the break-even of that row's own entry (parity.be; a row
-# without a break-even never qualifies - the frame prints the two side by side). WHICH qualifiers show stays the neutral rule order
-# (_groups: line gaps, moved lines, the soonest; one row per player; at most HERO_ROWS) - never the board's best-graded props, or the
-# free page would be a top-picks feed (owner access rule). Only the DISPLAY order of those rows is grade tier, then estimate.
-# Fewer qualifiers = fewer rows, never padded with B- or sub-break-even rows. A live board with fewer than FRAME_MIN qualifiers is
-# replaced by the saved board (dated) when that shows more.
+# The frame's rows (critic round 2 replaces round 1's filter): one lettered market per player, any letter, picked in the neutral rule
+# order with markets both apps list first (the hero promises PrizePicks AND Underdog), at most HERO_ROWS. Round 1 kept only rows that
+# clear their own break-even, which turned the free page into a list of the board's qualifying plays (owner access rule) and made a
+# wall of identical B badges. Now only ONE row is held to that bar: the highlight (the phone's row, shown first, tinted, its
+# break-even printed beside its estimate) = the first two-app market that clears its own entry's break-even, else the first clearer.
+# A live board with fewer than FRAME_MIN rows or no clearer shows the saved board (dated) when that has one.
 TIER = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4}
 FRAME_MIN = 2
+MORE_MIN = 25                      # "Showing 4 of N graded props" only from this many (a quiet slate never reads as an empty product)
 
 
 def _clears(rs):
@@ -337,18 +342,25 @@ def _clears(rs):
         return False
 
 
+def _apps(rs):
+    return {(r.get("offer") or {}).get("platform") for r in rs if (r.get("offer") or {}).get("line") is not None}
+
+
 def frame_pick(board, n=HERO_ROWS):
-    """[(rows, gap, moved)] for the browser frame by the rule above: chosen in rule order, shown highest grade first."""
+    """([(rows, gap, moved)], highlighted) for the browser frame by the rule above; the highlighted row (if any) first."""
+    gs = sorted(_groups(board), key=lambda g: 0 if len(_apps(g[2])) > 1 else 1)        # stable: rule order inside each half
+    hl = next((g for g in gs if len(_apps(g[2])) > 1 and _clears(g[2])), None) or next((g for g in gs if _clears(g[2])), None)
     seen, pick = set(), []
-    for _pri, _lock, rs, gap, moved in _groups(board):
+    for g in ([hl] if hl else []) + [g for g in gs if g is not hl]:
+        _pri, _lock, rs, gap, moved = g
         who = (rs[0].get("player") or {}).get("key")
-        if who in seen or not _clears(rs):
+        if who in seen:
             continue
         seen.add(who)
         pick.append((rs, gap, moved))
         if len(pick) == n:
             break
-    return sorted(pick, key=lambda x: (TIER[(x[0][0].get("scout") or {}).get("grade")], -float((x[0][0].get("scout") or {}).get("p_side"))))
+    return pick, hl is not None
 
 
 def _l10(r):
@@ -393,21 +405,25 @@ def _meter(p):
     return f'<span class="mt"><i style="transform:scaleX({v:.3f})"></i></span>'
 
 
-def frame_rows(shown):
+def frame_rows(shown, hl=False):
     """The browser frame's rows (a picture inside an aria-hidden frame): player + prop | each app's line | pick | model estimate +
-    meter | grade. Lines print exactly as the member board prints them."""
+    meter | grade. Lines print exactly as the member board prints them. hl: the first row is the highlighted one (tinted, its
+    break-even beside its estimate)."""
     out = []
-    for rs, _gap, _moved in shown:
+    for i, (rs, _gap, _moved) in enumerate(shown):
         lead = rs[0]
-        pl, mk, sc = lead.get("player") or {}, lead.get("market") or {}, lead.get("scout") or {}
+        pl, mk, sc, par = lead.get("player") or {}, lead.get("market") or {}, lead.get("scout") or {}, lead.get("parity") or {}
         p = _pct(sc.get("p_side"))
         lines = "".join(f'<span>{_tag(r)} {esc(_num((r.get("offer") or {}).get("line")))}</span>' for r in _by_app(rs))
         g = sc.get("grade") or ""
-        out.append(f'<div class="br"><span class="b-who"><b>{esc(pl.get("name"))}</b>'
+        on = bool(hl and i == 0 and _pct(par.get("be")))
+        est = (f'<span class="b-p b-pe"><span><b>{esc(p)}%</b>{_meter(sc.get("p_side"))}</span>'
+               f'<small>vs {esc(_pct(par.get("be")))}% break-even</small></span>'
+               if on else f'<span class="b-p"><b>{esc(p)}%</b>{_meter(sc.get("p_side"))}</span>')
+        out.append(f'<div class="br{" hl" if on else ""}"><span class="b-who"><b>{esc(pl.get("name"))}</b>'
                    f'<small>{esc(mk.get("stat_label"))} · {esc(mk.get("period_label"))}</small></span>'
                    f'<span class="b-ln">{lines}</span><span class="b-pk">{_side(lead)}</span>'
-                   f'<span class="b-p"><b>{esc(p)}%</b>{_meter(sc.get("p_side"))}</span>'
-                   f'<span class="b-g"><i class="gb {gcls(g)}">{esc(_grade_text(g, _side(lead)))}</i></span></div>')
+                   f'{est}<span class="b-g"><i class="gb {gcls(g)}">{esc(_grade_text(g, _side(lead)))}</i></span></div>')
     return "".join(out)
 
 
@@ -464,10 +480,12 @@ def phone(shown):
     }
 
 
-def gap_panel(pick):
+def gap_panel(pick, skip=None):
     """The 'apps disagree' panel from the first row whose two apps list different lines, rows that clear their own break-even
-    (_clears) first, then rule order ({} = no panel)."""
-    for rs, gap, _m in sorted(pick, key=lambda x: 0 if _clears(x[0]) else 1):
+    (_clears) first, then rule order ({} = no panel). skip = the phone's player key: another player's gap leads when there is one,
+    so the page never repeats one play in every section (critic round 2)."""
+    for rs, gap, _m in sorted(pick, key=lambda x: (1 if skip and (x[0][0].get("player") or {}).get("key") == skip else 0,
+                                                   0 if _clears(x[0]) else 1)):
         plats = {(r.get("offer") or {}).get("platform") for r in rs}
         if not gap or len(plats) < 2:
             continue
@@ -493,14 +511,13 @@ def gap_panel(pick):
 
 
 def slip_real(pick):
-    """The Slip Studio stage's real card: the lettered frame row with the highest model estimate (first in frame order on a tie)."""
-    best = None
-    for rs, _g, _m in pick:
-        sc = rs[0].get("scout") or {}
-        if sc.get("grade") and sc.get("p_side") is not None and (best is None or float(sc["p_side"]) > float((best.get("scout") or {})["p_side"])):
-            best = rs[0]
-    if best is None:
+    """The Slip Studio stage's real card: a lettered frame row other than the phone's (the first row) when there is one - so the page
+    never repeats one play everywhere - graded B or better first, then the highest model estimate (frame order on a tie)."""
+    cands = [rs[0] for rs, _g, _m in (pick[1:] or pick)
+             if (rs[0].get("scout") or {}).get("grade") and (rs[0].get("scout") or {}).get("p_side") is not None]
+    if not cands:
         return {}
+    best = min(cands, key=lambda r: (0 if (r.get("scout") or {}).get("grade") in TIER else 1, -float((r.get("scout") or {})["p_side"])))
     pl, mk, sc, of = (best.get(k) or {} for k in ("player", "market", "scout", "offer"))
     return {"SS_WHO": esc(pl.get("name")), "SS_PROP": esc(f"{_side(best)} {_num(of.get('line'))} {mk.get('stat_label')}"),
             "SS_PER": esc(mk.get("period_label") or ""), "SS_P": esc(_pct(sc.get("p_side"))), "SS_G": esc(sc.get("grade")),
@@ -513,50 +530,43 @@ ICONS = {"cs2": '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="
          "tennis": '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M3.3 3.7c2.5 2.3 2.5 6.3 0 8.6M12.7 3.7c-2.5 2.3-2.5 6.3 0 8.6"/></svg>'}
 
 
+LOCK = ('<svg class="lk" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5"/>'
+        '<path d="M5.5 7V5a2.5 2.5 0 015 0v2"/></svg>')
+
+
 def slip_cards(real):
-    """(board cards, slip slots): the real CS2 card first, then the labelled placeholders (the role on the name line, a small
-    'placeholder' label beside it that never truncates). A placeholder's estimate and grade are
-    placeholder glyphs under a blur (never a real value in the page source) and it carries no meter. Each slot holds a copy of its
-    card (the still page shows the final frame: every slot filled)."""
+    """(board cards, slip slots): the real CS2 card first, then the labelled examples (the role on the name line, a small 'Example'
+    label beside it that never truncates). An example's value slot is a lock and "Members only" (never a value in the page source)
+    and it carries no meter. Each slot holds a copy of its card (the still page shows the final frame: every slot filled)."""
     cards = [f'<span class="si">{ICONS["cs2"]}</span><span class="sw"><b>{real["SS_WHO"]}</b>'
              f'<small>{real["SS_PROP"]}{" · " + real["SS_PER"] if real["SS_PER"] else ""}</small></span>'
              f'<span class="sv"><b>{real["SS_P"]}%</b><i class="gb {real["SS_GCLS"]}">{real["SS_G"]}</i></span>']
     for sp, who, prop, per in PLACEHOLDERS:
-        cards.append(f'<span class="si">{ICONS[sp]}</span><span class="sw"><b>{who}<em class="phl">placeholder</em></b>'
+        cards.append(f'<span class="si">{ICONS[sp]}</span><span class="sw"><b>{who}<em class="phl">Example</em></b>'
                      f'<small>{prop}{" · " + per if per else ""}</small></span>'
-                     f'<span class="sv bl"><b>00.0%</b><i class="gb gg">B</i></span>')
+                     f'<span class="sv mo">{LOCK}<span>Members only</span></span>')
     cls = lambda i: "sc" if i == 0 else "sc ph"          # noqa: E731 - a placeholder's name line never truncates (its label shows whole)
     board = "".join(f'<div class="{cls(i)}" data-i="{i}">{c}</div>' for i, c in enumerate(cards))
     slots = "".join(f'<div class="slot" data-i="{i}"><div class="{cls(i)}">{c}</div></div>' for i, c in enumerate(cards))
     return board, slots
 
 
-def how_frags(shown):
-    """How it works, one tiny view-only fragment per step from the first frame row ({} = none, the steps show text only):
-    01 each app's line, 02 the grade badge + the pick, 03 a two-slot slip with that leg in the first slot."""
-    if not shown:
-        return {}
-    rs = shown[0][0]
-    lead = rs[0]
-    mk, sc, of = (lead.get(k) or {} for k in ("market", "scout", "offer"))
-    g = sc.get("grade") or ""
-    return {
-        "HOW_F1": "".join(f'<i><span>{esc((r.get("offer") or {}).get("platform_label"))}</span><b>{esc(_num((r.get("offer") or {}).get("line")))}</b></i>'
-                          for r in _by_app(rs)[:2]),
-        "HOW_F2": f'<i class="gb {gcls(g)}">{esc(_grade_text(g, _side(lead)))}</i><span>{esc(_side(lead))} {esc(_num(of.get("line")))} {esc(mk.get("stat_label"))}</span>',
-        "HOW_F3": f'<i><b>{esc((lead.get("player") or {}).get("name"))}</b><span>{esc(_side(lead))} {esc(_num(of.get("line")))}</span></i><i class="e"></i>',
-    }
-
-
-def feeds_label(board):
-    """'Underdog + PrizePicks': the apps whose rows are on this board, in the board's feed order (never a feed that listed nothing)."""
-    have = {(r.get("offer") or {}).get("platform"): (r.get("offer") or {}).get("platform_label") for r in (board or {}).get("records") or []}
-    order = list(((board or {}).get("feeds") or {}).keys()) + sorted(k for k in have if k)
-    out = []
-    for k in order:
-        if k in have and have[k] and have[k] not in out:
-            out.append(have[k])
-    return " + ".join(out)
+def feeds_label(shown):
+    """(board subtitle, line column header) from the apps the SHOWN rows list (critic round 2: never "each app's own line" over one
+    app): two or more apps -> ('PrizePicks + Underdog, graded at each app's own line', 'Line by app'); one -> ("Graded at
+    Underdog's line", 'Line'); none -> ('', 'Line')."""
+    have = {}
+    for rs, _g, _m in shown:
+        for r in rs:
+            of = r.get("offer") or {}
+            if of.get("platform") and of.get("line") is not None:
+                have.setdefault(of.get("platform"), of.get("platform_label") or of.get("platform"))
+    names = [have[k] for k in sorted(have, key=lambda k: (APP_ORDER.get(k, 9), k))]
+    if len(names) > 1:
+        return " + ".join(names) + ", graded at each app’s own line", "Line by app"
+    if names:
+        return f"Graded at {names[0]}’s line", "Line"
+    return "", "Line"
 
 
 def fallback_board():
@@ -761,7 +771,7 @@ def featured(doc):
     out). Order: complete reviews first, then the most product talk, then the longest; a cut review needs CUT_MIN_WORDS words left
     and shows its ellipsis plus a 'Full review' link to /reviews. Different dates are preferred when the reviews have them. A review
     that names the site's old brand (_OLD_BRAND) is never featured (it stays on /reviews). old is always False (kept for callers)."""
-    out = []
+    out, short = [], []
     for r in (doc or {}).get("reviews") or []:
         text = f'{r.get("title") or ""} {r.get("body") or ""}'
         letters = [c for c in text if c.isalpha()]
@@ -773,11 +783,9 @@ def featured(doc):
         quote = " ".join(kept)
         cut = len(kept) < len(sents)
         hits = len(_PRODUCT.findall(quote))
-        if not hits or len(quote.split()) < (CUT_MIN_WORDS if cut else 5):
+        if not hits or len(quote.split()) < 5 or _OLD_BRAND.search(f'{text} {r.get("name") or ""}'):
             continue
-        if _OLD_BRAND.search(f'{text} {r.get("name") or ""}'):
-            continue
-        out.append((cut, -hits, -len(quote), r, quote))
+        (short if cut and len(quote.split()) < CUT_MIN_WORDS else out).append((cut, -hits, -len(quote), r, quote))
     out.sort(key=lambda x: x[:3])
     first, rest, days = [], [], set()
     for x in out:                                        # one review per date first (when the dates differ), then the rest in order
@@ -785,7 +793,9 @@ def featured(doc):
         (rest if d in days else first).append(x)
         days.add(d)
     pick = sorted((first + rest)[:FEATURE_N], key=lambda x: x[:3]) if len(first) > 1 else out[:FEATURE_N]
-    return [(r, q, cut, False) for cut, _h, _n, r, q in pick]
+    short.sort(key=lambda x: x[:3])
+    pick += short[:FEATURE_N - len(pick)]                # the row needs 3 (critic round 2): a cut review with 5-11 words left fills
+    return [(r, q, cut, False) for cut, _h, _n, r, q in pick]   # it, its ellipsis and "Full review" link marking the cut
 
 
 def wall(doc):
@@ -802,9 +812,8 @@ def wall(doc):
         d = _ts(r.get("created"))
         more = ' <a class="tl" href="/reviews">Full review</a>' if cut else ""
         cards.append(f'<li><figure class="rq"><blockquote><p>&ldquo;{esc(curly(quote))}{chr(160) + "…" if cut else ""}&rdquo;</p></blockquote>'
-                     f'<figcaption>Paying member, {esc(_date(d))}.{more}</figcaption></figure></li>')
-    head = (f'<span class="star" aria-hidden="true">★</span>&nbsp;{avg:.1f} from {n} reviews, all published' if avg is not None
-            else f"{n} reviews, all published")
+                     f'<figcaption>Paying member, {esc(_date(d))}{more}</figcaption></figure></li>')
+    head = (f"from {n} reviews, all published" if avg is not None else "reviews, all published")
     return head, "".join(cards), n, avg
 
 
@@ -857,58 +866,54 @@ def build(srv, join_url, fetch=True):
     sp = sports_on()
     live = open_only(inp["board"])                    # live rows only while their match has not started (never a stale line)
     live_rows, _at, live_n = _rows(live, n=10 ** 6) if live else ([], None, 0)
-    board, pick, saved = live, (frame_pick(live) if live else []), False
-    if len(pick) < FRAME_MIN:                         # too few qualifying live rows: the saved board (dated), through the same code
+    board, saved = live, False
+    pick, hl = frame_pick(live) if live else ([], False)
+    if len(pick) < FRAME_MIN or not hl:               # too few live rows or no clearer: the saved board (dated), through the same code
         fb = fallback_board()
-        fpick = frame_pick(fb) if fb else []
-        if len(fpick) > len(pick):
-            board, pick, saved = fb, fpick, True
+        fpick, fhl = frame_pick(fb) if fb else ([], False)
+        if (fhl and len(fpick) >= FRAME_MIN) or (fpick and not pick):
+            board, pick, hl, saved = fb, fpick, fhl, True
     rows, total, asof = ledger(inp["record"])
     head, cards, nrv, avg = wall(inp["reviews"])
-    shown = pick                                      # frame_pick already ranks: highest grade, then highest estimate
+    shown = pick                                      # frame_pick puts the highlighted (phone) row first
     gap_src = live_rows or (_rows(board, n=10 ** 6)[0] if pick else [])     # the gap panel and map bars read the live board first
-    ph, gp, real = phone(shown), gap_panel(gap_src), slip_real(pick)
+    skip = (shown[0][0][0].get("player") or {}).get("key") if shown else None
+    ph, gp, real = phone(shown), gap_panel(gap_src, skip), slip_real(pick)
     cards_ss = slip_cards(real) if real else ("", "")
     pm = pool_module(live, fetch) if live_rows else {}  # live board only: the saved board's line is not current
-    steps = how_frags(shown)
     base = public_base()
-    host = re.sub(r"^https://", "", base)
     bdate = _date(_ts((board or {}).get("board_at"))) if pick else ""
     tot_s = f"{total:,}" if total else ""
-    rv_short = (f'<span class="star" aria-hidden="true">★</span>&nbsp;{avg:.1f} from {nrv} reviews' if avg is not None
-                else f"{nrv} reviews" if nrv else "")
-    # the phone's first screen carries the proof (critic round 1): one link to /record with the live count and the live score
-    hproof = " ".join(f'<span class="hp">{x}</span>' for x in ((f"{tot_s} decided picks on the public record." if total else ""),
-                                                              (f"{rv_short}." if rv_short else "")) if x)
-    more_n = live_n - len(shown) if (pick and not saved) else 0      # the saved file is not a board: no count under it
+    more_n = live_n - len(shown) if (pick and not saved and live_n >= MORE_MIN) else 0   # the saved file is not a board: no count
     units_s = f"+{OWNER_UNITS}U"
+    fsub, flh = feeds_label(shown)
+    ncols = 1 + bool(total) + bool(nrv)               # proof columns: +46U, the record count, the review score
     fill = {
         "TRIAL_URL": esc(join_url),
         "WEEKLY_URL": esc(weekly_url(srv)),
         "PRICE_M": esc(PRICE_M), "PRICE_W": esc(PRICE_W),
         "OWNER_UNITS": str(OWNER_UNITS), "OWNER_UNITS_S": esc(units_s), "OWNER_UNITS_W": str(len(units_s)),
-        "OWNER_POST": f"&ldquo;{esc(OWNER_POST)}&nbsp;…&rdquo;", "OWNER_POST_BY": esc(OWNER_POST_BY),
+        "OWNER_POST": esc(OWNER_POST), "OWNER_POST_BY": esc(OWNER_POST_BY),
+        "PF_CLS": " pf-solo" if ncols == 1 else " pf-2" if ncols == 2 else "",
         "OWNER_STORY": esc(OWNER_STORY).replace("6 man", "6&nbsp;man"), "OWNER_STORY_BY": esc(OWNER_STORY_BY),
+        "STORY_CLS": "" if nrv else " solo",
         "SPORT_SUB": esc(_sport_sub(sp)),
         "SPORT_LONG": esc(_list([LONG[s] if s in ("cs2", "lol", "nba", "nfl") else LONG[s].lower() for s in sp])),
-        "SPORT_NAV": "".join(f'<li{" class=on" if s == "cs2" else ""}>{LONG[s]}</li>' for s in sp),
-        "FRAME_ROWS": frame_rows(shown), "FRAME_SR": frame_sr(shown),
-        "FRAME_FEEDS": esc(feeds_label(board)) if pick else "",
+        # the frame's sidebar: the long name, and the short one the 1024-1279 layout shows (a nav label never truncates)
+        "SPORT_NAV": "".join(f'<li{" class=on" if s == "cs2" else ""}><span class="lg">{LONG[s]}</span><span class="sh">{LABEL[s]}</span></li>'
+                             for s in sp),
+        "FRAME_ROWS": frame_rows(shown, hl), "FRAME_SR": frame_sr(shown),
+        "FRAME_SUB": esc(fsub), "FRAME_LN_H": esc(flh),
         "FRAME_MORE": esc(f"Showing {len(shown)} of {live_n:,} graded props on the board.") if more_n > 0 else "",
-        "HERO_PROOF": hproof,
-        "FINAL_SUB": esc(f"{live_n:,} CS2 {'prop is' if live_n == 1 else 'props are'} graded on the board right now.") if live_rows else "",
-        **steps,
         "FRAME_CAP": esc(f"Example rows from the public sample board{', ' + bdate if bdate else ''}. "
                          "A model estimate is a chance, not a promise."),
         **ph, **gp, **pm,
         "SS_CARDS": cards_ss[0], "SS_SLOTS": cards_ss[1], "SS_WHO": real.get("SS_WHO", ""),
         "LEDGER_ROWS": rows, "LEDGER_ASOF": esc(asof),
         "LEDGER_TOTAL": tot_s, "LEDGER_N": str(total), "LEDGER_W": str(len(tot_s)),
-        "REC_CAP": esc(f"{tot_s} decided picks") if total else "",
-        "REC_SRC": esc(f"{host}/record") if host else "the public record",
-        "REC_LINK": esc(f"{host}/record") if host else "The public record",
-        "RV_LINK": esc(f"{host}/reviews") if host else "Every review",
+        "REC_SRC": esc(f"{re.sub(r'^https://', '', base)}/record") if base else "the public record",
         "RV_HEAD": head, "RV_CARDS": cards, "RV_N": str(nrv),
+        "RQS_CLS": f" n{cards.count('<li>')}",
         "RV_BIG": (f'<span class="star" aria-hidden="true">★</span>&nbsp;{avg:.1f}' if avg is not None else str(nrv)),
         "RV_BIG_SR": esc(f"{avg:.1f} out of 5" if avg is not None else str(nrv)),
         "RV_PROOF": esc(f"from {nrv} member reviews. Every review is published, whatever its rating." if avg is not None
@@ -919,8 +924,7 @@ def build(srv, join_url, fetch=True):
     # optional blocks: <!--if:NAME--> ... <!--/if:NAME--> kept only when NAME has content
     for name, on in (("FRAME", bool(pick)), ("PHONE", bool(ph)), ("GAP", bool(gp)), ("POOL", bool(pm)), ("SLIP", bool(real)),
                      ("LEDGER", bool(rows)), ("TOTAL", bool(total)), ("REVIEWS", bool(nrv)), ("RVCARDS", bool(cards)),
-                     ("BASE", bool(base)), ("INSIDE", bool(gp or pm)), ("HPROOF", bool(hproof)), ("FMORE", bool(more_n > 0)),
-                     ("FSUB", bool(live_rows)), ("STEPS", bool(steps))):
+                     ("BASE", bool(base)), ("INSIDE", bool(gp or pm)), ("FMORE", bool(more_n > 0))):
         out = re.sub(rf"<!--if:{name}-->(.*?)<!--/if:{name}-->", (lambda m: m.group(1)) if on else "", out, flags=re.S)
     out = re.sub(r"\{\{([A-Z_0-9]+)\}\}", lambda m: fill.get(m.group(1), ""), out)
     return out.encode("utf-8")
