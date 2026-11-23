@@ -99,7 +99,11 @@ DISAGREE = 0.05
 COHERENCE = 0.05
 FORECAST_EVERY = 1800    # shadow log: also re-log an unchanged baseline every 30 min
 HEARTBEAT = 600          # ml_quotes: an unchanged quote is re-written at most every 10 min
-SNAPSHOT_MAX_MB = float(os.environ.get("ML_SNAPSHOT_MAX_MB") or 900)   # cap on LIVE pages of ml_snapshots.db (+ WAL)
+SNAPSHOT_MAX_MB = float(os.environ.get("ML_SNAPSHOT_MAX_MB") or 1500)  # cap on LIVE pages of ml_snapshots.db (+ WAL)
+# 900 -> 1500 on 2026-11-23 (storage-1123 R3a): writes had stopped since 2026-11-10 at 1,072 MB because the rows the
+# evaluation keeps live (ml_quotes keep set ~305 MB incl. indexes) plus the never-archived ml_forecasts shadow log
+# (~767 MB incl. index, +~13 MB/day) exceed 900 MB on their own (E4 dbstat). No row is removed; DISK_FLOOR_MB still
+# protects the disk. The durable fix (archive settled matches' keep set + forecasts) is mlstore-3 (R3b), not this.
 DISK_FLOOR_MB = float(os.environ.get("ML_DISK_FLOOR_MB") or 400)     # no quote write below this free space on the disk
 LEGACY_FILE_CAP_MB = 500  # the pre-mlstore-1 guard: file size > 500 MB paused every quote write
 GAP_MIN_S = 1800          # no saved quote for a platform this long (3 heartbeats) = a recorded gap (ml_gaps)
@@ -484,8 +488,10 @@ def write_snapshots(rows, force=False):
                 if at is not None and (prev.get(plat) is None or at > prev[plat]):
                     prev[plat] = at
             before = con.total_changes
+            vals = [tuple(r.get(c) for c in cols) for _, _, _, r in keep]
+            vals = _insert_above_archive(con, cols, vals)
             con.executemany(f"INSERT OR IGNORE INTO ml_quotes ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
-                            [tuple(r.get(c) for c in cols) for _, _, _, r in keep])
+                            vals)
             n_new = con.total_changes - before
             if n_new:
                 _record_gaps(con, prev, keep)
@@ -499,6 +505,30 @@ def write_snapshots(rows, force=False):
             con.close()
 
 
+def _insert_above_archive(con, cols, vals):
+    """Never hand a new ml_quotes row a rowid an archived row already has (storage-1123 R3a). ml_quotes has no INTEGER
+    PRIMARY KEY / AUTOINCREMENT, so SQLite gives a new row MAX(live rowid) + 1; when the newest rows were archived
+    (writes stopped 2026-11-10, the archive then moved rowids 1,446,395..1,446,399 while 1,446,394 stayed live) the next
+    insert would reuse an archived rowid, and the unified lookup / restore_db (INSERT OR IGNORE at original rowids) and
+    the export would see two different rows under one rowid. So while the live maximum is below the archive maximum, rows
+    are inserted one by one at an explicit rowid above it until one is stored; the rest then follow it as before.
+    Returns the rows still to insert."""
+    floor = con.execute("SELECT MAX(max_rowid) FROM ml_archive").fetchone()[0] or 0
+    if not floor:
+        return vals
+    top = con.execute("SELECT MAX(rowid) FROM ml_quotes").fetchone()[0] or 0
+    i = 0
+    sql = (f"INSERT OR IGNORE INTO ml_quotes (rowid, {','.join(cols)}) "
+           f"VALUES ({','.join('?' * (len(cols) + 1))})")
+    while top < floor and i < len(vals):
+        n0 = con.total_changes
+        con.execute(sql, (floor + 1,) + tuple(vals[i]))
+        i += 1
+        if con.total_changes > n0:
+            top = floor + 1
+    return vals[i:]
+
+
 class SnapshotCapReached(RuntimeError):
     pass
 
@@ -506,6 +536,10 @@ class SnapshotCapReached(RuntimeError):
 _OPEN = {"file_mb": None}     # ml_snapshots.db file size when this process first wrote (memory)
 _PAUSED = {}                  # platform -> why its quote writes were refused in this process (cleared by the next write)
 NO_BACKFILL = "none - Polymarket/Kalshi quotes are captured only by this collector; no archived copy of the gap exists"
+# the reason of a gap this process did not cause (R3a 2026-11-23: a restart that ends a store-cap / disk-floor pause of the
+# previous process lands here - that process's refusal is not persisted, so it is named as one of the possibilities)
+GAP_UNKNOWN = ("no quote saved (process down, source refresh failing, no listings, or writes refused by the store cap / "
+               "disk floor in an earlier process)")
 
 
 def _kick_archive():
@@ -544,7 +578,7 @@ def _record_gaps(con, prev, keep):
         con.execute("INSERT OR IGNORE INTO ml_gaps (platform, last_saved_before, first_saved_after, gap_s, reason, "
                     "backfill, recorded_at) VALUES (?,?,?,?,?,?,?)",
                     (plat, _iso(b), _iso(a), round((a - b).total_seconds(), 1),
-                     reason or "no quote saved (process down, source refresh failing or no listings)", NO_BACKFILL, now))
+                     reason or GAP_UNKNOWN, NO_BACKFILL, now))
 
 
 def store_sizes(con):
