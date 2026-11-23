@@ -169,3 +169,51 @@ def test_st1_attach_names_the_publication_time(tmp_path, monkeypatch):
     out = model.attach('soccer', {'offers': [offer]})
     (f,) = out['forecasts'].values()
     assert out['forecasts_at'] == '2026-11-18T17:30:00Z' and f['made_at'] <= NOW
+
+
+def test_st2_offer_briefly_off_the_board_keeps_its_saved_letter(tmp_path, monkeypatch):
+    """sweep 2026-11-23 ST-2: a PrizePicks league-tab row leaves board.json for a few minutes (300 s age rule) and returns.
+    A publish in that gap used to drop its key, so the row came back with no letter until the next publish."""
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    offer, facts = fixture()
+    live = {'offers': [offer]}
+    monkeypatch.setattr(boards, 'board', lambda req: (200, live))
+    monkeypatch.setattr(research, 'saved', lambda sport: {'players': {research.key(offer): facts}})
+    first = model.publish('soccer', NOW)
+    assert first['published'] == 1
+    saved = model.attach('soccer', {'offers': [offer]})['forecasts']
+    live['offers'] = []                                        # off the board at this publish
+    out = model.publish('soccer', '2026-11-17T23:03:00Z')
+    assert out['published'] == 1 and out['pending'].get('carried_off_board') == 1
+    assert model.attach('soccer', {'offers': []})['forecasts'] == {}           # nothing served while it is off the board
+    live['offers'] = [offer]                                   # back on the board: the saved letter at once
+    back = model.attach('soccer', {'offers': [offer]})
+    assert back['forecasts'] == saved and back['forecasts_at'] == '2026-11-17T23:03:00Z'
+    # a moved line (new revision) never matches the carried entry
+    assert model.attach('soccer', {'offers': [dict(offer, revision='moved')]})['forecasts'] == {}
+    # after the start the carried entry is dropped
+    live['offers'] = []
+    assert model.publish('soccer', '2026-11-18T18:00:01Z')['published'] == 0
+
+
+def test_st2_on_board_offer_without_a_forecast_now_is_not_given_its_old_letter(tmp_path, monkeypatch):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    offer, facts = fixture()
+    monkeypatch.setattr(boards, 'board', lambda req: (200, {'offers': [offer]}))
+    players = {'players': {research.key(offer): facts}}
+    monkeypatch.setattr(research, 'saved', lambda sport: players)
+    assert model.publish('soccer', NOW)['published'] == 1
+    players['players'] = {}                                    # research gone: make_forecast refuses this offer now
+    out = model.publish('soccer', '2026-11-17T23:03:00Z')
+    assert out['published'] == 0 and 'carried_off_board' not in out['pending']
+
+
+def test_st2_carry_never_evicts_a_current_entry_and_fills_soonest_first():
+    cur = {'c': {'start': '2026-11-18T10:00:00Z', 'pad': 'x' * 200}}
+    prev = {'late': {'start': '2026-11-19T10:00:00Z', 'pad': 'y' * 200}, 'soon': {'start': '2026-11-18T09:00:00Z', 'pad': 'z' * 200},
+            'past': {'start': '2026-11-17T22:00:00Z'}, 'arch': {'start': '2026-11-19T00:00:00Z', 'archived': 'f'},
+            'c': {'start': '2026-11-18T10:00:00Z', 'old': True}, 'onb': {'start': '2026-11-19T00:00:00Z'}}
+    limit = sum(model._entry_bytes(k, v) for k, v in cur.items()) + 64 + model._entry_bytes('soon', prev['soon'])
+    got = model.carry_off_board(prev, cur, {'onb'}, NOW, limit=limit)
+    assert got == {'soon': prev['soon']}
+    assert set(model.carry_off_board(prev, cur, {'onb'}, NOW)) == {'soon', 'late'}

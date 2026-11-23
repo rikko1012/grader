@@ -614,26 +614,73 @@ def publish(sport, now=None, budget_s=8):
             current[key] = {k:v for k,v in frozen.items() if k != 'inputs'}
         c.commit()
     path = boards.root(sport)/'forecasts.json'
+    eligible = {offer_key(o) for o in board['offers']}
+    previous = {}
+    try:
+        if path.stat().st_size <= 4_000_000:
+            old = json.loads(path.read_text(encoding='utf-8'))
+            if old.get('sport') == sport and isinstance(old.get('forecasts'), dict):
+                previous = old['forecasts']
+    except (OSError, ValueError, AttributeError):
+        previous = {}
     if counts.get('budget'):
         # sg-stability: a run cut by its time budget keeps the previous publication of every offer it did not reach
         # (same offer revision = the same frozen forecast) instead of dropping those grades for a cycle
-        eligible = {offer_key(o) for o in board['offers']}
-        try:
-            if path.stat().st_size <= 4_000_000:
-                old = json.loads(path.read_text(encoding='utf-8'))
-                if old.get('sport') == sport:
-                    kept = {k: v for k, v in (old.get('forecasts') or {}).items() if k in eligible and k not in current}
-                    current.update(kept)
-                    counts['carried'] = len(kept)
-        except (OSError, ValueError, AttributeError):
-            pass
+        kept = {k: v for k, v in previous.items() if k in eligible and k not in current}
+        current.update(kept)
+        counts['carried'] = len(kept)
     current = fit_publication(current)
+    # sweep 2026-11-23 ST-2: an offer briefly OFF the board at publish time (a PrizePicks league tab past its 300 s age rule
+    # until the next tab read) keeps its previous publication, so the saved letter is back the moment the row returns
+    # instead of a cycle without a grade. Only offers not on this board (an on-board offer that gave no forecast now is
+    # never given its old letter back), not started, into the bytes fit_publication left (never evicting a current entry),
+    # soonest start first. attach() still serves only keys of offers on the board it answers for; the key encodes the
+    # offer revision, so a moved line never matches.
+    off = carry_off_board(previous, current, eligible, now)
+    if off:
+        counts['carried_off_board'] = len(off)
+        current = {**current, **off}
     atomic_json(path, {'sport':sport,'at':now,'forecasts':current})
     return {'published':len(current),'letters':sum(bool(v['grade']) for v in current.values()),'pending':counts,
             'pending_by':dict(sorted(detail.items(), key=lambda kv:(-kv[1],kv[0]))[:60])}
 
 
 PUBLICATION_BYTES = 3_800_000   # attach() ignores a forecasts.json over 4,000,000 bytes (every grade of the sport)
+
+
+def _entry_bytes(k, v):
+    return len(json.dumps(v, separators=(',', ':'))) + len(k) + 6
+
+
+def carry_off_board(previous, current, on_board, now, limit=PUBLICATION_BYTES):
+    """{key: entry} of the previous publication to keep for offers not on the board now: not in `current`, not on the board,
+    a saved (non-archived) forecast whose start is after `now`, added soonest start first while the file stays under `limit`
+    (the same byte count as fit_publication). `current` is never touched."""
+    try:
+        t_now = parse_utc(now)
+    except (TypeError, ValueError):
+        return {}
+    cand = []
+    for k, v in (previous or {}).items():
+        if k in current or k in on_board or not isinstance(v, dict) or 'archived' in v:
+            continue
+        try:
+            st = parse_utc(v.get('start'))
+            if st > t_now:
+                cand.append((st, k, v))
+        except (TypeError, ValueError, AttributeError):
+            continue
+    if not cand:
+        return {}
+    total = sum(_entry_bytes(k, v) for k, v in current.items()) + 64
+    out = {}
+    for st, k, v in sorted(cand, key=lambda t: (t[0], t[1])):
+        size = _entry_bytes(k, v)
+        if total + size > limit:
+            break
+        out[k] = v
+        total += size
+    return out
 
 
 def fit_publication(current, limit=PUBLICATION_BYTES):
