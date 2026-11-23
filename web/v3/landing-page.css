@@ -445,6 +445,8 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 .motion .rv.in li:nth-child(3) .kb>span{transition-delay:120ms}
 .motion .rv.in li:nth-child(4) .kb>span{transition-delay:180ms}
 .motion .rv.in li:nth-child(5) .kb>span{transition-delay:240ms}
+.motion .rv.in li:nth-child(6) .kb>span{transition-delay:300ms}
+.motion .rv.in li:nth-child(7) .kb>span{transition-delay:360ms}
 
 /* 1024-1215: the phone stays inside the page */
 @media (max-width:1279px){

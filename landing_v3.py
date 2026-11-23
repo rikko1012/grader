@@ -969,6 +969,8 @@ def build(srv, join_url, fetch=True):
         "RV_LINE": (f'<span aria-hidden="true"><span class="star">★</span>&nbsp;{avg:.1f} ·&nbsp;</span><span class="sr-only">Rated {avg:.1f} out of 5 from </span>'
                     f'{nrv} reviews, all published' if avg is not None else f"{nrv} reviews, all published"),
         "RQS_CLS": f" n{cards.count('<li>')}",
+        # "in their words" only over members' own words: with no review card the band holds Prop Grader's post alone (critic round 6)
+        "RV_H2": "Members, in their words." if cards else "Members.",
         "RV_BIG": (f'<span class="star" aria-hidden="true">★</span>&nbsp;{avg:.1f}' if avg is not None else str(nrv)),
         "RV_BIG_SR": esc(f"{avg:.1f} out of 5" if avg is not None else str(nrv)),
         "RV_PROOF": esc(f"from {nrv} member reviews. Every review is published, whatever its rating." if avg is not None

@@ -458,6 +458,7 @@ def test_review_cards_escape_feature_by_rule_and_leave_handles_off(srv, monkeypa
     assert "st-r" not in m and m.count("4.8") == 2                    # one rating line beside the H2; the 6-man card is the post only
     # critic round 6: the members' reviews sit under the H2; Prop Grader's own post follows with its own source label
     assert m.index('class="rqs n3"') < m.index('class="story"') and '<p class="st-k">From Prop Grader on X</p>' in m
+    assert '<h2 id="rv-title">Members, in their words.</h2>' in m
     assert "Shared by Prop Grader on X. One member, one night: a result, not a promise." in m
 def test_review_order_cut_rule_and_curly_apostrophes():
     rv = {"summary": {"count": 3}, "reviews": [
@@ -1031,3 +1032,11 @@ def test_hero_shows_up_to_six_rows_in_rule_order():
     css = landing_v3.ASSETS["PAGE_CSS"].read_text(encoding="utf-8")
     assert ".pcol{grid-area:1 / 1;align-self:stretch;display:flex;flex-direction:column;min-width:0;margin:0 16px 48px 0}" in css
     assert ".pcol>.browser{flex:1}" in css and ".ph-why li.oa{display:none}" in css
+
+
+def test_members_heading_says_in_their_words_only_over_member_reviews(srv, monkeypatch):
+    """Critic round 6: with no review card the band holds Prop Grader's own post alone, so the H2 never labels it a member's words."""
+    seed(srv, monkeypatch, board(), rv={"summary": {"count": 0}, "reviews": []})
+    m = block(build(srv).decode("utf-8"), 'id="members"')
+    assert '<h2 id="rv-title">Members.</h2>' in m and "in their words" not in m and 'class="rqs' not in m
+    assert '<p class="st-k">From Prop Grader on X</p>' in m and "Shared by Prop Grader on X." in m
