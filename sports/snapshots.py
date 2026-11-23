@@ -2097,7 +2097,18 @@ def main(argv=None):
             else:
                 out[lg] = build(con, lg, now=now, history=not a.no_history, results=not a.no_results)
     print(json.dumps(out, indent=1, default=str))
+    if a.cmd == "history" and history_starved(out):
+        # the budget ran out before a single player was read (e.g. the board scan alone used it): a failed run, so the
+        # scheduler keeps counting failures and job_failing stays up instead of a clean exit hiding a job that refreshes nothing
+        sys.stderr.write("  history: budget used up before any player was read" + "\n")
+        raise SystemExit(2)
     return out
+
+
+def history_starved(out):
+    """True when a history run read no player in any league and stopped on its budget."""
+    tried = sum(c.get(k, 0) for c in out.values() for k in ("players", "unchanged", "no_log", "errors"))
+    return tried == 0 and any(c.get("budget_stopped") for c in out.values())
 
 
 if __name__ == "__main__":

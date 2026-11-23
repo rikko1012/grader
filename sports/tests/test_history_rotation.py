@@ -55,3 +55,17 @@ def test_history_cli_splits_the_budget_between_leagues(monkeypatch):
     t = snapshots.time.monotonic()
     snapshots.main(["history", "nba", "nfl", "--max-players", "60"])
     assert 0 < got["nba"] - t <= 300.5 and 300 < got["nfl"] - t <= 600.5
+
+
+def test_a_run_that_reads_no_player_before_its_budget_fails(monkeypatch):
+    """Advisor review: a run whose board scan used the whole budget must not exit 0 (that would clear job_failing while
+    nothing refreshes)."""
+    import pytest
+    monkeypatch.setenv("SPORTS_INGEST", "1")
+    monkeypatch.setattr(snapshots, "board_player_ids", lambda con, lg, now: [f"{lg}:player:espn:1"])
+    monkeypatch.setattr(snapshots, "ingest_history", lambda con, lg, ids, **kw: {"players": 0, "unchanged": 0, "no_log": 0, "errors": 0, "budget_stopped": 1})
+    with pytest.raises(SystemExit) as e:
+        snapshots.main(["history", "nba", "nfl"])
+    assert e.value.code == 2
+    assert not snapshots.history_starved({"nba": {"players": 0, "no_log": 1, "budget_stopped": 5}})      # read one: not starved
+    assert not snapshots.history_starved({"nba": {"players": 0}})                                        # nothing to read: fine
