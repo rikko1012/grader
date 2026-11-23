@@ -581,6 +581,7 @@ def publish(sport, now=None, budget_s=8):
         return {'state':'quotes_unavailable'}
     facts = research.saved(sport).get('players',{})
     counts, current, detail = {}, {}, {}
+    reached = set()             # F1 (sweep 2026-11-23): every offer key this run processed, published or declined
     full = storage(sport)['full']
     with closing(connect(sport)) as c:
         # Component-model offers go after every count-model offer, so the budget never drops an existing grade.
@@ -588,6 +589,7 @@ def publish(sport, now=None, budget_s=8):
             if time.monotonic() >= deadline:
                 counts['budget'] = counts.get('budget',0)+1
                 break
+            reached.add(offer_key(offer))
             fact = facts.get(research.key(offer),{})
             forecast, reason = make_forecast(offer, fact, now)
             if forecast is None:
@@ -625,10 +627,16 @@ def publish(sport, now=None, budget_s=8):
         previous = {}
     if counts.get('budget'):
         # sg-stability: a run cut by its time budget keeps the previous publication of every offer it did not reach
-        # (same offer revision = the same frozen forecast) instead of dropping those grades for a cycle
-        kept = {k: v for k, v in previous.items() if k in eligible and k not in current}
+        # (same offer revision = the same frozen forecast) instead of dropping those grades for a cycle.
+        # F1 (sweep 2026-11-23): only offers it did NOT reach. An offer the run reached and declined (event no longer
+        # scheduled = postponed/cancelled, identity lost, storage full, archived conflict) never gets its old letter
+        # back; carry_declined counts the letters the old rule would have republished.
+        would = [k for k in previous if k in eligible and k not in current]
+        kept = {k: previous[k] for k in would if k not in reached}
         current.update(kept)
         counts['carried'] = len(kept)
+        if len(would) > len(kept):
+            counts['carry_declined'] = len(would) - len(kept)
     current = fit_publication(current)
     # sweep 2026-11-23 ST-2: an offer briefly OFF the board at publish time (a PrizePicks league tab past its 300 s age rule
     # until the next tab read) keeps its previous publication, so the saved letter is back the moment the row returns

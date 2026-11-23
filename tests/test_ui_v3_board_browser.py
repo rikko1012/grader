@@ -275,7 +275,9 @@ def test_v3_board_soccer_and_tennis(browser, env, monkeypatch, size, theme):
             p.wait_for_function("!document.querySelector('#hub-rows>tr[data-record]:not([data-sc=\"1\"])')")
             rows = visible_cells(p)
             assert rows and all(all(v != 0 for k, v in r.items()) for r in rows), rows
-            assert p.locator("#hub-health .h-history-note").is_visible()                  # the coverage note stays
+            # ST-4 (sweep 2026-11-23): no coverage status note on the member board; the counts stay in the board data
+            assert p.locator("#hub-health .h-history-note").count() == 0
+            assert "await supporting game logs" not in p.locator("#hub-health").inner_text()
             no_h_scroll(p)
             shot(p, f"{sport}-{theme}-{size['width']}")
         assert not p.errors, p.errors

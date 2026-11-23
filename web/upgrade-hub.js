@@ -810,10 +810,8 @@ export function mount(C) {
     const heldSports=[...new Set(list.filter(r=>r.scout.letter_held).map(r=>r.sport))];
     // the Sports grades note belongs to the NBA and NFL boards only
     $('hub-health').innerHTML=(isExtra(H.book)?extraBanner():'')+heldSports.map(sp=>`<p class="h-letter-hold" role="status">${esc(SPORTS[sp]||sp.toUpperCase())} letters are held until stated chances match results.</p>`).join('')+(['nba','nfl'].includes(H.sport)&&list.some(r=>r.scout.validation?.kind==='research')?`<details><summary>About ${esc(SPORTS[H.sport])} grades</summary><p>Published letters rank the model’s current picks. Stakes are 0. See Record for stated chances and actual results.</p></details>`:'');
-    if(['soccer','tennis'].includes(H.sport)) {
-      const coverage=R.boards[H.sport]?.coverage;
-      if(coverage)$('hub-health').insertAdjacentHTML('beforeend',`<p class="h-history-note" role="status">${esc(SPORTS[H.sport])}: ${coverage.with_history} lines with verified player history${coverage.pending_history?` · ${coverage.pending_history} more await supporting game logs`:''}. Historical records are not forecast probabilities.</p>`);
-    }
+    /* ST-4 (sweep 2026-11-23): no soccer/tennis coverage status note on the member board (no status labels on member pages);
+       the counts stay in the board data (coverage) and the admin ops diagnostics */
     const games=H.view==='games';
     $('hub-board-section').classList.toggle('h-by-game',games);
     $('hub-board-section').querySelectorAll('[data-hub="view"]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===(games?'games':'list'))));

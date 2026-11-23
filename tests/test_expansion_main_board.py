@@ -125,7 +125,7 @@ def test_same_sport_tabs_player_cards_history_and_stats(ctx, env, expansion, siz
     assert p.locator('#hub-sports [data-id="soccer"]').get_attribute('aria-pressed') == 'true'
     assert 'Unsupported Player' not in p.locator('#hub-rows').inner_text()
     assert 'Verified Player' in p.locator('#hub-rows').inner_text()
-    assert '1 more await' in p.locator('#hub-health').inner_text()
+    assert 'await' not in p.locator('#hub-health').inner_text()          # ST-4 2026-11-23: no member status note
     p.locator('#hub-rows .h-player').first.click()
     p.wait_for_selector('#hub-detail .h-history-panel', timeout=20000)
     expect(p.locator('#hub-detail')).to_contain_text('Opponent 0', timeout=20000)
