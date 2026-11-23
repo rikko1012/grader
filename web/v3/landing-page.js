@@ -3,14 +3,16 @@
    - the fixed message for a failed sign-in code (/?signin_error=<code>), never text from the URL;
    - one-time reveals on the Inside panels (+ their text, 80 ms later, and the kills bars) and the record table;
    - count-up on two proof numbers (+46U and the decided count; the review score never ticks);
-   - the Slip Studio timeline: plays once at 35% on screen (cards fly into the slip, FLIP + WAAPI, transform/opacity only; on phones,
-     where the board column is hidden, the slip opens with leg 1 in and legs 2-4 drop in 1 s apart, 650 ms each, so "Building 2 of 4"
-     is on screen), holds "Slip ready", re-arms only after the stage has fully left the screen. Off screen the stage always shows
-     its final frame (a full-page capture or a no-data build never shows an empty slip); a hidden tab jumps it to the final frame;
+   - the Slip Studio timeline: plays once at 35% on screen (cards fly from the board into the slip, FLIP + WAAPI, transform/opacity
+     only; each flown card leaves a dashed "Added to slip" outline in its board box; on phones the board is a 2x2 strip of mini cards
+     above the slip and the same flight runs down into the slots), holds "Slip ready", re-arms only after the stage has fully left
+     the screen. Off screen the stage always shows its final frame (a full-page capture or a no-data build never shows an empty
+     slip); a hidden tab jumps it to the final frame;
    - the FAQ accordion (WAI-ARIA buttons, one open at a time, hidden="until-found" so find-in-page opens a panel);
    - the phone bar: after the hero button has left the screen, hidden over the Slip button, the pricing card, the final call to
      action and any focused element near the bottom; while it shows, body.dock-on hides the header's Try pill (one Try per screen)
-     and slides "Sign in" right by the pill's width (--pill-shift, a transform: no hole in the header, no layout shift).
+     and slides "Sign in" right by the pill's width (--pill-shift, a transform: no hole in the header, no layout shift). Its link is
+     in the tab order whenever the bar shows (a hidden bar is visibility:hidden, so never focusable).
    Motion runs only when html.motion is set (prefers-reduced-motion is not "reduce"). */
 (function () {
   'use strict';
@@ -74,9 +76,8 @@
   safe(function () {
     var st = D.getElementById('ss');
     if (!st || !MOTION || !st.animate) return;
-    var cards = $$('.ss-board .sc', st), slots = $$('.slot', st), pill = D.getElementById('ss-st');
-    var LEG = [300, 1300, 2300, 3300], READY = 4400, FLY = 650;
-    var LEG_M = [1000, 2000, 3000], READY_M = 3800, DROP_M = 650;           /* phones: no board column; leg 1 is in from the start */
+    var boxes = $$('.ss-board .sbx', st), slots = $$('.slot', st), pill = D.getElementById('ss-st');
+    var LEG = [300, 1300, 2300, 3300], READY = 4400, FLY = 650, DROP = 650;
     var timers = [], ghosts = [], state = 'idle', seen = false;           /* idle (final frame, armed) -> playing -> done -> idle off screen */
     function later(ms, f) { timers.push(setTimeout(f, ms)); }
     function clear() {
@@ -86,7 +87,7 @@
     function start() {
       clear();
       st.classList.add('run'); st.classList.remove('ready');
-      cards.forEach(function (c) { c.classList.remove('dim'); });
+      boxes.forEach(function (b) { b.classList.remove('gone'); });
       slots.forEach(function (s) { s.classList.remove('on'); });
       pill.textContent = 'Building 0 of 4';
       state = 'idle';
@@ -104,30 +105,32 @@
       s.classList.add('on');
       pill.textContent = 'Building ' + (i + 1) + ' of 4';
       var sc = $('.sc', s);
-      if (sc) sc.animate([{ transform: 'translateY(-16px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: DROP_M, easing: 'cubic-bezier(.2,.8,.2,1)' });
+      if (sc) sc.animate([{ transform: 'translateY(-16px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: DROP, easing: 'cubic-bezier(.2,.8,.2,1)' });
     }
     function fly(i) {
-      var c = cards[i], s = slots[i];
+      var bx = boxes[i], s = slots[i], c = bx && $('.sc', bx);
       if (!c || !s) return;
       if (!c.offsetParent) { drop(i); return; }
       var sr = st.getBoundingClientRect(), a = c.getBoundingClientRect(), b = s.getBoundingClientRect();
+      var mini = a.width < b.width * 0.8;                    /* phones: a mini card flies down and hands over to the full slot card */
       var g = c.cloneNode(true);
-      g.classList.add('ghost'); g.classList.remove('dim');
-      g.style.width = a.width + 'px';
+      g.classList.add('ghost'); if (mini) g.classList.add('mini');
+      g.style.width = a.width + 'px'; g.style.height = a.height + 'px';
       st.appendChild(g); ghosts.push(g);
-      c.classList.add('dim');
-      var x0 = a.left - sr.left, y0 = a.top - sr.top, x1 = b.left - sr.left, y1 = b.top - sr.top;
+      bx.classList.add('gone');
+      var x0 = a.left - sr.left, y0 = a.top - sr.top, x1 = b.left - sr.left, y1 = b.top - sr.top + (mini ? (b.height - a.height) / 2 : 0);
       var an = g.animate([
-        { transform: 'translate(' + x0 + 'px,' + y0 + 'px) rotate(0deg)' },
-        { transform: 'translate(' + (x0 + x1) / 2 + 'px,' + ((y0 + y1) / 2 - 12) + 'px) rotate(-2deg)' },
-        { transform: 'translate(' + x1 + 'px,' + y1 + 'px) rotate(0deg)' }
+        { transform: 'translate(' + x0 + 'px,' + y0 + 'px) rotate(0deg)', opacity: 1 },
+        { transform: 'translate(' + (x0 + x1) / 2 + 'px,' + ((y0 + y1) / 2 - 12) + 'px) rotate(-2deg)', opacity: 1, offset: 0.5 },
+        { transform: 'translate(' + x1 + 'px,' + y1 + 'px) rotate(0deg)', opacity: mini ? 0 : 1 }
       ], { duration: FLY, easing: 'cubic-bezier(.77,0,.175,1)', fill: 'forwards' });
-      an.onfinish = function () { land(i); if (g.parentNode) g.parentNode.removeChild(g); };
+      if (mini) { var tl = setTimeout(function () { land(i); }, FLY * 0.7); timers.push(tl); }
+      an.onfinish = function () { if (!mini) land(i); if (g.parentNode) g.parentNode.removeChild(g); };
     }
     function finish() {                                      /* the final frame: what a still page shows */
       clear();
       st.classList.remove('run', 'ready');
-      cards.forEach(function (c) { c.classList.remove('dim'); });
+      boxes.forEach(function (b) { b.classList.remove('gone'); });
       slots.forEach(function (s) { s.classList.remove('on'); });
       pill.textContent = 'Slip ready';
       state = 'done';
@@ -135,14 +138,8 @@
     function rearm() { finish(); state = 'idle'; }             /* the final frame on screen, ready to play on the next entry */
     function play() {
       start(); state = 'playing';
-      var phone = cards[0] && !cards[0].offsetParent;
-      if (phone) {
-        slots[0].classList.add('on'); pill.textContent = 'Building 1 of 4';
-        LEG_M.forEach(function (t, i) { later(t, function () { drop(i + 1); }); });
-      } else {
-        LEG.forEach(function (t, i) { later(t, function () { fly(i); }); });
-      }
-      later(phone ? READY_M : READY, function () {
+      LEG.forEach(function (t, i) { later(t, function () { fly(i); }); });
+      later(READY, function () {
         pill.textContent = 'Slip ready'; st.classList.add('ready'); state = 'done';
         if (!seen) rearm();                                 /* ended off screen: replay on the next entry */
       });
@@ -212,7 +209,7 @@
   safe(function () {
     var dock = D.getElementById('dock'), hero = D.getElementById('hero-cta');
     if (!dock || !hero || !IO) return;
-    var link = $('a', dock), past = false, over = {}, low = false;
+    var past = false, over = {}, low = false;
     var pill = $('.btn-nav'), si = $('.nav-cta .tl');
     function measure() {                                     /* how far "Sign in" slides to sit flush right while the pill is hidden */
       if (pill && si && !D.body.classList.contains('dock-on')) R.style.setProperty('--pill-shift', (pill.getBoundingClientRect().right - si.getBoundingClientRect().right) + 'px');
@@ -225,10 +222,9 @@
       if (dock.classList.contains('show') === show) return;
       dock.classList.toggle('show', show);
       D.body.classList.toggle('dock-on', show);
-      if (show) link.removeAttribute('tabindex'); else link.setAttribute('tabindex', '-1');
     }
     io([hero], { threshold: 0 }, function (e) { past = !e.isIntersecting && e.boundingClientRect.top < 0; set(); });
-    var cover = $$('.slip-copy .btn, #plan, #final');
+    var cover = $$('.ss-cta, #plan, #final');
     cover.forEach(function (el, i) { el.setAttribute('data-dock', i); });
     io(cover, { threshold: 0 }, function (e) { over[e.target.getAttribute('data-dock')] = e.isIntersecting; set(); });
     function focusCheck() {

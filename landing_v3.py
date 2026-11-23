@@ -12,18 +12,18 @@ from a body the server already keeps for its own public routes - never typed int
   chosen by a stated rule (frame_pick: one lettered market per player in the neutral rule order - markets both apps list first,
   then line gaps, moved lines, the soonest - with ANY letter, so the frame shows the grader saying no as well as yes and is never a
   list of the board's qualifying plays), each app's line, the pick, the model estimate and the grade. One row is highlighted and
-  shown first: the first two-app market whose model estimate clears its own entry's break-even (else any clearer); it prints its
-  break-even beside the estimate. A live board with fewer than FRAME_MIN rows or no clearer: the saved board (FALLBACK, dated),
-  through the same code, when that has a clearer;
+  shown first, chosen by the same neutral order only (critic round 3, access rule): the first two-app market, any letter, never
+  because it clears its break-even, and the board row prints no break-even. A live board with fewer than FRAME_MIN rows: the saved
+  board (FALLBACK, dated), through the same code;
 - the phone frame: the highlighted row's own card lines (match, player, side + line, the chance at the line on its app, the grade,
   the projection, the last 10 at this line, the break-even for the entry, the other app's line); a value the row lacks is left out,
   never shown as 0;
-- the line-gap panel: the first eligible row of the LIVE board (break-even clearers first, then rule order) whose two apps list
+- the line-gap panel: the first eligible row of the LIVE board in rule order (another player than the phone's first) whose two apps list
   different lines (opening lines when known), else no panel;
 - the CS2 map bars: one live-board player picked by a fixed rule (pool_subject), his HLTV kills per map (hltv_maps.for_player, the
   member player card's read and cache); no subject or any error drops the panel;
-- the Slip Studio stage's one real card: a frame row other than the phone's (B or better first, then the highest model estimate);
-  the other sports' cards are labelled examples whose values are a lock and "Members only" (no number in the source);
+- the Slip Studio stage's one real card: the first frame row in rule order other than the phone's (and the gap panel's when it
+  can); the other sports' cards are examples whose values are a lock (no number in the source);
 - the record table and count: the same shared answer /api/record serves (key and compute identical), per sport;
 - the reviews: the same shared answer /api/reviews serves (newest first page), member text escaped here, handles left off;
 - the frame's "Showing N of M" line: letter-graded CS2 markets on the live member board, printed only from MORE_MIN (a small
@@ -84,8 +84,8 @@ OWNER_UNITS = 46
 # The line under the big +46U is the rest of the post's first clause, so the number is never printed twice (critic round 2); the
 # "only been live 2 weeks" clause is left off (critic round 1: it read as a contradiction beside the multi-month record). Full post:
 # "+46U on Grader 4 mans in the past week, and Grader has only been live 2 weeks."
-OWNER_POST = "on Grader 4 mans in the past week."
-OWNER_POST_BY = "Trey on X, Nov 20, 2026. 4 mans are 4-pick slips."
+OWNER_POST = "on Grader 4 mans in the past week, and Grader has only been live 2 weeks."
+OWNER_POST_BY = "Trey on X, Nov 20, 2026"
 OWNER_STORY = "A member ran his first ever 6 man with Grader and cashed."
 OWNER_STORY_BY = "Shared by Prop Grader on X. One member, one night: a result, not a promise."
 # The Slip Studio stage's other sports: no public sample rows exist for them, so they are labelled examples (owner brief 6b said
@@ -324,10 +324,10 @@ def _rows(board, n=6):
 
 # The frame's rows (critic round 2 replaces round 1's filter): one lettered market per player, any letter, picked in the neutral rule
 # order with markets both apps list first (the hero promises PrizePicks AND Underdog), at most HERO_ROWS. Round 1 kept only rows that
-# clear their own break-even, which turned the free page into a list of the board's qualifying plays (owner access rule) and made a
-# wall of identical B badges. Now only ONE row is held to that bar: the highlight (the phone's row, shown first, tinted, its
-# break-even printed beside its estimate) = the first two-app market that clears its own entry's break-even, else the first clearer.
-# A live board with fewer than FRAME_MIN rows or no clearer shows the saved board (dated) when that has one.
+# clear their own break-even, which turned the free page into a list of the board's qualifying plays (owner access rule). Round 3:
+# the highlight (the phone's row, shown first, tinted) is no longer chosen for clearing its break-even either - it is simply the
+# first two-app market in that order (else the first row), any letter, and the board row prints no break-even (the phone's Why list
+# keeps it, beside the projection and the last 10). A live board with fewer than FRAME_MIN rows shows the saved board (dated).
 TIER = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4}
 FRAME_MIN = 2
 MORE_MIN = 25                      # "Showing 4 of N graded props" only from this many (a quiet slate never reads as an empty product)
@@ -349,9 +349,8 @@ def _apps(rs):
 def frame_pick(board, n=HERO_ROWS):
     """([(rows, gap, moved)], highlighted) for the browser frame by the rule above; the highlighted row (if any) first."""
     gs = sorted(_groups(board), key=lambda g: 0 if len(_apps(g[2])) > 1 else 1)        # stable: rule order inside each half
-    hl = next((g for g in gs if len(_apps(g[2])) > 1 and _clears(g[2])), None) or next((g for g in gs if _clears(g[2])), None)
-    seen, pick = set(), []
-    for g in ([hl] if hl else []) + [g for g in gs if g is not hl]:
+    seen, pick = set(), []                           # the highlight = gs[0]: the first two-app market (else the first row)
+    for g in gs:
         _pri, _lock, rs, gap, moved = g
         who = (rs[0].get("player") or {}).get("key")
         if who in seen:
@@ -360,7 +359,7 @@ def frame_pick(board, n=HERO_ROWS):
         pick.append((rs, gap, moved))
         if len(pick) == n:
             break
-    return pick, hl is not None
+    return pick, bool(pick)
 
 
 def _l10(r):
@@ -407,19 +406,17 @@ def _meter(p):
 
 def frame_rows(shown, hl=False):
     """The browser frame's rows (a picture inside an aria-hidden frame): player + prop | each app's line | pick | model estimate +
-    meter | grade. Lines print exactly as the member board prints them. hl: the first row is the highlighted one (tinted, its
-    break-even beside its estimate)."""
+    meter | grade. Lines print exactly as the member board prints them. hl: the first row is the highlighted one (tinted; the
+    board row prints no break-even)."""
     out = []
     for i, (rs, _gap, _moved) in enumerate(shown):
         lead = rs[0]
-        pl, mk, sc, par = lead.get("player") or {}, lead.get("market") or {}, lead.get("scout") or {}, lead.get("parity") or {}
+        pl, mk, sc = lead.get("player") or {}, lead.get("market") or {}, lead.get("scout") or {}
         p = _pct(sc.get("p_side"))
         lines = "".join(f'<span>{_tag(r)} {esc(_num((r.get("offer") or {}).get("line")))}</span>' for r in _by_app(rs))
         g = sc.get("grade") or ""
-        on = bool(hl and i == 0 and _pct(par.get("be")))
-        est = (f'<span class="b-p b-pe"><span><b>{esc(p)}%</b>{_meter(sc.get("p_side"))}</span>'
-               f'<small>vs {esc(_pct(par.get("be")))}% break-even</small></span>'
-               if on else f'<span class="b-p"><b>{esc(p)}%</b>{_meter(sc.get("p_side"))}</span>')
+        on = bool(hl and i == 0)
+        est = f'<span class="b-p"><b>{esc(p)}%</b>{_meter(sc.get("p_side"))}</span>'
         out.append(f'<div class="br{" hl" if on else ""}"><span class="b-who"><b>{esc(pl.get("name"))}</b>'
                    f'<small>{esc(mk.get("stat_label"))} · {esc(mk.get("period_label"))}</small></span>'
                    f'<span class="b-ln">{lines}</span><span class="b-pk">{_side(lead)}</span>'
@@ -481,11 +478,10 @@ def phone(shown):
 
 
 def gap_panel(pick, skip=None):
-    """The 'apps disagree' panel from the first row whose two apps list different lines, rows that clear their own break-even
-    (_clears) first, then rule order ({} = no panel). skip = the phone's player key: another player's gap leads when there is one,
-    so the page never repeats one play in every section (critic round 2)."""
-    for rs, gap, _m in sorted(pick, key=lambda x: (1 if skip and (x[0][0].get("player") or {}).get("key") == skip else 0,
-                                                   0 if _clears(x[0]) else 1)):
+    """The 'apps disagree' panel from the first row in rule order whose two apps list different lines ({} = no panel; never
+    chosen for clearing its break-even, critic round 3). skip = the phone's player key: another player's gap leads when there is
+    one, so the page never repeats one play in every section (critic round 2)."""
+    for rs, gap, _m in sorted(pick, key=lambda x: 1 if skip and (x[0][0].get("player") or {}).get("key") == skip else 0):
         plats = {(r.get("offer") or {}).get("platform") for r in rs}
         if not gap or len(plats) < 2:
             continue
@@ -504,20 +500,21 @@ def gap_panel(pick, skip=None):
         sr = (f"Example: {pl.get('name')}, {mk.get('stat_label')} {mk.get('period_label')}. "
               + ", ".join(f'{(r.get("offer") or {}).get("platform_label")} line {_num((r.get("offer") or {}).get("line"))}' for r in two)
               + f". Line gap {d}. {pick_t}: {_pct(sc.get('p_side'))}% model estimate.")
-        return {"GAP_WHO": esc(f"{pl.get('name')} · {mk.get('stat_label')} · {mk.get('period_label')}"), "GAP_TILES": "".join(tiles),
+        return {"GAP_KEY": pl.get("key"), "GAP_WHO": esc(f"{pl.get('name')} · {mk.get('stat_label')} · {mk.get('period_label')}"), "GAP_TILES": "".join(tiles),
                 "GAP_D": d, "GAP_PICK": esc(pick_t), "GAP_P": esc(_pct(sc.get("p_side"))), "GAP_METER": _meter(sc.get("p_side")),
                 "GAP_SR": esc(sr)}
     return {}
 
 
-def slip_real(pick):
-    """The Slip Studio stage's real card: a lettered frame row other than the phone's (the first row) when there is one - so the page
-    never repeats one play everywhere - graded B or better first, then the highest model estimate (frame order on a tie)."""
+def slip_real(pick, skip=None):
+    """The Slip Studio stage's real card: the first lettered frame row in rule order other than the phone's (the first row) and,
+    when another exists, other than skip (the gap panel's player) - so the page never repeats one play everywhere. Never chosen by
+    grade or estimate (critic round 3: no merit-picked play on the free page)."""
     cands = [rs[0] for rs, _g, _m in (pick[1:] or pick)
              if (rs[0].get("scout") or {}).get("grade") and (rs[0].get("scout") or {}).get("p_side") is not None]
     if not cands:
         return {}
-    best = min(cands, key=lambda r: (0 if (r.get("scout") or {}).get("grade") in TIER else 1, -float((r.get("scout") or {})["p_side"])))
+    best = next((r for r in cands if skip is None or (r.get("player") or {}).get("key") != skip), cands[0])
     pl, mk, sc, of = (best.get(k) or {} for k in ("player", "market", "scout", "offer"))
     return {"SS_WHO": esc(pl.get("name")), "SS_PROP": esc(f"{_side(best)} {_num(of.get('line'))} {mk.get('stat_label')}"),
             "SS_PER": esc(mk.get("period_label") or ""), "SS_P": esc(_pct(sc.get("p_side"))), "SS_G": esc(sc.get("grade")),
@@ -535,18 +532,22 @@ LOCK = ('<svg class="lk" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7
 
 
 def slip_cards(real):
-    """(board cards, slip slots): the real CS2 card first, then the labelled examples (the role on the name line, a small 'Example'
-    label beside it that never truncates). An example's value slot is a lock and "Members only" (never a value in the page source)
-    and it carries no meter. Each slot holds a copy of its card (the still page shows the final frame: every slot filled)."""
+    """(board cards, slip slots): the real CS2 card first (its value labelled 'model estimate'), then the examples (the role on the
+    name line: 'NBA guard', 'LoL mid', 'Tennis'; the stage's EXAMPLE tag and caption say what they are, critic round 3 cut the
+    per-card chips). An example's value slot is a lock only (never a value in the page source) and it carries no meter. Each board
+    card sits in a box whose dashed 'Added to slip' outline shows once the card has flown, so the end frame never repeats the four
+    cards side by side; each slot holds a copy of its card (the still page shows the final frame: every slot filled)."""
     cards = [f'<span class="si">{ICONS["cs2"]}</span><span class="sw"><b>{real["SS_WHO"]}</b>'
              f'<small>{real["SS_PROP"]}{" · " + real["SS_PER"] if real["SS_PER"] else ""}</small></span>'
-             f'<span class="sv"><b>{real["SS_P"]}%</b><i class="gb {real["SS_GCLS"]}">{real["SS_G"]}</i></span>']
+             f'<span class="sv"><span class="sp"><span><b>{real["SS_P"]}%</b><i class="gb {real["SS_GCLS"]}">{real["SS_G"]}</i></span>'
+             f'<small>model estimate</small></span></span>']
     for sp, who, prop, per in PLACEHOLDERS:
-        cards.append(f'<span class="si">{ICONS[sp]}</span><span class="sw"><b>{who}<em class="phl">Example</em></b>'
+        cards.append(f'<span class="si">{ICONS[sp]}</span><span class="sw"><b>{who}</b>'
                      f'<small>{prop}{" · " + per if per else ""}</small></span>'
-                     f'<span class="sv mo">{LOCK}<span>Members only</span></span>')
-    cls = lambda i: "sc" if i == 0 else "sc ph"          # noqa: E731 - a placeholder's name line never truncates (its label shows whole)
-    board = "".join(f'<div class="{cls(i)}" data-i="{i}">{c}</div>' for i, c in enumerate(cards))
+                     f'<span class="sv mo">{LOCK}</span>')
+    cls = lambda i: "sc" if i == 0 else "sc ph"          # noqa: E731
+    added = '<span class="sad"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>Added to slip</span>'
+    board = "".join(f'<div class="sbx" data-i="{i}"><div class="{cls(i)}">{c}</div>{added}</div>' for i, c in enumerate(cards))
     slots = "".join(f'<div class="slot" data-i="{i}"><div class="{cls(i)}">{c}</div></div>' for i, c in enumerate(cards))
     return board, slots
 
@@ -756,7 +757,7 @@ def _sentences(s):
     return [x.strip() for x in re.split(r"(?<=[.!?])\s+", str(s or "").strip()) if x.strip()]
 
 
-CUT_MIN_WORDS = 12                 # a quote with a sentence left out needs at least this many words left (no one-line stubs)
+# critic round 3: a review with a sentence left out is never featured (a cut stub looked edited under "in their words")
 
 
 def curly(s):
@@ -768,10 +769,10 @@ def curly(s):
 def featured(doc):
     """[(review, quote, cut, old)] by the stated rule: reviews that talk about using the product. A review with photos (slips) or
     shouting is not featured; a sentence with money / result / betting / guarantee talk is never quoted (cut = a sentence was left
-    out). Order: complete reviews first, then the most product talk, then the longest; a cut review needs CUT_MIN_WORDS words left
-    and shows its ellipsis plus a 'Full review' link to /reviews. Different dates are preferred when the reviews have them. A review
+    out, and such a review is left on /reviews, never featured). Order: the most product talk, then the longest. Fewer than
+    FEATURE_N complete reviews: the row shows fewer cards (2-up / 1-up). Different dates are preferred when the reviews have them. A review
     that names the site's old brand (_OLD_BRAND) is never featured (it stays on /reviews). old is always False (kept for callers)."""
-    out, short = [], []
+    out = []
     for r in (doc or {}).get("reviews") or []:
         text = f'{r.get("title") or ""} {r.get("body") or ""}'
         letters = [c for c in text if c.isalpha()]
@@ -785,7 +786,9 @@ def featured(doc):
         hits = len(_PRODUCT.findall(quote))
         if not hits or len(quote.split()) < 5 or _OLD_BRAND.search(f'{text} {r.get("name") or ""}'):
             continue
-        (short if cut and len(quote.split()) < CUT_MIN_WORDS else out).append((cut, -hits, -len(quote), r, quote))
+        if cut:
+            continue
+        out.append((cut, -hits, -len(quote), r, quote))
     out.sort(key=lambda x: x[:3])
     first, rest, days = [], [], set()
     for x in out:                                        # one review per date first (when the dates differ), then the rest in order
@@ -793,9 +796,7 @@ def featured(doc):
         (rest if d in days else first).append(x)
         days.add(d)
     pick = sorted((first + rest)[:FEATURE_N], key=lambda x: x[:3]) if len(first) > 1 else out[:FEATURE_N]
-    short.sort(key=lambda x: x[:3])
-    pick += short[:FEATURE_N - len(pick)]                # the row needs 3 (critic round 2): a cut review with 5-11 words left fills
-    return [(r, q, cut, False) for cut, _h, _n, r, q in pick]   # it, its ellipsis and "Full review" link marking the cut
+    return [(r, q, cut, False) for cut, _h, _n, r, q in pick]
 
 
 def wall(doc):
@@ -868,17 +869,18 @@ def build(srv, join_url, fetch=True):
     live_rows, _at, live_n = _rows(live, n=10 ** 6) if live else ([], None, 0)
     board, saved = live, False
     pick, hl = frame_pick(live) if live else ([], False)
-    if len(pick) < FRAME_MIN or not hl:               # too few live rows or no clearer: the saved board (dated), through the same code
+    if len(pick) < FRAME_MIN:                         # too few live rows: the saved board (dated), through the same code
         fb = fallback_board()
         fpick, fhl = frame_pick(fb) if fb else ([], False)
-        if (fhl and len(fpick) >= FRAME_MIN) or (fpick and not pick):
+        if len(fpick) >= FRAME_MIN or (fpick and not pick):
             board, pick, hl, saved = fb, fpick, fhl, True
     rows, total, asof = ledger(inp["record"])
     head, cards, nrv, avg = wall(inp["reviews"])
     shown = pick                                      # frame_pick puts the highlighted (phone) row first
     gap_src = live_rows or (_rows(board, n=10 ** 6)[0] if pick else [])     # the gap panel and map bars read the live board first
     skip = (shown[0][0][0].get("player") or {}).get("key") if shown else None
-    ph, gp, real = phone(shown), gap_panel(gap_src, skip), slip_real(pick)
+    ph, gp = phone(shown), gap_panel(gap_src, skip)
+    real = slip_real(pick, gp.pop("GAP_KEY", None))
     cards_ss = slip_cards(real) if real else ("", "")
     pm = pool_module(live, fetch) if live_rows else {}  # live board only: the saved board's line is not current
     base = public_base()
@@ -908,6 +910,7 @@ def build(srv, join_url, fetch=True):
         "FRAME_CAP": esc(f"Example rows from the public sample board{', ' + bdate if bdate else ''}. "
                          "A model estimate is a chance, not a promise."),
         **ph, **gp, **pm,
+        "POOL_ROW": "" if pm else " solo",
         "SS_CARDS": cards_ss[0], "SS_SLOTS": cards_ss[1], "SS_WHO": real.get("SS_WHO", ""),
         "LEDGER_ROWS": rows, "LEDGER_ASOF": esc(asof),
         "LEDGER_TOTAL": tot_s, "LEDGER_N": str(total), "LEDGER_W": str(len(tot_s)),
