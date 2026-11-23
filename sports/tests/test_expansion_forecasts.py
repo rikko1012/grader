@@ -217,3 +217,17 @@ def test_st2_carry_never_evicts_a_current_entry_and_fills_soonest_first():
     got = model.carry_off_board(prev, cur, {'onb'}, NOW, limit=limit)
     assert got == {'soon': prev['soon']}
     assert set(model.carry_off_board(prev, cur, {'onb'}, NOW)) == {'soon', 'late'}
+
+
+def test_st2_a_moved_line_is_superseded_not_carried(tmp_path, monkeypatch):
+    monkeypatch.setenv('SCOUT_EXPANSION_DATA_DIR', str(tmp_path))
+    offer, facts = fixture()
+    live = {'offers': [offer]}
+    monkeypatch.setattr(boards, 'board', lambda req: (200, live))
+    monkeypatch.setattr(research, 'saved', lambda sport: {'players': {research.key(offer): facts}})
+    assert model.publish('soccer', NOW)['published'] == 1
+    live['offers'] = [dict(offer, revision='moved', line=3.5)]
+    out = model.publish('soccer', '2026-11-17T23:03:00Z')
+    assert 'carried_off_board' not in out['pending']
+    saved = json.loads((tmp_path / 'soccer' / 'forecasts.json').read_text(encoding='utf-8'))['forecasts']
+    assert all(v['offer_revision'] == 'moved' for v in saved.values())

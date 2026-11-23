@@ -636,7 +636,8 @@ def publish(sport, now=None, budget_s=8):
     # never given its old letter back), not started, into the bytes fit_publication left (never evicting a current entry),
     # soonest start first. attach() still serves only keys of offers on the board it answers for; the key encodes the
     # offer revision, so a moved line never matches.
-    off = carry_off_board(previous, current, eligible, now)
+    off = carry_off_board(previous, current, eligible, now,
+                          live_offers={(o.get('platform'), str(o.get('offer_id'))) for o in board['offers']})
     if off:
         counts['carried_off_board'] = len(off)
         current = {**current, **off}
@@ -652,10 +653,11 @@ def _entry_bytes(k, v):
     return len(json.dumps(v, separators=(',', ':'))) + len(k) + 6
 
 
-def carry_off_board(previous, current, on_board, now, limit=PUBLICATION_BYTES):
+def carry_off_board(previous, current, on_board, now, limit=PUBLICATION_BYTES, live_offers=()):
     """{key: entry} of the previous publication to keep for offers not on the board now: not in `current`, not on the board,
     a saved (non-archived) forecast whose start is after `now`, added soonest start first while the file stays under `limit`
-    (the same byte count as fit_publication). `current` is never touched."""
+    (the same byte count as fit_publication). An offer still on the board under another revision (live_offers: its
+    (platform, offer_id)) is superseded, never carried. `current` is never touched."""
     try:
         t_now = parse_utc(now)
     except (TypeError, ValueError):
@@ -664,6 +666,8 @@ def carry_off_board(previous, current, on_board, now, limit=PUBLICATION_BYTES):
     for k, v in (previous or {}).items():
         if k in current or k in on_board or not isinstance(v, dict) or 'archived' in v:
             continue
+        if (v.get('platform'), str(v.get('offer_id'))) in live_offers:
+            continue                                    # the same offer at a new revision (moved line): superseded
         try:
             st = parse_utc(v.get('start'))
             if st > t_now:
