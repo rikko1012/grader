@@ -487,7 +487,7 @@ def grade_seed(board):
 # ------------------------------------------------------------------------------------------------------------- the map module
 
 # "Pick two maps. See the pace." (the CS2 band): one real board player's HLTV kills per map, picked by a fixed rule (pool_subject):
-#   candidates = the LIVE board's letter-graded standard CS2 Kills Maps 1-2 props that lock after the board's time (never the saved
+#   candidates = the LIVE board's letter-graded standard CS2 Kills Maps 1-2 props that lock after the board's time and after now (never the saved
 #   board: its line is not current), one per player per match, the lettered Underdog line first (the terminal's order);
 #   order = soonest lock, then the player's name (case-insensitive), then the event id;
 #   the subject = the first candidate whose HLTV per-map totals (hltv_maps.for_player: exact HLTV id via hltv._player_ids, the
@@ -496,7 +496,7 @@ def grade_seed(board):
 # HLTV only (owner 2026-11-20), never BO3.gg; a map missing a value is left out, never shown as 0. The current pool is
 # hltv_maps.pool_for (the match's HLTV veto pool, else the last 7 days of HLTV vetoes, else Active Duty), as on the player card.
 # Reads: the background builder (fetch=True) may ask hltv_maps.for_player for at most POOL_TRIES uncached players per build (its own
-# single flight, bounded read slots, failures kept FAIL_TTL); a visitor's request (fetch=False) only peeks at cached answers. No
+# single flight, bounded read slots, failures kept FAIL_TTL), and stops reading at the first failed read; a visitor's request (fetch=False) only peeks at cached answers. No
 # subject, a read older than POOL_MAX_AGE_H, or any error: the whole module is left out (the page still serves).
 POOL_MIN_MAPS = 4
 POOL_MIN_N = 8
@@ -512,6 +512,7 @@ def _pool_candidates(board):
     """[(lock, record)] by the rule above (lettered Kills Maps 1-2, standard, ok, lock after the board's time), one per player per match."""
     recs = (board or {}).get("records") or []
     at = _ts((board or {}).get("board_at"))
+    now = datetime.now(timezone.utc)
     best = {}
     for r in recs:
         sc, mk, ev, pl, of = r.get("scout") or {}, r.get("market") or {}, r.get("event") or {}, r.get("player") or {}, r.get("offer") or {}
@@ -521,7 +522,7 @@ def _pool_candidates(board):
                 or not isinstance(line, (int, float)) or line <= 0):
             continue
         lock = _ts(ev.get("lock_utc") or ev.get("start_utc"))
-        if lock is None or (at and lock <= at):
+        if lock is None or (at and lock <= at) or lock <= now:      # a kept (older) board never shows a match that has locked
             continue
         k = (ev.get("id"), pl.get("key") or pl.get("name"))
         rank = 0 if of.get("platform") == "underdog" else 1
@@ -586,6 +587,8 @@ def pool_subject(board, fetch):
                 continue
             tries += 1
             doc = hltv_maps.for_player(nick, team)
+            if not isinstance(doc, dict) or doc.get("state") == "unavailable":
+                tries = POOL_TRIES                       # HLTV is failing: no more reads this build (the rest of the page is not held up)
         if not isinstance(doc, dict) or doc.get("state") != "ok" or not doc.get("hltv_id") or doc.get("source") != "HLTV":
             continue
         read = _read_at(key)

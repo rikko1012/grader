@@ -614,8 +614,13 @@ def test_map_module_is_omitted_cleanly(srv, monkeypatch, maps_loader, case):
     import hltv
     import hltv_maps
     b = pm_board()
+    calls = 0
     if case == "error":
-        monkeypatch.setattr(hltv_maps, "LOADER", lambda *a: (_ for _ in ()).throw(RuntimeError("db down")))
+        def down(*a):
+            nonlocal calls
+            calls += 1
+            raise RuntimeError("db down")
+        monkeypatch.setattr(hltv_maps, "LOADER", down)
     elif case == "none":
         maps_loader.data.clear()
     elif case == "no_letter":
@@ -637,6 +642,8 @@ def test_map_module_is_omitted_cleanly(srv, monkeypatch, maps_loader, case):
             hltv._META[k]["as_of"] = time.time() - (landing_v3.POOL_MAX_AGE_H * 3600 + 60)
         page = landing_v3.build(srv, JOIN, fetch=True)
     s = page.decode("utf-8")
+    if case == "error":
+        assert landing_v3.POOL_TRIES > 1 and calls == 1                  # a failed HLTV read stops this build's reads
     assert pool_html(page) is None and '<div class="pool"' not in s and "Pick two maps" not in text(page) and not re.search(r"\{\{[A-Z_0-9]+\}\}", s)
     assert 'class="wrap cs2-in no-pool"' in s and "Built for CS2, not bolted on." in s and 'id="terminal"' in s
 
@@ -677,3 +684,28 @@ def test_map_module_survives_an_idle_rebuild_after_the_hltv_cache_lapses(srv, mo
     n = len(maps_loader.calls)
     hltv._CACHE.clear()                                                  # hltv's 15-min cache lapsed while nobody visited
     assert pool_html(build(srv)) == a and len(maps_loader.calls) == n    # the request path keeps the subject, still no read
+
+
+def test_map_module_pool_reads_the_rows_own_match_id(srv, monkeypatch, maps_loader):
+    import hltv_maps
+    b = pm_board()
+    for r in b["records"]:
+        if r["player"]["name"] == "Mover":
+            r["offer"]["offer_id"] = f"id-{r['offer']['platform']}"
+    seen = []
+    monkeypatch.setattr(hltv_maps, "pool_for", lambda mid=None: seen.append(mid) or (list(hltv_maps.ACTIVE_DUTY), "match"))
+    seed(srv, monkeypatch, b)
+    monkeypatch.setitem(workspace_api._SNAP, "index", {("underdog", "id-underdog"): {"match_id": "2400644", "nick": "Mover"}})
+    assert pool_html(landing_v3.build(srv, JOIN, fetch=True)) is not None
+    assert seen[-1] == "2400644"                                         # the board row's own match: veto-1's pool for that match
+
+
+def test_map_module_never_picks_a_match_that_has_locked(srv, monkeypatch, maps_loader):
+    b = pm_board()
+    old = datetime.now(timezone.utc) - timedelta(hours=6)                # a kept board from before the feeds failed
+    b["board_at"] = iso(old)
+    for r in b["records"]:
+        if r["player"]["name"] in ("Early", "Mover", "Zeta"):
+            r["event"]["lock_utc"] = r["event"]["start_utc"] = iso(old + timedelta(hours=1))
+    seed(srv, monkeypatch, b)
+    assert pool_html(landing_v3.build(srv, JOIN, fetch=True)) is None and maps_loader.calls == []
