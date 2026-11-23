@@ -168,6 +168,7 @@ def test_4_admin_numeric_parameters_never_crash(admin, tmp_path):
     assert b["total"] == 20 and len(b["snapshots"]) == 20
     b = body(get(f"/admin/comparisons.json?token={TOK}&last=3"))
     assert [x["i"] for x in b["snapshots"]] == [17, 18, 19] and b["total"] == 20
+    assert {"written", "skipped_low_disk", "seeded", "disk_floor_mb"} <= set(b["stats"])      # SO-2 counters (admin only)
     b = body(get(f"/admin/comparisons.json?token={TOK}&last=-4"))
     assert [x["i"] for x in b["snapshots"]] == [19]                        # clamped to at least one, never lines[4:]
     lim = {}

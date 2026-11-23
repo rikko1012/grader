@@ -5381,6 +5381,7 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     pass
                 return self.send(200, {"version": comparison.VERSION, "total": total, "sources": comparison.SOURCES,
+                                       "stats": dict(comparison.STATS, disk_floor_mb=comparison.DISK_FLOOR_MB),
                                        "snapshots": [json.loads(x) for x in tail if x.strip()]})
             if u.path == "/admin/slip_batch_results.json" and self.authed(q.get("token")):
                 new = slip_batches.settle_all(slip_batches.leg_result_from_picks(picklog.settlement_rows()))
