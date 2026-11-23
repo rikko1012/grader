@@ -5057,6 +5057,11 @@ class Handler(BaseHTTPRequestHandler):
                 return                                                              # the unknown-route answer below
             if u.path == "/alerts/unsubscribe":
                 return self.send(*unsubscribe_page(q.get("m"), q.get("t")))
+            if u.path.startswith("/admin/storage/"):     # storage-1123 zero-loss tools (storage_ops.py): admin token or 403,
+                import storage_ops                       # checked before any lock or read; bounded, single-flight reads
+                if not self.authed(q.get("token")):
+                    return self.send(403, {"error": "forbidden"})
+                return storage_ops.handle_get(self, u.path, q)
             if u.path == "/health":
                 ws_ = sys.modules.get("workspace_sports")      # bandwidth 2026-11-13: private-network sports reads (never imported here)
                 return self.send(200, {**_HEALTH_SNAPSHOT.read(_health_diagnostics), "ok": True,
@@ -6652,6 +6657,19 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(413, {"error": "request too large"})
             form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode("utf-8", "replace")).items()}
             return self.send(*unsubscribe_page(form.get("m"), form.get("t"), confirm=True))
+        if u.path == "/admin/storage/comparison_trim":   # storage-1123 E3: X-Admin-Token header only, checked before the body
+            import storage_ops                           # is read; dry run unless the JSON body says "dry_run": false
+            if not self.authed(None):
+                self.close_connection = True
+                return self.send(403, {"error": "forbidden"})
+            if n > 4096:
+                self.close_connection = True
+                return self.send(413, {"error": "request too large"})
+            try:
+                body = json.loads(self.rfile.read(n) or b"null")
+            except ValueError:
+                return self.send(400, {"error": "JSON body required"})
+            return self.send(*storage_ops.trim_comparison(body))
         # 2026-10-13 audit: the body was read before any check, as long as the client said (a 10 GB Content-Length was
         # read into memory). Every body here is small: over POST_MAX it is refused unread, members-only before reading.
         # Saved lineup batches contain up to twelve slips. All other routes keep
@@ -6884,6 +6902,10 @@ if __name__ == "__main__":
         traceback.print_exc()
     try:                                              # ec-1: when this artifact first went live (the record maps forecasts
         esports_cal.mark_live(DATA_DIR)               # logged after it at the calibrated chance; earlier ones stay as logged)
+    except Exception:
+        traceback.print_exc()
+    try:                                              # storage-1123 rot-1: the comparison log rotates into verified gzip
+        __import__("storage_ops").start()             # segments on /data (its own thread; never a request; nothing deleted)
     except Exception:
         traceback.print_exc()
     try:                                              # extra book providers' one poller (no-op with every SCOUT_BOOK_* off)
