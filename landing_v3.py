@@ -1,6 +1,6 @@
 """The v3 signed-out landing page (Prop Grader, owner brief + DESIGN_RULES.md, Nov 23 2026): web/v3/landing.html filled server-side
 with real data. Hero = a browser frame (the member board) + a phone frame (one prop card), then proof strip, how it works, Inside rows,
-Slip Studio stage, why table, public record, members, pricing, FAQ, final call to action.
+Slip Studio stage, public record, members, pricing, FAQ, final call to action (critic round 1 removed the why table, D16).
 
 Served instead of web/landing.html + the v3 overlay when v3 is on (server.py, the two landing send sites). web/landing.html is
 untouched: flag-off visitors keep its exact bytes (tests/test_ui_v3_gate.py).
@@ -8,20 +8,22 @@ untouched: flag-off visitors keep its exact bytes (tests/test_ui_v3_gate.py).
 The page is VIEW-ONLY (owner access rule: visitors get no usable product for free). Everything product-shaped is a static picture of
 the member app, tagged EXAMPLE: no row that opens, no app toggle, no slider, no buildable slip, no calculator. Every number on it comes
 from a body the server already keeps for its own public routes - never typed into the template:
-- the browser frame: the top HERO_ROWS graded rows of the CS2 board snapshot members read (workspace_api.snapshot, the shared 5 s
-  board), chosen by a stated rule (_rows: line gaps between apps first, then moved lines, then the soonest), each app's line, the
-  pick, the model estimate and the grade. No live row: the saved board (FALLBACK), through the same code;
-- the frame shows those rows highest model estimate first (by_estimate); the phone frame: the first shown row's own card lines (match, player, side + line + app, the chance at exactly the line, the
-  grade, the projection, the last 10 at this line, the break-even for the entry, the other app's line); a value the row lacks is
-  left out, never shown as 0;
-- the line-gap panel: the first eligible row (rule order, the whole board) whose two apps list different lines (opening lines when
-  known), else no panel;
+- the browser frame: up to HERO_ROWS rows of the CS2 board snapshot members read (workspace_api.snapshot, the shared 5 s board),
+  chosen by a stated rule (frame_pick: markets graded B or better whose model estimate clears their own entry's break-even, highest
+  grade then highest estimate, never padded), each app's line, the pick, the model estimate and the grade. Fewer than FRAME_MIN
+  live qualifiers: the saved board (FALLBACK, dated), through the same code;
+- the phone frame: the first shown row's own card lines (match, player, side + line, the chance at the line on its app, the grade,
+  the projection, the last 10 at this line, the break-even for the entry, the other app's line); a value the row lacks is left out,
+  never shown as 0; How it works draws three tiny view-only fragments from the same row;
+- the line-gap panel: the first eligible row of the LIVE board (break-even clearers first, then rule order) whose two apps list
+  different lines (opening lines when known), else no panel;
 - the CS2 map bars: one live-board player picked by a fixed rule (pool_subject), his HLTV kills per map (hltv_maps.for_player, the
   member player card's read and cache); no subject or any error drops the panel;
 - the Slip Studio stage's one real card: the frame row with the highest model estimate (a real, public, graded CS2 row); the other
   sports' cards are labelled placeholders whose values are glyphs under a blur (no digits behind it);
 - the record table and count: the same shared answer /api/record serves (key and compute identical), per sport;
-- the reviews: the same shared answer /api/reviews serves (newest first page), member text escaped here, handles left off.
+- the reviews: the same shared answer /api/reviews serves (newest first page), member text escaped here, handles left off;
+- the final call to action's count: letter-graded CS2 markets on the live board (no line without a live board).
 
 Capacity (700 visitors at once): the request path only returns the last built bytes object (send_shared keys its ETag + gzip on
 that object's identity). One builder at a time rebuilds it at most every REBUILD_S seconds in a background thread, from cached
@@ -75,7 +77,10 @@ PRICE_W = "$9.99"
 # attribution (owner brief Nov 23: "+46U on Grader 4 mans in the past week ..." - Trey on X, Nov 20, 2026 - and the member 6-man
 # story). Nothing else may be typed in (tests/test_landing_v3.py checks the page's other numbers come from data).
 OWNER_UNITS = 46
-OWNER_POST = "on Grader 4 mans in the past week, and Grader has only been live 2 weeks."
+# Shown in quotation marks as one verbatim fragment of the post, the omitted rest marked with an ellipsis (critic round 1: the
+# "only been live 2 weeks" clause read as a contradiction beside the multi-month record). Full post: "+46U on Grader 4 mans in the
+# past week, and Grader has only been live 2 weeks."
+OWNER_POST = "+46U on Grader 4 mans in the past week"
 OWNER_POST_BY = "Trey on X, Nov 20, 2026"
 OWNER_STORY = "A member ran his first ever 6 man with Grader and cashed."
 OWNER_STORY_BY = "Shared by Prop Grader on X. One member, one night: a result, not a promise."
@@ -266,10 +271,10 @@ def open_only(board, now=None):
     return dict(board, records=keep)
 
 
-def _rows(board, n=6):
-    """Terminal rows by the stated rule: graded standard CS2 props with a lock after the board's own time, one row per
-    player/stat/maps market (every app's line on it). Line gaps and moved lines first, then the soonest. Returns (rows, board time,
-    how many letter-graded markets the board holds in all)."""
+def _groups(board):
+    """Every eligible market by the stated rule: graded standard CS2 props with a lock after the board's own time, one group per
+    player/stat/maps market (every app's line on it), the lettered line first. [(priority, lock, rows, gap, moved)] in rule order:
+    line gaps, then moved lines, then the soonest."""
     recs = (board or {}).get("records") or []
     at = _ts((board or {}).get("board_at"))
     groups = {}
@@ -293,6 +298,13 @@ def _rows(board, n=6):
         lock = _ts((rs[0].get("event") or {}).get("lock_utc") or (rs[0].get("event") or {}).get("start_utc"))
         out.append((0 if gap else 1 if moved else 2, lock, rs, gap, moved))
     out.sort(key=lambda x: (x[0], x[1]))
+    return out
+
+
+def _rows(board, n=6):
+    """Terminal rows by the stated rule (_groups), one per player. Returns (rows, board time, how many letter-graded markets the
+    board holds in all)."""
+    out = _groups(board)
     seen, pick = set(), []
     for pri, lock, rs, gap, moved in out:
         who = (rs[0].get("player") or {}).get("key")
@@ -302,7 +314,41 @@ def _rows(board, n=6):
         pick.append((rs, gap, moved))
         if len(pick) == n:
             break
-    return pick, at, len(out)
+    return pick, _ts((board or {}).get("board_at")), len(out)
+
+
+# The frame's rows (critic round 1: the showcase pick must clear its own break-even): a market qualifies when its lettered lead is
+# graded B or better (the cyan tiers) AND its model estimate is above the break-even of that row's own entry (parity.be; a row
+# without a break-even never qualifies - the frame prints the two side by side). Ranked grade tier first, then the model estimate,
+# then the soonest; one row per player; at most HERO_ROWS. Fewer qualifiers = fewer rows, never padded with B- or sub-break-even
+# rows. A live board with fewer than FRAME_MIN qualifiers is replaced by the saved board (dated) when that shows more.
+TIER = {"A+": 0, "A": 1, "A-": 2, "B+": 3, "B": 4}
+FRAME_MIN = 2
+
+
+def _clears(rs):
+    lead = rs[0]
+    sc, par = lead.get("scout") or {}, lead.get("parity") or {}
+    try:
+        return sc.get("grade") in TIER and par.get("be") is not None and float(sc.get("p_side")) > float(par.get("be"))
+    except (TypeError, ValueError):
+        return False
+
+
+def frame_pick(board, n=HERO_ROWS):
+    """[(rows, gap, moved)] for the browser frame, by the rule above (highest grade first)."""
+    q = [x for x in _groups(board) if _clears(x[2])]
+    q.sort(key=lambda x: (TIER[(x[2][0].get("scout") or {}).get("grade")], -float((x[2][0].get("scout") or {}).get("p_side")), x[1]))
+    seen, pick = set(), []
+    for _pri, _lock, rs, gap, moved in q:
+        who = (rs[0].get("player") or {}).get("key")
+        if who in seen:
+            continue
+        seen.add(who)
+        pick.append((rs, gap, moved))
+        if len(pick) == n:
+            break
+    return pick
 
 
 def _l10(r):
@@ -336,11 +382,6 @@ def _side(r):
 def _tag(r):
     of = r.get("offer") or {}
     return SHORT.get(of.get("platform"), esc(of.get("platform_label") or "")[:2].upper())
-
-
-def by_estimate(pick):
-    """The frame's display order: highest model estimate first (stable: equal estimates keep the rule's order)."""
-    return sorted(pick, key=lambda x: -float((x[0][0].get("scout") or {}).get("p_side") or 0))
 
 
 def _meter(p):
@@ -411,12 +452,12 @@ def phone(shown):
         why.append((f'{(other.get("offer") or {}).get("platform_label") or ""} line', _num((other.get("offer") or {}).get("line"))))
     g = sc.get("grade") or ""
     prop = f"{side} {line} {mk.get('stat_label') or ''} · {mk.get('period_label') or ''}"
-    sr = (f"Example prop card: {pl.get('name')}, {prop.replace(' · ', ', ')} on {app}, model estimate {p}% at exactly {line}, grade "
+    sr = (f"Example prop card: {pl.get('name')}, {prop.replace(' · ', ', ')} on {app}, model estimate {p}% at the {line} line, grade "
           f"{_grade_text(g, side)}." + "".join(f" {k}: {v}." for k, v in why))
     return {
         "PH_MATCH": esc(ev.get("label") or ""), "PH_WHO": esc(pl.get("name")),
         "PH_PROP": esc(prop), "PH_APP": esc(app),
-        "PH_LINE": esc(line), "PH_P": esc(p), "PH_G": esc(_grade_text(g, side)), "PH_GCLS": "gs" if g else "gg",
+        "PH_LINE": esc(line), "PH_P": esc(p), "PH_G": esc(_grade_text(g, side)), "PH_GCLS": gcls(g),
         "PH_METER": _meter(sc.get("p_side")),
         "PH_WHY": "".join(f'<li><span>{esc(k)}</span><b>{esc(v)}</b></li>' for k, v in why),
         "PH_SR": esc(sr),
@@ -424,9 +465,9 @@ def phone(shown):
 
 
 def gap_panel(pick):
-    """The 'apps disagree' panel from the first row (rule order, every eligible row) whose two apps list different lines
-    ({} = no panel)."""
-    for rs, gap, _m in pick:
+    """The 'apps disagree' panel from the first row whose two apps list different lines, rows that clear their own break-even
+    (_clears) first, then rule order ({} = no panel)."""
+    for rs, gap, _m in sorted(pick, key=lambda x: 0 if _clears(x[0]) else 1):
         plats = {(r.get("offer") or {}).get("platform") for r in rs}
         if not gap or len(plats) < 2:
             continue
@@ -473,19 +514,38 @@ ICONS = {"cs2": '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="
 
 
 def slip_cards(real):
-    """(board cards, slip slots): the real CS2 card first, then the labelled placeholders. A placeholder's estimate and grade are
+    """(board cards, slip slots): the real CS2 card first, then the labelled placeholders (the role on the name line, a small
+    'placeholder' label beside it that never truncates). A placeholder's estimate and grade are
     placeholder glyphs under a blur (never a real value in the page source) and it carries no meter. Each slot holds a copy of its
     card (the still page shows the final frame: every slot filled)."""
     cards = [f'<span class="si">{ICONS["cs2"]}</span><span class="sw"><b>{real["SS_WHO"]}</b>'
              f'<small>{real["SS_PROP"]}{" · " + real["SS_PER"] if real["SS_PER"] else ""}</small></span>'
              f'<span class="sv"><b>{real["SS_P"]}%</b><i class="gb {real["SS_GCLS"]}">{real["SS_G"]}</i></span>']
     for sp, who, prop, per in PLACEHOLDERS:
-        cards.append(f'<span class="si">{ICONS[sp]}</span><span class="sw"><b>{who} placeholder</b>'
+        cards.append(f'<span class="si">{ICONS[sp]}</span><span class="sw"><b>{who}<em class="phl">placeholder</em></b>'
                      f'<small>{prop}{" · " + per if per else ""}</small></span>'
                      f'<span class="sv bl"><b>00.0%</b><i class="gb gg">B</i></span>')
-    board = "".join(f'<div class="sc" data-i="{i}">{c}</div>' for i, c in enumerate(cards))
-    slots = "".join(f'<div class="slot" data-i="{i}"><div class="sc">{c}</div></div>' for i, c in enumerate(cards))
+    cls = lambda i: "sc" if i == 0 else "sc ph"          # noqa: E731 - a placeholder's name line never truncates (its label shows whole)
+    board = "".join(f'<div class="{cls(i)}" data-i="{i}">{c}</div>' for i, c in enumerate(cards))
+    slots = "".join(f'<div class="slot" data-i="{i}"><div class="{cls(i)}">{c}</div></div>' for i, c in enumerate(cards))
     return board, slots
+
+
+def how_frags(shown):
+    """How it works, one tiny view-only fragment per step from the first frame row ({} = none, the steps show text only):
+    01 each app's line, 02 the grade badge + the pick, 03 a two-slot slip with that leg in the first slot."""
+    if not shown:
+        return {}
+    rs = shown[0][0]
+    lead = rs[0]
+    mk, sc, of = (lead.get(k) or {} for k in ("market", "scout", "offer"))
+    g = sc.get("grade") or ""
+    return {
+        "HOW_F1": "".join(f'<i><span>{esc((r.get("offer") or {}).get("platform_label"))}</span><b>{esc(_num((r.get("offer") or {}).get("line")))}</b></i>'
+                          for r in _by_app(rs)[:2]),
+        "HOW_F2": f'<i class="gb {gcls(g)}">{esc(_grade_text(g, _side(lead)))}</i><span>{esc(_side(lead))} {esc(_num(of.get("line")))} {esc(mk.get("stat_label"))}</span>',
+        "HOW_F3": f'<i><b>{esc((lead.get("player") or {}).get("name"))}</b><span>{esc(_side(lead))} {esc(_num(of.get("line")))}</span></i><i class="e"></i>',
+    }
 
 
 def feeds_label(board):
@@ -644,10 +704,10 @@ def pool_module(board, fetch):
         rows = sorted(((k, kills / n) for k, kills, n in maps), key=lambda x: (-x[1], x[0]))
         top = rows[0][1]
         bars = "".join(f'<li{" class=top" if i == 0 else ""}><span>{esc(hltv_maps.display(k))}</span>'
-                       f'<span class="kb"><span><i style="transform:scaleX({v / top:.3f})"></i></span></span><b>{v:.2f}</b></li>'
+                       f'<span class="kb"><span><i style="transform:scaleX({v / top:.3f})"></i></span></span><b>{v:.1f}</b></li>'
                        for i, (k, v) in enumerate(rows))
-        sr = (f"Example: {pl.get('name')}, HLTV kills per map over the last 12 months: "
-              + ", ".join(f"{hltv_maps.display(k)} {v:.2f}" for k, v in rows) + ".")
+        sr = (f"Example: {pl.get('name')}, HLTV kills per map over the past year: "
+              + ", ".join(f"{hltv_maps.display(k)} {v:.1f}" for k, v in rows) + ".")
         return {"POOL_WHO": esc(pl.get("name")), "POOL_BARS": bars, "POOL_SR": esc(sr)}
     except Exception:
         return {}
@@ -686,11 +746,21 @@ def _sentences(s):
     return [x.strip() for x in re.split(r"(?<=[.!?])\s+", str(s or "").strip()) if x.strip()]
 
 
+CUT_MIN_WORDS = 12                 # a quote with a sentence left out needs at least this many words left (no one-line stubs)
+
+
+def curly(s):
+    """Typographic apostrophes (rulebook 3): a straight ' between two letters becomes a right single quote. Run BEFORE esc() (esc
+    turns ' into &#x27;)."""
+    return re.sub(r"(?<=\w)'(?=\w)", "’", str(s or ""))
+
+
 def featured(doc):
-    """[(review, quote, cut, old)] by the stated rule: reviews that talk about using the product, most specific first. A review with
-    photos (slips) or shouting is not featured; a sentence with money / result / betting / guarantee talk is never quoted (cut = a sentence
-    was left out, shown as an ellipsis with a link to the reviews page). A review that names the site's old brand (_OLD_BRAND) is never featured
-    (it stays on /reviews). old is always False (kept in the tuple for callers)."""
+    """[(review, quote, cut, old)] by the stated rule: reviews that talk about using the product. A review with photos (slips) or
+    shouting is not featured; a sentence with money / result / betting / guarantee talk is never quoted (cut = a sentence was left
+    out). Order: complete reviews first, then the most product talk, then the longest; a cut review needs CUT_MIN_WORDS words left
+    and shows its ellipsis plus a 'Full review' link to /reviews. Different dates are preferred when the reviews have them. A review
+    that names the site's old brand (_OLD_BRAND) is never featured (it stays on /reviews). old is always False (kept for callers)."""
     out = []
     for r in (doc or {}).get("reviews") or []:
         text = f'{r.get("title") or ""} {r.get("body") or ""}'
@@ -701,19 +771,26 @@ def featured(doc):
         sents = _sentences(r.get("body"))
         kept = [x for x in sents if not _MONEY.search(x)]
         quote = " ".join(kept)
+        cut = len(kept) < len(sents)
         hits = len(_PRODUCT.findall(quote))
-        if not hits or len(quote.split()) < 5:
+        if not hits or len(quote.split()) < (CUT_MIN_WORDS if cut else 5):
             continue
         if _OLD_BRAND.search(f'{text} {r.get("name") or ""}'):
             continue
-        out.append((hits, len(quote), r, quote, len(kept) < len(sents)))
-    out.sort(key=lambda x: (-x[0], -x[1]))
-    return [(r, q, cut, False) for _h, _n, r, q, cut in out[:FEATURE_N]]
+        out.append((cut, -hits, -len(quote), r, quote))
+    out.sort(key=lambda x: x[:3])
+    first, rest, days = [], [], set()
+    for x in out:                                        # one review per date first (when the dates differ), then the rest in order
+        d = str(x[3].get("created") or "")[:10]
+        (rest if d in days else first).append(x)
+        days.add(d)
+    pick = sorted((first + rest)[:FEATURE_N], key=lambda x: x[:3]) if len(first) > 1 else out[:FEATURE_N]
+    return [(r, q, cut, False) for cut, _h, _n, r, q in pick]
 
 
 def wall(doc):
-    """(head text, cards html, review count, average or None). Handles are left off (owner brief: no member names on the sales page);
-    each card says 'Paying member, <date>'. The average shows only from 10 reviews."""
+    """(head html, cards html, review count, average or None). Handles are left off (owner brief: no member names on the sales page);
+    each card says 'Paying member, <date>'. The average shows only from 10 reviews. The head links to /reviews."""
     s = (doc or {}).get("summary") or {}
     n = int(s.get("count") or 0)
     if not n:
@@ -723,8 +800,9 @@ def wall(doc):
     cards = []
     for r, quote, cut, _old in featured(doc):
         d = _ts(r.get("created"))
-        cards.append(f'<li><figure class="rq"><blockquote><p>&ldquo;{esc(quote)}{chr(160) + "…" if cut else ""}&rdquo;</p></blockquote>'
-                     f'<figcaption>Paying member, {esc(_date(d))}</figcaption></figure></li>')
+        more = ' <a class="tl" href="/reviews">Full review</a>' if cut else ""
+        cards.append(f'<li><figure class="rq"><blockquote><p>&ldquo;{esc(curly(quote))}{chr(160) + "…" if cut else ""}&rdquo;</p></blockquote>'
+                     f'<figcaption>Paying member, {esc(_date(d))}.{more}</figcaption></figure></li>')
     head = (f'<span class="star" aria-hidden="true">★</span>&nbsp;{avg:.1f} from {n} reviews, all published' if avg is not None
             else f"{n} reviews, all published")
     return head, "".join(cards), n, avg
@@ -777,42 +855,56 @@ def build(srv, join_url, fetch=True):
     checkout every 'Try' button opens (server.landing_trial_url)."""
     inp = _inputs(srv, fetch)
     sp = sports_on()
-    board, saved = open_only(inp["board"]), False       # live rows only while their match has not started (never a stale line)
-    pick = _rows(board, n=HERO_ROWS)[0] if board else []
-    if not pick:                                      # nothing to show live: the saved board, through the same code
-        board = fallback_board()
-        pick = _rows(board, n=HERO_ROWS)[0] if board else []
-        saved = bool(pick)
+    live = open_only(inp["board"])                    # live rows only while their match has not started (never a stale line)
+    live_rows, _at, live_n = _rows(live, n=10 ** 6) if live else ([], None, 0)
+    board, pick, graded_n = live, (frame_pick(live) if live else []), live_n
+    if len(pick) < FRAME_MIN:                         # too few qualifying live rows: the saved board (dated), through the same code
+        fb = fallback_board()
+        fpick = frame_pick(fb) if fb else []
+        if len(fpick) > len(pick):
+            board, pick, graded_n = fb, fpick, _rows(fb, n=10 ** 6)[2]
     rows, total, asof = ledger(inp["record"])
     head, cards, nrv, avg = wall(inp["reviews"])
-    shown = by_estimate(pick)                         # the rule picks the rows; the frame shows them highest estimate first
-    allrows = _rows(board, n=10 ** 6)[0] if pick else []
-    ph, gp, real = phone(shown), gap_panel(allrows), slip_real(pick)
+    shown = pick                                      # frame_pick already ranks: highest grade, then highest estimate
+    gap_src = live_rows or (_rows(board, n=10 ** 6)[0] if pick else [])     # the gap panel and map bars read the live board first
+    ph, gp, real = phone(shown), gap_panel(gap_src), slip_real(pick)
     cards_ss = slip_cards(real) if real else ("", "")
-    pm = pool_module(board, fetch) if (pick and not saved) else {}     # live board only: the saved board's line is not current
+    pm = pool_module(live, fetch) if live_rows else {}  # live board only: the saved board's line is not current
+    steps = how_frags(shown)
     base = public_base()
     host = re.sub(r"^https://", "", base)
     bdate = _date(_ts((board or {}).get("board_at"))) if pick else ""
     tot_s = f"{total:,}" if total else ""
+    rv_short = (f'<span class="star" aria-hidden="true">★</span>&nbsp;{avg:.1f} from {nrv} reviews' if avg is not None
+                else f"{nrv} reviews" if nrv else "")
+    # the phone's first screen carries the proof (critic round 1): one link to /record with the live count and the live score
+    hproof = " ".join(f'<span class="hp">{x}</span>' for x in ((f"{tot_s} decided picks on the public record." if total else ""),
+                                                              (f"{rv_short}." if rv_short else "")) if x)
+    more_n = graded_n - len(shown) if pick else 0
     units_s = f"+{OWNER_UNITS}U"
     fill = {
         "TRIAL_URL": esc(join_url),
         "WEEKLY_URL": esc(weekly_url(srv)),
         "PRICE_M": esc(PRICE_M), "PRICE_W": esc(PRICE_W),
         "OWNER_UNITS": str(OWNER_UNITS), "OWNER_UNITS_S": esc(units_s), "OWNER_UNITS_W": str(len(units_s)),
-        "OWNER_POST": esc(OWNER_POST), "OWNER_POST_BY": esc(OWNER_POST_BY),
+        "OWNER_POST": f"&ldquo;{esc(OWNER_POST)}&nbsp;…&rdquo;", "OWNER_POST_BY": esc(OWNER_POST_BY),
         "OWNER_STORY": esc(OWNER_STORY).replace("6 man", "6&nbsp;man"), "OWNER_STORY_BY": esc(OWNER_STORY_BY),
         "SPORT_SUB": esc(_sport_sub(sp)),
         "SPORT_LONG": esc(_list([LONG[s] if s in ("cs2", "lol", "nba", "nfl") else LONG[s].lower() for s in sp])),
         "SPORT_NAV": "".join(f'<li{" class=on" if s == "cs2" else ""}>{LONG[s]}</li>' for s in sp),
         "FRAME_ROWS": frame_rows(shown), "FRAME_SR": frame_sr(shown),
         "FRAME_FEEDS": esc(feeds_label(board)) if pick else "",
+        "FRAME_MORE": esc(f"{len(shown)} of {graded_n:,} graded props shown: graded B or better and above the entry’s break-even") if more_n > 0 else "",
+        "HERO_PROOF": hproof,
+        "FINAL_SUB": esc(f"{live_n:,} CS2 {'prop is' if live_n == 1 else 'props are'} graded on the board right now.") if live_rows else "",
+        **steps,
         "FRAME_CAP": esc(f"Example rows from the public sample board{', ' + bdate if bdate else ''}. "
                          "A model estimate is a chance, not a promise."),
         **ph, **gp, **pm,
         "SS_CARDS": cards_ss[0], "SS_SLOTS": cards_ss[1], "SS_WHO": real.get("SS_WHO", ""),
         "LEDGER_ROWS": rows, "LEDGER_ASOF": esc(asof),
         "LEDGER_TOTAL": tot_s, "LEDGER_N": str(total), "LEDGER_W": str(len(tot_s)),
+        "REC_CAP": esc(f"{tot_s} decided picks") if total else "",
         "REC_SRC": esc(f"{host}/record") if host else "the public record",
         "REC_LINK": esc(f"{host}/record") if host else "The public record",
         "RV_LINK": esc(f"{host}/reviews") if host else "Every review",
@@ -827,7 +919,8 @@ def build(srv, join_url, fetch=True):
     # optional blocks: <!--if:NAME--> ... <!--/if:NAME--> kept only when NAME has content
     for name, on in (("FRAME", bool(pick)), ("PHONE", bool(ph)), ("GAP", bool(gp)), ("POOL", bool(pm)), ("SLIP", bool(real)),
                      ("LEDGER", bool(rows)), ("TOTAL", bool(total)), ("REVIEWS", bool(nrv)), ("RVCARDS", bool(cards)),
-                     ("BASE", bool(base)), ("INSIDE", bool(gp or pm))):
+                     ("BASE", bool(base)), ("INSIDE", bool(gp or pm)), ("HPROOF", bool(hproof)), ("FMORE", bool(more_n > 0)),
+                     ("FSUB", bool(live_rows)), ("STEPS", bool(steps))):
         out = re.sub(rf"<!--if:{name}-->(.*?)<!--/if:{name}-->", (lambda m: m.group(1)) if on else "", out, flags=re.S)
     out = re.sub(r"\{\{([A-Z_0-9]+)\}\}", lambda m: fill.get(m.group(1), ""), out)
     return out.encode("utf-8")

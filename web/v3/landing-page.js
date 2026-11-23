@@ -3,11 +3,12 @@
    - the fixed message for a failed sign-in code (/?signin_error=<code>), never text from the URL;
    - one-time reveals on the Inside panels (+ their text, 80 ms later, and the kills bars) and the record table;
    - count-up on two proof numbers (+46U and the decided count; the review score never ticks);
-   - the Slip Studio timeline: plays once at 35% on screen (cards fly into the slip, FLIP + WAAPI, transform/opacity only), holds
-     "Slip ready", replays only after the stage has fully left the screen; a hidden tab jumps it to the final frame;
+   - the Slip Studio timeline: plays once at 35% on screen (cards fly into the slip, FLIP + WAAPI, transform/opacity only; on phones,
+     where the board column is hidden, the legs drop into the slip 120 ms apart), holds "Slip ready", replays only after the stage has
+     fully left the screen; a hidden tab jumps it to the final frame;
    - the FAQ accordion (WAI-ARIA buttons, one open at a time, hidden="until-found" so find-in-page opens a panel);
    - the phone bar: after the hero button has left the screen, hidden over the Slip button, the pricing card, the final call to
-     action and any focused element near the bottom.
+     action and any focused element near the bottom; while it shows, body.dock-on hides the header's Try pill (one Try per screen).
    Motion runs only when html.motion is set (prefers-reduced-motion is not "reduce"). */
 (function () {
   'use strict';
@@ -72,7 +73,8 @@
     var st = D.getElementById('ss');
     if (!st || !MOTION || !st.animate) return;
     var cards = $$('.ss-board .sc', st), slots = $$('.slot', st), pill = D.getElementById('ss-st');
-    var LEG = [300, 1300, 2300, 3300], READY = 4400, CTA = 4600, FLY = 650;
+    var LEG = [300, 1300, 2300, 3300], READY = 4400, FLY = 650;
+    var LEG_M = [300, 420, 540, 660], READY_M = 1200;                     /* phones: no board column, the legs drop in */
     var timers = [], ghosts = [], state = 'idle', seen = false;           /* idle -> playing -> done; done -> idle once fully off screen */
     function later(ms, f) { timers.push(setTimeout(f, ms)); }
     function clear() {
@@ -81,7 +83,7 @@
     }
     function start() {
       clear();
-      st.classList.add('run'); st.classList.remove('ready', 'cta');
+      st.classList.add('run'); st.classList.remove('ready');
       cards.forEach(function (c) { c.classList.remove('dim'); });
       slots.forEach(function (s) { s.classList.remove('on'); });
       pill.textContent = 'Building 0 of 4';
@@ -94,9 +96,18 @@
       var sc = $('.sc', s);
       if (sc) sc.animate([{ transform: 'scale(.95)' }, { transform: 'scale(1)' }], { duration: 240, easing: 'cubic-bezier(.2,.8,.2,1)' });
     }
+    function drop(i) {
+      var s = slots[i];
+      if (!s) return;
+      s.classList.add('on');
+      pill.textContent = 'Building ' + (i + 1) + ' of 4';
+      var sc = $('.sc', s);
+      if (sc) sc.animate([{ transform: 'translateY(12px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 360, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    }
     function fly(i) {
       var c = cards[i], s = slots[i];
       if (!c || !s) return;
+      if (!c.offsetParent) { drop(i); return; }
       var sr = st.getBoundingClientRect(), a = c.getBoundingClientRect(), b = s.getBoundingClientRect();
       var g = c.cloneNode(true);
       g.classList.add('ghost'); g.classList.remove('dim');
@@ -113,7 +124,7 @@
     }
     function finish() {                                      /* the final frame: what a still page shows */
       clear();
-      st.classList.remove('run', 'ready', 'cta');
+      st.classList.remove('run', 'ready');
       cards.forEach(function (c) { c.classList.remove('dim'); });
       slots.forEach(function (s) { s.classList.remove('on'); });
       pill.textContent = 'Slip ready';
@@ -121,9 +132,12 @@
     }
     function play() {
       start(); state = 'playing';
-      LEG.forEach(function (t, i) { later(t, function () { fly(i); }); });
-      later(READY, function () { pill.textContent = 'Slip ready'; st.classList.add('ready'); });
-      later(CTA, function () { st.classList.add('cta'); state = 'done'; if (!seen) start(); });  /* ended off screen: replay on the next entry */
+      var phone = cards[0] && !cards[0].offsetParent;
+      (phone ? LEG_M : LEG).forEach(function (t, i) { later(t, function () { phone ? drop(i) : fly(i); }); });
+      later(phone ? READY_M : READY, function () {
+        pill.textContent = 'Slip ready'; st.classList.add('ready'); state = 'done';
+        if (!seen) start();                                 /* ended off screen: replay on the next entry */
+      });
     }
     start();
     io([st], { threshold: [0, 0.35] }, function (e) {
@@ -195,6 +209,7 @@
       var show = past && !low && !Object.keys(over).some(function (k) { return over[k]; });
       if (dock.classList.contains('show') === show) return;
       dock.classList.toggle('show', show);
+      D.body.classList.toggle('dock-on', show);
       if (show) link.removeAttribute('tabindex'); else link.setAttribute('tabindex', '-1');
     }
     io([hero], { threshold: 0 }, function (e) { past = !e.isIntersecting && e.boundingClientRect.top < 0; set(); });

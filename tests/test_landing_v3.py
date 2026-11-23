@@ -5,12 +5,15 @@ DESIGN_RULES.md. No network, no production data: real-shaped board / record / re
   holds no link, button, input, tabindex or toggle; the page's only buttons are the five FAQ triggers;
 - every number comes from the shared bodies (board snapshot, /api/record, /api/reviews); the only typed-in ones are the owner's
   attributed +46U post and 6-man story; the template carries no player stat, percentage or price;
-- frame rows: picked by the stated rule (gaps, moved lines, soonest), shown highest model estimate first, lines printed raw; the phone
-  reads the first row and leaves a missing value out (never 0); the line-gap panel is a real two-app row or absent; the Slip stage has
-  one real CS2 card and labelled placeholders whose blurred values are glyphs (no real numbers in the source);
+- frame rows: only markets graded B or better whose model estimate clears their own entry's break-even, ranked grade tier then
+  estimate, never padded (fewer than FRAME_MIN live qualifiers: the dated saved board); lines printed raw; the phone reads the first
+  row and leaves a missing value out (never 0); the line-gap panel is a real two-app row (break-even clearers first) or absent; the
+  Slip stage has one real CS2 card and labelled placeholders (role + an untruncated 'placeholder' label) whose blurred values are
+  glyphs (no real numbers in the source);
 - record = Won / Lost / Push counts only; the decided count = the table's Won + Lost; the review score never ticks;
-- copy / CSS hard rules: no banned words, no arrows or middle-dot strings in page copy, one uppercase tag, green on one selector, no
-  gradient / blur / shadow except the Slip flight token; every Try button opens the free-trial checkout, the weekly link once;
+- copy / CSS hard rules: no banned words, no arrows or middle-dot strings in page copy, curly apostrophes, one uppercase tag, green
+  on one selector, no gradient / blur / shadow except the Slip flight token; every Try button (six) opens the free-trial checkout,
+  the weekly link once;
 - the request path never computes (cached bodies only) and 700 visitors at once get one body and one ETag."""
 import html
 import http.client
@@ -210,16 +213,15 @@ def frames(s):
 
 
 # ------------------------------------------------------------------------------------------------------------ the hero frames
-def test_frame_rows_follow_the_rule_and_show_highest_estimate_first(srv, monkeypatch):
+def test_frame_rows_clear_their_break_even_and_rank_by_grade(srv, monkeypatch):
     seed(srv, monkeypatch, board())
     s = build(srv).decode("utf-8")
     rows = re.findall(r'<div class="br"><span class="b-who"><b>([^<]+)</b>', s)
-    assert rows == ["Mover", "Zeta", "Gap"]                               # picked by the rule, shown 64.0 > 61.1 > 58.3
+    assert rows == ["Mover", "Zeta"]                                      # B+ before B; Gap (B-) is never padded in
     assert "NoLetter" not in s.split('class="bt"')[1].split("</div></div></div>")[0] and ">Past<" not in s
-    gap = re.search(r'(?s)<div class="br"><span class="b-who"><b>Gap</b>.*?</div>', s).group(0)
-    assert '<span class="b-ln"><span>PP 13.5</span><span>UD 12.5</span></span>' in gap   # each app's line, raw, PrizePicks first
-    assert "<b>58.3%</b>" in gap and 'scaleX(0.583)' in gap and '<i class="gb gg">B-</i>' in gap
+    assert '<p class="bfoot">2 of 3 graded props shown: graded B or better and above the entry’s break-even</p>' in s
     mover = re.search(r'(?s)<div class="br"><span class="b-who"><b>Mover</b>.*?</div>', s).group(0)
+    assert "<b>64.0%</b>" in mover and 'scaleX(0.640)' in mover
     assert '<span class="b-pk">Under</span>' in mover and '<i class="gb gc">B+</i>' in mover
     cap = re.search(r'<p class="cap hero-cap">([^<]+)</p>', s).group(1)
     today = landing_v3._date(landing_v3._ts(board()["board_at"]))
@@ -228,20 +230,45 @@ def test_frame_rows_follow_the_rule_and_show_highest_estimate_first(srv, monkeyp
     assert sr.startswith("Example rows from the member board: Mover, Kills Maps 1-2, Underdog 32.5, Under, model estimate 64.0%, grade B+;")
 
 
+def test_frame_rule_tier_before_estimate_break_even_and_lines_by_app(srv, monkeypatch):
+    b = board()
+    for r in b["records"]:
+        if r["player"]["name"] == "Gap":
+            r["scout"]["grade"] = "A-" if r["offer"]["platform"] == "underdog" else None    # A- at 58.3% outranks B+ at 64.0%
+        if r["player"]["name"] == "Zeta":
+            r["scout"]["p_side"] = .52                                    # below its own 53.45% break-even: left out
+    b["records"].append(rec("NoBe", "kills", 22.5, "underdog", .700, "A", datetime.now(timezone.utc) + timedelta(hours=3), be=None))
+    seed(srv, monkeypatch, b)
+    s = build(srv).decode("utf-8")
+    assert re.findall(r'<div class="br"><span class="b-who"><b>([^<]+)</b>', s) == ["Gap", "Mover"]   # no break-even = never shown
+    gap = re.search(r'(?s)<div class="br"><span class="b-who"><b>Gap</b>.*?</div>', s).group(0)
+    assert '<span class="b-ln"><span>PP 13.5</span><span>UD 12.5</span></span>' in gap   # each app's line, raw, PrizePicks first
+    assert "<b>58.3%</b>" in gap and '<i class="gb gc">A-</i>' in gap
+
+
+def test_too_few_live_qualifiers_show_the_dated_saved_board_but_inside_stays_live(srv, monkeypatch):
+    b = board()
+    b["records"] = [r for r in b["records"] if r["player"]["name"] != "Zeta"]                    # one qualifier left (Mover)
+    seed(srv, monkeypatch, b)
+    s = build(srv).decode("utf-8")
+    assert "public sample board, Nov 22, 2026." in s and ">Mover<" not in s.split('class="bt"')[1].split("</div></div></div>")[0]
+    assert "Gap · Headshots · Maps 1-2" in s                              # the gap panel still reads the live board
+    assert "2 CS2 props are graded on the board right now." in s          # the live count, not the saved board's
+
 def test_lines_print_as_the_member_board_prints_them(srv, monkeypatch):
     b = board()
     b["records"][0]["offer"]["line"] = 30.0
-    b["records"][1]["offer"]["line"] = 12
+    b["records"][3]["offer"]["line"] = 32
     seed(srv, monkeypatch, b)
     s = build(srv).decode("utf-8")
-    assert "<span>UD 30</span>" in s and "<span>UD 12</span>" in s and "UD 30.0" not in s
+    assert "<span>UD 30</span>" in s and "<span>UD 32</span>" in s and "UD 30.0" not in s
 
 
 def test_phone_reads_the_first_row_and_hides_missing_values(srv, monkeypatch):
     seed(srv, monkeypatch, board())
     ph = block(build(srv).decode("utf-8"), '<div class="phone"', '<p class="cap hero-cap">')
-    assert "<p class=\"ph-who\">Mover</p>" in ph and "Under 32.5 Kills · Maps 1-2 on Underdog" in ph
-    assert '<b>64.0%</b><i class="gb gs">B+</i>' in ph and "Model estimate at exactly 32.5" in ph
+    assert "<p class=\"ph-who\">Mover</p>" in ph and '<p class="ph-prop">Under 32.5 Kills · Maps 1-2</p>' in ph
+    assert '<b>64.0%</b><i class="gb gc">B+</i>' in ph and "Model estimate at the 32.5 line on Underdog" in ph and "exactly" not in ph
     why = re.findall(r"<li><span>([^<]+)</span><b>([^<]+)</b></li>", ph)
     assert why == [("Last 10 at this line", "4 / 10 Under"), ("Break-even, standard 2-pick", "53.4%")]   # no projection, no other app
     assert "Projection" not in ph and ">0<" not in ph and "0.0 vs" not in ph
@@ -253,6 +280,7 @@ def test_phone_lists_projection_and_the_other_apps_line_when_the_row_has_them(sr
     for r in b["records"]:
         if r["player"]["name"] == "Gap":
             r["scout"]["p_side"] = .7 if r["offer"]["platform"] == "underdog" else r["scout"]["p_side"]
+            r["scout"]["grade"] = "A" if r["offer"]["platform"] == "underdog" else None
             r["scout"]["projection"] = 13.9
     seed(srv, monkeypatch, b)
     ph = block(build(srv).decode("utf-8"), '<div class="phone"', '<p class="cap hero-cap">')
@@ -278,10 +306,11 @@ def test_slip_stage_has_one_real_row_and_placeholders_with_no_real_numbers(srv, 
     seed(srv, monkeypatch, board())
     s = build(srv).decode("utf-8")
     stage = block(s, '<div class="stage" id="ss">', '<p class="cap">Example animation.')
-    cards = re.findall(r'<div class="sc" data-i="\d">(.*?)</div>', stage)
+    cards = re.findall(r'<div class="sc(?: ph)?" data-i="\d">(.*?)</div>', stage)
     assert len(cards) == 4 and "<b>Mover</b>" in cards[0] and "<b>64.0%</b>" in cards[0]     # the highest real estimate
-    for c, who in zip(cards[1:], ("NBA guard placeholder", "LoL mid laner placeholder", "Tennis player placeholder")):
-        assert f"<b>{who}</b>" in c and '<span class="sv bl"><b>00.0%</b><i class="gb gg">B</i></span>' in c and 'class="mt"' not in c
+    assert stage.count('<div class="sc ph" data-i=') == 3 and "ss-cta" not in s and 'id="ss-cta"' not in s
+    for c, who in zip(cards[1:], ("NBA guard", "LoL mid laner", "Tennis player")):
+        assert f'<b>{who}<em class="phl">placeholder</em></b>' in c and '<span class="sv bl"><b>00.0%</b><i class="gb gg">B</i></span>' in c and 'class="mt"' not in c
     assert stage.count('class="slot"') == 4 and '<span class="bl">00.0% vs 00.0%</span>' in stage
     blurred = re.findall(r'<span class="(?:sv )?bl">(.*?)</span>', stage)
     assert blurred and all(not re.search(r"[1-9]", re.sub(r"<[^>]+>", "", x)) for x in blurred)    # glyphs only behind every blur
@@ -322,6 +351,7 @@ def test_proof_strip_is_live_attributed_and_the_score_never_ticks(srv, monkeypat
     s = build(srv).decode("utf-8")
     proof = block(s, '<section class="proof"')
     assert '<span class="tk" aria-hidden="true" data-to="46" data-pre="+" data-suf="U" style="min-width:4ch">+46U</span><span class="sr-only">+46U</span>' in proof
+    assert '<p class="pl">&ldquo;+46U on Grader 4 mans in the past week&nbsp;…&rdquo;</p>' in proof and "only been live" not in s
     assert "Trey on X, Nov 20, 2026" in proof and 'href="/record">propsgrader.com/record<' in proof and 'href="/reviews">propsgrader.com/reviews<' in proof
     assert '<span class="star" aria-hidden="true">★</span>&nbsp;4.8</span><span class="sr-only">4.8 out of 5</span>' in proof
     assert proof.count("data-to=") == 2 and "from 12 member reviews. Every review is published, whatever its rating." in proof
@@ -337,7 +367,7 @@ def test_missing_inputs_drop_their_blocks_and_the_page_still_serves(srv, monkeyp
     assert 'id="inside"' not in s and 'href="#inside"' not in s           # one-app saved board, no map panel: no Inside section at all
     assert '<ul class="kbars">' not in s                    # the saved board never drives the map panel
     assert "{{" not in s and "<!--if:" not in s and ">0<" not in s
-    assert s.count(f'href="{JOIN.replace("&", "&amp;")}"') == 7
+    assert s.count(f'href="{JOIN.replace("&", "&amp;")}"') == 6
 
 
 def test_every_in_page_link_has_its_section(srv, monkeypatch):
@@ -365,14 +395,31 @@ def test_review_cards_escape_feature_by_rule_and_leave_handles_off(srv, monkeypa
     m = block(s, 'id="members"')
     assert "<script>x</script>" not in s and "&lt;script&gt;" in m
     quotes = re.findall(r"<blockquote><p>&ldquo;(.*?)&rdquo;</p></blockquote>", m)
-    assert len(quotes) == 4                                              # the owner's story + 3 member reviews
+    assert len(quotes) == 3                                              # 2 member reviews (the 8-word cut stub is skipped) + the story
+    assert quotes[0].startswith("The cards explain every lean") and quotes[1] == "Reasons behind each prop are great for me"
     caps = re.findall(r"<figcaption>([^<]+)</figcaption>", m)
-    assert caps[1:] == ["Paying member, Nov 16, 2026"] * 3 and not any(n in m for n in ("longform", "slipper", "earner"))
-    assert "Hit big" not in m and "profitable" not in m and "YALL" not in m and "guaranteed" not in m
-    assert m.count("Paying member, Nov 16, 2026") == 3 and "Paying member ·" not in m
-    assert '<p class="rvh"><span class="star" aria-hidden="true">★</span>&nbsp;4.8 from 12 reviews, all published</p>' in m
+    assert caps[:2] == ["Paying member, Nov 16, 2026."] * 2 and not any(n in m for n in ("longform", "slipper", "earner"))
+    assert "Hit big" not in m and "profitable" not in m and "YALL" not in m and "guaranteed" not in m and "…" not in m
+    assert m.count("Paying member, Nov 16, 2026") == 2 and "Paying member ·" not in m
+    assert '<p class="rvh"><a class="tl" href="/reviews"><span class="star" aria-hidden="true">★</span>&nbsp;4.8 from 12 reviews, all published</a></p>' in m
+    assert m.index('class="rqs"') < m.index('class="story"')            # members' own words lead; the owner's post follows
     assert "A member ran his first ever 6&nbsp;man with Grader and cashed." in m
     assert "Shared by Prop Grader on X. One member, one night: a result, not a promise." in m
+
+
+def test_review_order_cut_rule_and_curly_apostrophes():
+    rv = {"summary": {"count": 3}, "reviews": [
+        review(1, "a", "Love the stats and the reasons. Paid me big last week, money every day."),            # cut, 6 words left: skipped
+        review(2, "b", "The breakdowns on every card are clear and I can read the map data quickly before I build. "
+                       "Made money all week with it."),                                                    # cut, 18 words left
+        review(3, "c", "You've got the stats right there, it's the best board."),                          # complete
+    ]}
+    got = landing_v3.featured(rv)
+    assert [r["id"] for r, _q, _c, _o in got] == [3, 2] and [c for _r, _q, c, _o in got] == [False, True]
+    _h, cards, _n, _a = landing_v3.wall(rv)
+    assert "You’ve got the stats right there, it’s the best board." in cards and "&#x27;" not in cards
+    assert 'build.&nbsp;…&rdquo;' not in cards and "build. …&rdquo;" in cards and 'Paying member, Nov 16, 2026. <a class="tl" href="/reviews">Full review</a>' in cards
+    assert cards.count("Full review") == 1
 
 
 def test_rating_shows_only_from_ten_reviews(srv, monkeypatch):
@@ -389,7 +436,7 @@ def test_reviews_naming_the_old_brand_are_never_featured(srv, monkeypatch):
 
 
 # ---------------------------------------------------------------------------------------------------------- copy + structure
-SECTION_ORDER = ['class="nav"', 'class="hero"', 'class="proof"', 'id="how"', 'id="inside"', 'id="slip"', 'class="sec why"', 'id="record"',
+SECTION_ORDER = ['class="nav"', 'class="hero"', 'class="proof"', 'id="how"', 'id="inside"', 'id="slip"', 'id="record"',
                  'id="members"', 'id="pricing"', 'id="faq"', 'id="final"', 'class="foot"']
 
 
@@ -403,13 +450,15 @@ def test_sections_follow_the_brief_order_and_wording(srv, monkeypatch):
                  "Every PrizePicks and Underdog line gets a letter grade and a model estimate, with the reason in plain English.",
                  "Then $24.99/month. Cancel anytime.", "Open the board. Read the grade. Play your line.",
                  "What members see when they log in.", "When the apps disagree, you see it first.", "Built for CS2, not bolted on.",
-                 "Slips, built from graded lines.", "One row instead of six apps.",
-                 "Saved before the game. Scored after.", "See every pick on the record", "Members, in their words.",
+                 "Slips, built from graded lines.",
+                 "Saved before the game. Scored after.", "See every pick on the record", "Members and results.",
+                 "The board is already graded.",
                  "Start with a free day.", "One plan with everything. Cancel anytime from your Whop account.",
                  "Your first day is free. Then $24.99/month until you cancel.", "Secure checkout on Whop.", "Questions.",
                  "Prop Grader gives chances, not certainties. Play only what you can afford to lose."):
         assert line in t, line
-    assert s.count("<h1") == 1 and s.count('<h2 id="final-title" class="display">Grade every prop before you <span class="ac nw">lock it in.</span></h2>') == 1
+    assert s.count("<h1") == 1 and t.count("lock it in.") == 1 and '<h2 id="final-title">The board is already graded.</h2>' in s
+    assert "six apps" not in t and 'class="sec why"' not in s and "By hand" not in t
     assert re.findall(r'<p class="eb">([^<]+)</p>', s) == ["How it works", "Inside Prop Grader", "Slip Studio", "The public record"]
 
 
@@ -429,17 +478,18 @@ def test_faq_is_a_five_item_button_accordion_with_the_live_answers(srv, monkeypa
 
 def test_template_copy_follows_the_rulebook():
     raw = landing_v3.TEMPLATE.read_text(encoding="utf-8")
-    t = text(re.sub(r"\{\{[A-Z_0-9]+\}\}", " ", raw).encode())
+    t = text(re.sub(r"\{\{[A-Z_0-9]+\}\}", " ¤ ", raw).encode())         # a fill is never read as a digit beside the copy
     low = t.lower().replace("00.0%", "")                                 # the Slip stage's blurred placeholder glyphs
     for bad in (r"guarantee", r"hit rate", r"win[- ]rate", r"\block(?! it in)", r"21\+", r"gambler", r"\bodds\b", r"\beasy\b", r"\bsimple\b",
                 r"\bquick\b", r"\bvery\b", r"\bjust\b", r"\breally\b", r"seamless", r"unlock", r"supercharge", r"game-changer",
                 r"\d+(\.\d+)?\s*%", r"\$", r"profit", r"\bunits?\b"):
         assert not re.search(bad, low), bad
-    page_copy = re.sub(r'(?s)<div class="(browser|phone|panel)" aria-hidden="true">.*?</div>\s*</div>|<div class="ss-fig".*?<div class="ss-cta"', "", raw)
+    page_copy = re.sub(r'(?s)<div class="(browser|phone|panel)" aria-hidden="true">.*?</div>\s*</div>|<div class="stage" id="ss">.*?<p class="cap">', "", raw)
+    assert not re.search(r"[A-Za-z]'[A-Za-z]", re.sub(r"<[^>]+>", " ", page_copy)), "straight apostrophe in copy"
     assert "→" not in raw and "&rarr;" not in raw
     head = raw.split("<body>")[1]
     for frag in ("· ", " ·"):                                            # middle dots only inside product pictures
-        copy = re.sub(r"(?s)<div class=\"(browser|phone|panel)\".*?<p class=\"sr-only\">|<div class=\"ss-fig\".*?</div>\s*<div class=\"ss-cta\"", "", head)
+        copy = re.sub(r"(?s)<div class=\"(browser|phone|panel)\".*?<p class=\"sr-only\">|<div class=\"stage\" id=\"ss\">.*?<p class=\"cap\">", "", head)
         assert frag not in re.sub(r"<[^>]+>", "", copy), frag
     assert "<script src" not in raw and "<img" not in raw
     del page_copy
@@ -466,10 +516,10 @@ def test_links_go_to_the_trial_and_weekly_checkouts(srv, monkeypatch):
     assert '<html lang="en" data-ui-v3="1" data-v3-page="landing" data-sc-sport="cs2" data-theme="dark" style="color-scheme:dark">' in s
     trial, week = JOIN.replace("&", "&amp;"), WEEK.replace("&", "&amp;")
     btns = re.findall(r'<a class="btn[^"]*"[^>]*href="([^"]+)"[^>]*>([^<]+)</a>', s)
-    assert len(btns) == 7 and {h for h, _t in btns} == {trial}          # nav, hero, Slip, Slip stage, pricing, final, phone bar
-    assert sorted(t for _h, t in btns) == sorted(["Try free", "Try free for 1&nbsp;day"] + ["Try Prop Grader free for 1&nbsp;day"] * 5)
+    assert len(btns) == 6 and {h for h, _t in btns} == {trial}          # nav, hero, Slip, pricing, final, phone bar (no stage CTA, D15)
+    assert sorted(t for _h, t in btns) == sorted(["Try free", "Try free for 1&nbsp;day"] + ["Try Prop Grader free for 1&nbsp;day"] * 4)
     whop = re.findall(r'href="(https://whop\.com/[^"]+)"', s)
-    assert set(whop) == {trial, week} and whop.count(week) == 1 and f'<a class="tl" href="{week}">Weekly plan</a>: $9.99/week' in s
+    assert set(whop) == {trial, week} and whop.count(week) == 1 and f'<a href="{week}">Weekly plan</a>: $9.99/week' in s
     assert OLD_JOIN not in s
     hero = block(s, '<section class="hero"')
     assert re.search(r'id="hero-cta" href="[^"]+">Try Prop Grader free for 1&nbsp;day</a>\s*<p class="terms">Then \$24\.99/month\. Cancel anytime\.</p>', hero)
@@ -687,7 +737,7 @@ def maps_loader(monkeypatch):
 
 
 def pool_html(page):
-    m = re.search(r'(?s)<div class="ipanel rv">\s*<div class="panel" aria-hidden="true">\s*<p class="pnh"><span>[^<]+ · Kills per map, last 12 months</span>.*?<p class="sr-only">[^<]*</p>', page.decode("utf-8"))
+    m = re.search(r'(?s)<div class="ipanel rv">\s*<div class="panel" aria-hidden="true">\s*<p class="pnh"><span>[^<]+ · Kills per map, past year</span>.*?<p class="sr-only">[^<]*</p>', page.decode("utf-8"))
     return m.group(0) if m else None
 
 
@@ -698,13 +748,13 @@ def bars(pool):
 def test_map_module_renders_the_rule_subject_from_hltv_totals(srv, monkeypatch, maps_loader):
     seed(srv, monkeypatch, pm_board())
     pool = pool_html(landing_v3.build(srv, JOIN, fetch=True))
-    assert pool is not None and "<span>Mover · Kills per map, last 12 months</span>" in pool
+    assert pool is not None and "<span>Mover · Kills per map, past year</span>" in pool
     assert maps_loader.calls == ["Early", "Mover"]                    # soonest lettered kills first; Early falls short; Zeta never read
     tot = map_totals(MOVER_MAPS)
     want = sorted(((nm, tot[nm][0] / tot[nm][1]) for nm in ("Mirage", "Dust 2", "Inferno", "Ancient")), key=lambda x: (-x[1], x[0]))
-    assert bars(pool) == [(nm, f"{v:.2f}") for nm, v in want]          # top 4 pool maps by maps played, drawn highest kills/map first
+    assert bars(pool) == [(nm, f"{v:.1f}") for nm, v in want]          # top 4 pool maps by maps played, drawn highest kills/map first
     assert pool.count("<li class=top>") == 1 and "scaleX(1.000)" in pool
-    assert "Example: Mover, HLTV kills per map over the last 12 months: " in pool
+    assert "Example: Mover, HLTV kills per map over the past year: " in pool
 
 
 def test_map_module_pool_is_the_sites_current_pool(srv, monkeypatch, maps_loader):

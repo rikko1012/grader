@@ -152,7 +152,9 @@ def test_landing_v3_first_screen_passes_the_five_second_test(browser, lbase, siz
             assert page.locator(".phone").is_visible() and page.locator(".side").is_visible()
         else:
             assert not page.locator(".browser").is_visible() and inside(".ph-who") and inside(".ph-pr")
-        assert page.locator(".hero a").count() == 1                                    # one call to action in the hero
+        assert page.locator(".hero a.btn").count() == 1                                # one call to action in the hero
+        if size is not DESK:                                                           # the phone's first screen carries the proof
+            assert inside(".hero-proof") and page.locator(".hero-proof").get_attribute("href") == "/record"
         small = page.evaluate("""() => [...document.querySelectorAll('a,button')].filter(e => e.offsetParent && !e.closest('.dock')
             && !e.classList.contains('btn-nav') && !e.classList.contains('skip') && e.getBoundingClientRect().height < 44).map(e => e.textContent.trim().slice(0, 30))""")
         assert not small, small
@@ -192,7 +194,8 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
     ctx, page = open_page(browser, lbase, PHONE, "dark", motion="reduce")
     try:
         assert not page.evaluate("document.documentElement.classList.contains('motion')")
-        assert page.locator("#ss-st").text_content() == "Slip ready" and page.locator("#ss-cta").is_hidden() is True   # (no stage CTA on phones)
+        assert page.locator("#ss-st").text_content() == "Slip ready" and page.locator("#ss-cta").count() == 0   # no stage CTA (D15)
+        assert page.locator(".ss-board").is_hidden()                                   # phones: the slip alone, no ghost board
         assert page.evaluate("[...document.querySelectorAll('.rv')].every(e => getComputedStyle(e).opacity === '1')")
         assert page.evaluate("[...document.querySelectorAll('.slot .sc')].every(e => getComputedStyle(e).opacity === '1')")
     finally:
@@ -204,14 +207,23 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
         page.locator("#ss").scroll_into_view_if_needed()
         page.wait_for_function("document.getElementById('ss-st').textContent === 'Slip ready'", timeout=8000)
         page.wait_for_timeout(600)
-        assert page.locator("#ss-cta a").is_visible() and page.locator("#ss .slot.on").count() == 4
+        assert page.locator("#ss .slot.on").count() == 4 and page.locator("#ss a").count() == 0
         page.wait_for_timeout(3000)
         assert page.locator("#ss-st").text_content() == "Slip ready"                  # holds: no loop
         page.evaluate("window.scrollTo(0, 0)")
         page.wait_for_timeout(300)
         page.locator("#ss").scroll_into_view_if_needed()
-        page.wait_for_function("document.getElementById('ss').classList.contains('cta')", timeout=8000)    # replays after leaving
+        page.wait_for_function("document.getElementById('ss-st').textContent.startsWith('Building')", timeout=8000)  # replays after leaving
+        page.wait_for_function("document.getElementById('ss').classList.contains('ready')", timeout=8000)
         assert page.evaluate("[...document.querySelectorAll('.ghost')].length") == 0
+        assert not page.errors, page.errors
+    finally:
+        ctx.close()
+    ctx, page = open_page(browser, lbase, PHONE, "dark", motion="no-preference")
+    try:
+        page.evaluate("document.querySelector('#ss').scrollIntoView({block:'center'})")
+        page.wait_for_function("document.getElementById('ss').classList.contains('ready')", timeout=6000)   # legs drop in, no board
+        assert page.locator("#ss .slot.on").count() == 4 and page.evaluate("[...document.querySelectorAll('.ghost')].length") == 0
         assert not page.errors, page.errors
     finally:
         ctx.close()
@@ -287,6 +299,8 @@ def test_landing_v3_phone_bar_never_covers_content(browser, lbase):
         assert a.text_content() == "Try free for 1\u00a0day" and a.get_attribute("href") == JOIN and a.get_attribute("tabindex") is None
         assert dock.locator(".dk-t").text_content() == "1\u00a0day freeThen $24.99/mo" and a.bounding_box()["height"] >= 48
         assert page.evaluate("getComputedStyle(document.body).paddingBottom") == "76px"
+        page.wait_for_timeout(300)
+        assert not page.locator(".btn-nav").is_visible()                              # one Try on screen: the header pill steps aside
         for sel in (".slip-copy .btn", "#plan", "#final"):
             page.locator(sel).scroll_into_view_if_needed()
             page.evaluate(f"document.querySelector('{sel}').scrollIntoView({{block:'center'}})")
