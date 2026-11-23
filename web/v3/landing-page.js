@@ -1,12 +1,13 @@
 /* v3 landing (the line terminal). Inlined by landing_v3.py. Everything on the page is server-rendered at its final value; this only adds:
-   - the terminal: tap a player to open or close the full read; tap an app's line to see Scout's chance, grade, last 10 and break-even
+   - the terminal: tap a player to open or close the full read; tap an app's line to see the model estimate, grade, last 10 and break-even
      at that line (all values already in the row's markup);
    - "Pick two maps": the pooled kills per map from the two chosen maps (numbers in the markup, weighted by maps played);
-   - "Move the line": Scout's CS2 kills chance and letter as the line moves (formula, spread, cap, cut points and the per-letter record
+   - "Move the line": the grader's CS2 kills chance and letter as the line moves (formula, spread, cap, cut points and the per-letter record
      come from the server in data-gw; at the real line it prints the board's own number);
    - the hero board's chances count in once (html.motion only);
    - a failed sign-in (/?signin_error=...) shown as text; freshness said by the browser (the cached HTML only says "as of");
-   - reveal-once on view (html.motion only) and the phone dock after the hero buttons scroll away. */
+   - reveal-once on view (html.motion only) and the phone bar ("Try free for 1 day") after the hero buttons scroll away (the page keeps
+     static room for it at the bottom, so it never covers content). */
 (function () {
   'use strict';
   var D = document;
@@ -169,7 +170,7 @@
 
   safe(function () {
     var motion = D.documentElement.classList.contains('motion');
-    var targets = $$('.sec-head, .lg, .vs, .tile, .rv, .qs, .pool, .gw-box, .plan-card');
+    var targets = $$('.sec-head, .lg, .vs, .tile, .rv, .story, .step, .qs, .pool, .gw-box, .plan-card');
     if (motion && 'IntersectionObserver' in window) {
       targets.forEach(function (t) { t.classList.add('rv-on'); });
       var io = new IntersectionObserver(function (es) {

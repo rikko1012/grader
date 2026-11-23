@@ -4553,14 +4553,36 @@ def landing_page():
     return landing_next() if ui_next_default() else _LANDING["data"]
 
 
-# Owner 2026-11-16: the landing page's Join buttons go straight to Whop checkout (Monthly plan), not the member app page,
-# so an ad click lands on the payment step. LANDING_JOIN_URL overrides it without a deploy. Member paywall links keep
-# whop_auth.upgrade_url().
-LANDING_CHECKOUT_URL = "https://whop.com/checkout/plan_8d2GVuU7671mD"
+# Owner 2026-11-16: the landing page's Join buttons go straight to Whop checkout, not the member app page, so an ad click lands
+# on the payment step. Owner blueprint 2026-11-22: every landing button leads with the 1-day free trial (the Plays product's trial
+# plan, read Nov 23: "1 day free, then $24.99 per month"; trialing memberships unlock the site, whop_auth._row_paid). Member paywall
+# links keep whop_auth.upgrade_url().
+LANDING_TRIAL_URL = "https://whop.com/checkout/plan_llXQ8ebwMzfRd"      # 1 day free, then $24.99/month
+LANDING_MONTHLY_URL = "https://whop.com/checkout/plan_8d2GVuU7671mD"    # $24.99/month, no trial (not linked from the v3 landing)
+LANDING_WEEKLY_URL = "https://whop.com/checkout/plan_4zOzRl7roBDFf"     # $9.99/week (the v3 landing's Weekly card)
+LANDING_CHECKOUT_URL = LANDING_TRIAL_URL
 
 
 def landing_join_url():
+    """The flag-off landing (web/landing.html)'s Join buttons. LANDING_JOIN_URL overrides it without a deploy; it does not drive the
+    v3 landing, which has its own trial / weekly links below (so an old Monthly override can never send a "free for 1 day" button to
+    paid checkout)."""
     return (os.environ.get("LANDING_JOIN_URL") or "").strip() or LANDING_CHECKOUT_URL
+
+
+def _whop_url(name, default):
+    v = (os.environ.get(name) or "").strip()
+    return v if v.startswith("https://whop.com/") else default
+
+
+def landing_trial_url():
+    """The v3 landing's primary buttons: the free-trial checkout. LANDING_TRIAL_URL (a whop.com link) overrides it without a deploy."""
+    return _whop_url("LANDING_TRIAL_URL", LANDING_TRIAL_URL)
+
+
+def landing_weekly_url():
+    """The v3 landing's Weekly card. LANDING_WEEKLY_URL (a whop.com link) overrides it without a deploy."""
+    return _whop_url("LANDING_WEEKLY_URL", LANDING_WEEKLY_URL)
 
 
 def landing_price():
@@ -4611,7 +4633,7 @@ def landing_v3_page():
     caches, one bytes object per build). Any failure there serves the previous v3 page (web/landing.html + the v3 overlay)."""
     try:
         import landing_v3
-        return landing_v3.page(sys.modules[__name__], landing_join_url())
+        return landing_v3.page(sys.modules[__name__], landing_trial_url())
     except Exception:
         landing_page()
         return ui_v3.page(_LANDING["data"], "landing")

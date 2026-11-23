@@ -62,6 +62,7 @@ def base(monkeypatch, tmp_path):
     monkeypatch.setattr(whop_auth, "has_access", lambda *a, **k: False)
     monkeypatch.setenv("SESSION_SECRET", "landing-browser-secret")
     monkeypatch.setenv("LANDING_JOIN_URL", JOIN)
+    monkeypatch.setenv("LANDING_TRIAL_URL", JOIN)                      # the v3 landing's buttons: the free-trial checkout
     for name, val in (("_RESULTS", {}), ("_INFLIGHT", {}), ("_ENC_LOCKS", {}), ("_RES_BYTES", [0, 0.0])):
         monkeypatch.setattr(server, name, val)
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
@@ -129,13 +130,24 @@ def test_landing_v3_first_screen_targets_and_width(browser, lbase, size, theme):
     ctx, page = open_page(browser, lbase, size, theme)
     try:
         assert page.evaluate("document.documentElement.dataset.theme") == "dark"    # pinned dark: a stored light theme does not apply
-        for a in ("Get today's graded board", "Sign in with Whop"):          # both in the first phone screen (standing rule)
+        for a in ("Try Prop Grader free for 1 day", "Sign in with Whop"):   # both in the first phone screen (standing rule)
             loc = page.locator(".hero a", has_text=a).first
             assert loc.is_visible() and loc.bounding_box()["y"] + loc.bounding_box()["height"] <= size["height"], a
         assert page.locator(".hero a.btn.primary").get_attribute("href") == JOIN
-        first = page.locator(".term .tr").first                              # the first real row's chance and grade show in the first screen
-        assert first.locator(".pv").bounding_box()["y"] + first.locator(".pv").bounding_box()["height"] <= size["height"]
-        assert first.locator(".gr b").bounding_box()["y"] + first.locator(".gr b").bounding_box()["height"] <= size["height"]
+        btn, terms = page.locator(".hero a.btn.primary").bounding_box(), page.locator(".hero .terms").bounding_box()
+        assert terms["y"] >= btn["y"] + btn["height"] and terms["y"] - (btn["y"] + btn["height"]) < 24     # the price right under the button
+        assert page.locator(".hero .terms").text_content() == "Then $24.99/month. Cancel anytime from your Whop account."
+        proof = page.locator("#proof").bounding_box()                        # the proof strip: first screen too (owner blueprint)
+        assert proof["y"] + proof["height"] <= size["height"], proof
+        assert page.locator("#proof li").count() >= 3 and page.locator("#proof .pf-post").is_visible()   # no record store here: 3 tiles
+        if size is DESK:                                                     # desktop: the live sample's first row beside the headline
+            first = page.locator(".term .tr").first
+            assert first.locator(".pv").bounding_box()["y"] + first.locator(".pv").bounding_box()["height"] <= size["height"]
+            assert first.locator(".gr b").bounding_box()["y"] + first.locator(".gr b").bounding_box()["height"] <= size["height"]
+        else:                                                                # phone: 3 sample rows, each with its break-even
+            rows = page.locator(".term .tr")
+            vis = [i for i in range(rows.count()) if rows.nth(i).is_visible()]
+            assert len(vis) == 3 and all(rows.nth(i).locator(".rc small").is_visible() for i in vis)
         for sel in (".hero", "body"):
             assert page.evaluate(f"getComputedStyle(document.querySelector('{sel}')).backgroundColor") in ("rgb(8, 11, 19)", "rgb(12, 18, 34)"), sel
         small = page.evaluate("""() => [...document.querySelectorAll('a,button,summary,input')].filter(e => e.offsetParent && !e.closest('.dock')
@@ -143,6 +155,7 @@ def test_landing_v3_first_screen_targets_and_width(browser, lbase, size, theme):
         assert not small, small
         no_h_scroll(page)
         assert page.locator("#reviews .rv").count() >= 1 and page.locator("#rvq").count() == 0
+        assert page.locator(".brand").first.text_content().strip() == "PropGrader" and page.title().startswith("Prop Grader")
         assert page.locator("#term-at").text_content().startswith("checked ")    # a 3-minute-old board: the browser says so
         assert page.evaluate("document.documentElement.classList.contains('live')")
         snap(page, f"landing-c-{size['width']}-{theme}", full=True)
@@ -398,6 +411,33 @@ def test_landing_v3_a_line_without_last_10_hides_it_never_keeps_the_other_lines(
         row.locator("button.bk", has_text="12.5").click()
         assert row.locator('.dt [data-k="l10"]').text_content() == "6 of 10" and row.locator(".rc .l10").is_visible()
         assert row.locator('.dt [data-k="entry"]').text_content() == "Underdog standard 2-pick"
+        assert not page.errors, page.errors
+    finally:
+        ctx.close()
+
+
+def test_landing_v3_phone_bar_is_trial_first_and_never_covers_content(browser, lbase):
+    """The phone bar ("Try free for 1 day · then $24.99/mo") shows once the hero button scrolls away; the page keeps static room for it
+    at the bottom, so even shown at the very end it covers neither the footer nor its 21+ line."""
+    warm(lbase, 12)
+    ctx, page = open_page(browser, lbase, PHONE, "dark")
+    try:
+        dock = page.locator("#dock")
+        assert not dock.evaluate("d => d.classList.contains('show')")       # the hero button is on screen: no bar yet
+        page.locator("#tools").scroll_into_view_if_needed()
+        page.wait_for_function("document.getElementById('dock').classList.contains('show')")
+        a = dock.locator("a")
+        assert a.text_content() == "Try free for 1 day · then $24.99/mo" and a.get_attribute("href") == JOIN
+        assert a.bounding_box()["height"] >= 44
+        page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+        page.wait_for_timeout(400)
+        page.evaluate("document.getElementById('dock').classList.add('show')")   # force it shown at the very bottom
+        page.wait_for_timeout(500)
+        top = dock.bounding_box()["y"]
+        for sel in (".foot .rg", ".foot nav", ".rg-close"):
+            box = page.locator(sel).bounding_box()
+            assert box["y"] + box["height"] <= top + 0.5, (sel, box, top)
+        assert "21 and over" in page.locator(".foot .rg").text_content()
         assert not page.errors, page.errors
     finally:
         ctx.close()

@@ -11,7 +11,11 @@ real-shaped board / record / review documents built here.
   written, show no star histogram and quote product-use sentences only; the Slip Studio tile is a real slip in v3 markup;
 - "Move the line" is drawn only when its formula reproduces the seed row's own chance; its cut points match grader.grade_from_p;
 - the template's own text carries none of the owner's banned words and no static percentage;
-- the request path never computes (cached bodies only) and 700 visitors at once get one body and one ETag."""
+- the request path never computes (cached bodies only) and 700 visitors at once get one body and one ETag.
+Owner blueprint 2026-11-22 ("Prop Grader"): every primary button opens the 1-day free trial checkout, the price and cancel terms sit
+under the hero button, a Weekly card links the weekly plan, the brand is Prop Grader, the proof tiles come from live data (the only
+typed-in numbers are the owner's attributed +46U post and 6-man story), the FAQ answers the free day / bankroll / apps questions, and
+a phone bar ("Try free for 1 day") never covers content."""
 import html
 import http.client
 import json
@@ -30,7 +34,9 @@ import server
 import whop_auth
 import workspace_api
 
-JOIN = "https://whop.com/checkout/plan_test/?a=1&b=2"
+JOIN = "https://whop.com/checkout/plan_test/?a=1&b=2"           # the free-trial checkout (LANDING_TRIAL_URL) in these tests
+WEEK = "https://whop.com/checkout/plan_week_test/?w=1"          # the Weekly checkout (LANDING_WEEKLY_URL)
+OLD_JOIN = "https://whop.com/checkout/plan_monthly_old/"       # a stale LANDING_JOIN_URL: drives the flag-off page only, never v3
 
 
 def iso(dt):
@@ -103,7 +109,9 @@ def srv(monkeypatch, tmp_path):
     monkeypatch.setattr(whop_auth, "enabled", lambda: True)
     monkeypatch.setattr(whop_auth, "has_access", lambda *a, **k: False)
     monkeypatch.setenv("SESSION_SECRET", "landing-v3-secret")
-    monkeypatch.setenv("LANDING_JOIN_URL", JOIN)
+    monkeypatch.setenv("LANDING_JOIN_URL", OLD_JOIN)
+    monkeypatch.setenv("LANDING_TRIAL_URL", JOIN)
+    monkeypatch.setenv("LANDING_WEEKLY_URL", WEEK)
     monkeypatch.setenv("SCOUT_UI_V3", "1")
     monkeypatch.setenv("SCOUT_PUBLIC_RECORD", "1")
     monkeypatch.setenv("CS2_DATA_DIR", str(tmp_path))
@@ -194,7 +202,7 @@ def test_review_wall_escapes_and_features_by_rule(srv, monkeypatch):
         assert f"<b>{name}</b>" not in s
     t = text(s.encode())
     assert "★ 4.8 · 12 member reviews" in t and "Read all 12" in t and "Paying member" in t
-    assert "Written on Scout's reviews page by paying members" in html.unescape(t) and "1 to 3 stars" not in t
+    assert "Written on the site's reviews page by paying members" in html.unescape(t) and "1 to 3 stars" not in t
     assert 'class="brk"' not in s                                       # no star histogram
     assert "Love the stats and reasons behind each prop. …" in t and "guaranteed" not in t      # the hype sentence is cut, marked
     assert s.count('<a href="/reviews">') >= 3                          # every card links to the reviews page
@@ -213,7 +221,8 @@ def test_missing_inputs_drop_their_blocks_and_the_page_still_serves(srv, monkeyp
     monkeypatch.setattr(reviews, "page_on", lambda: False)
     s = build(srv).decode("utf-8")
     assert "/landing/board.webp" not in s and 'data-state="saved"' in s   # the saved board, dated, instead of live rows
-    assert "as of Nov 22, 17:53 UTC" in s and 'data-at="2026-11-22T17:53:44+00:00"' in s and 'class="gate"' not in s
+    assert "as of Nov 22, 17:53 UTC" in s and 'data-at="2026-11-22T17:53:44+00:00"' in s
+    assert "more letter-graded" not in s and "Open the full board, free for 1 day" in s      # no count off the saved board
     js = landing_v3.ASSETS["PAGE_JS"].read_text(encoding="utf-8")       # the browser keeps an old saved board relative, never a bare date
     assert "'Saved board from '" in js and "' days old'" in js
     assert 'id="record"' not in s and 'id="reviews"' not in s and "decided picks" not in s and "member reviews" not in s
@@ -242,7 +251,7 @@ def test_template_text_has_no_banned_words_or_static_numbers():
     assert "realslip-pp" not in raw and "<script src" not in raw
     assert set(re.findall(r'<img src="([^"]+)"', raw)) <= {"/landing/realslip-scout.webp"} | {
         f"/v3/art/{m}.svg" for m in ("anubis", "dust2", "ancient", "cache")}
-    assert '<span class="mark" aria-hidden="true">1T</span><b>Scout</b>' in raw
+    assert raw.count('<span class="mark" aria-hidden="true"><i></i></span><b>Prop<em>Grader</em></b>') == 2   # header + footer
 
 
 def test_an_idle_page_is_rebuilt_before_it_is_served(srv, monkeypatch):
@@ -345,7 +354,7 @@ def test_rows_open_in_place_with_the_card_read_and_the_letters_own_record(srv, m
     s = build(srv).decode("utf-8")
     rows = re.findall(r'<li class="tr[^"]*".*?</li>', s, re.S)
     assert all('aria-expanded="false"' in r and ' hidden>' in r for r in rows)        # closed: the hero shows its rows
-    assert 'Scout&#x27;s chance at exactly <span data-k="line">12.5</span>' in rows[0] or "Scout's chance at exactly <span data-k=\"line\">12.5</span>" in rows[0]
+    assert 'Model estimate at exactly <span data-k="line">12.5</span>' in rows[0]
     assert 'data-k="p">58.3<' in rows[0]
     assert 'data-k="l10">6 of 10<' in rows[0] and 'Break-even, <span data-k="entry">Underdog standard 2-pick</span>' in rows[0]
     assert "Projection" not in rows[0]                                  # no projection on the record: no "why" line, never a guess
@@ -367,7 +376,7 @@ def test_the_board_gate_counts_the_other_graded_markets_live_only(srv, monkeypat
     assert len(re.findall(r'<li class="tr[^"]*"', s)) == 4
     # 3 + 7 graded markets - 4 shown (desktop); phones show 3 rows, so their count is 1 higher
     assert '<span class="n-d">6</span><span class="n-m">7</span> more letter-graded CS2 props on this board' in s
-    assert "Open the board" in s
+    assert "Open the full board, free for 1 day" in s
     assert re.search(r'<a class="gate" href="([^"]+)"', s).group(1) == JOIN.replace("&", "&amp;")
 
 
@@ -383,7 +392,7 @@ def test_move_the_line_only_when_the_formula_reproduces_the_row(srv, monkeypatch
     seed(srv, monkeypatch, b)
     seed_bands(srv)
     s = build(srv).decode("utf-8")
-    assert 'id="gw"' in s and "projection is <b>32.4</b>" in s
+    assert 'id="gw"' in s and "projection for Zeta is <b>32.4</b>" in s
     cfg = json.loads(html.unescape(re.search(r'data-gw="([^"]+)"', s).group(1)))
     assert cfg["proj"] == 32.4 and cfg["line"] == 30.5 and "bands" not in cfg and cfg["cuts"][0] == [0.74, "A"]
     import grader as g
@@ -420,16 +429,21 @@ def test_og_image_is_served_as_png(srv, monkeypatch):
         httpd.shutdown()
 
 
-def test_page_is_pinned_dark_and_every_join_goes_to_the_checkout(srv, monkeypatch):
+def test_page_is_pinned_dark_and_every_primary_button_opens_the_free_trial(srv, monkeypatch):
     seed(srv, monkeypatch, board())
-    s = build(srv).decode("utf-8")
+    s = landing_v3.page(srv, server.landing_trial_url()).decode("utf-8")
     assert '<html lang="en" data-ui-v3="1" data-v3-page="landing" data-sc-sport="cs2" data-theme="dark">' in s
     assert "scout-theme" not in s and "prefers-color-scheme: light" not in landing_v3.ASSETS["PAGE_CSS"].read_text(encoding="utf-8")
-    joins = re.findall(r'<a [^>]*href="([^"]+)"[^>]*>(?:Get today\'s graded board|Get the board|Open the board|See plans on Whop)</a>', s)
-    assert len(joins) >= 6 and set(joins) == {JOIN.replace("&", "&amp;")}
-    assert "Join on Whop" not in s and "Membership on Whop · cancel anytime from your Whop account" in s
-    assert "See every pick, then join" in s and "Membership includes" in s
-    assert s.count("1-800-GAMBLER") == 2 and "21 and over" in s and "<details>" in s
+    trial, week = JOIN.replace("&", "&amp;"), WEEK.replace("&", "&amp;")
+    primary = re.findall(r'<a class="btn primary[^"]*" href="([^"]+)"[^>]*>([^<]+)</a>', s)
+    assert len(primary) >= 7 and {h for h, _t in primary} == {trial}, primary          # every primary button: the free trial
+    for _h, label in primary:                                                            # and each one says so
+        assert re.search(r"free", label, re.I), label
+    whop = re.findall(r'href="(https://whop\.com/[^"]+)"', s)
+    assert set(whop) == {trial, week} and whop.count(week) == 1                         # Weekly: its one card only
+    assert OLD_JOIN not in s and "plan_8d2GVuU7671mD" not in s                          # a stale LANDING_JOIN_URL never reaches v3
+    assert "Join on Whop" not in s and "See plans on Whop" not in s
+    assert s.count("1-800-GAMBLER") >= 3 and s.count("21 and over") >= 3 and "<details>" in s
 
 
 def test_saved_board_is_real_rows_with_their_own_time():
@@ -450,13 +464,14 @@ def test_slip_tile_is_a_real_slip_in_v3_markup():
     for l in doc["legs"]:
         p *= l["p"]
         assert f'{l["p"] * 100:.1f}<i>%</i>' in body and f'>{l["grade"]}</b>' in body
-    assert f"<b>{p * 100:.1f}<i>%</i></b><span>chance all {len(doc['legs'])} hit</span>" in body
+    assert f"<b>{p * 100:.1f}<i>%</i></b><span>model estimate, all {len(doc['legs'])} hit</span>" in body
     assert "shown as built" in cap and "Nov 20" not in cap and "<img" not in body       # no date older than the record
 
 
 def test_disclosure_text_is_at_least_13px():
     css = landing_v3.ASSETS["PAGE_CSS"].read_text(encoding="utf-8")
-    for sel in (".fine", ".rule", ".micro", ".rg", ".rg-close", ".term-foot", ".slip figcaption", ".rv figcaption small", ".pool .cap"):
+    for sel in (".fine", ".rule", ".micro", ".rg", ".rg-close", ".term-foot", ".slip figcaption", ".rv figcaption small", ".pool .cap",
+                ".terms", ".secure", ".story figcaption", ".pf-post small", ".proof span"):
         sizes = re.findall(r"(?:^|[},])\s*" + re.escape(sel) + r"\{[^}]*?font-size:([\d.]+)px", css, re.M)
         assert sizes and all(float(x) >= 13 for x in sizes), (sel, sizes)
 
@@ -709,3 +724,163 @@ def test_map_module_never_picks_a_match_that_has_locked(srv, monkeypatch, maps_l
             r["event"]["lock_utc"] = r["event"]["start_utc"] = iso(old + timedelta(hours=1))
     seed(srv, monkeypatch, b)
     assert pool_html(landing_v3.build(srv, JOIN, fetch=True)) is None and maps_loader.calls == []
+
+
+# ------------------------------------------------------------------------- owner blueprint 2026-11-22: Prop Grader, trial-first
+def hero(s):
+    return re.search(r'(?s)<section class="hero.*?</section>', s).group(0)
+
+
+def test_hero_button_is_the_free_trial_with_price_and_cancel_terms_right_under_it(srv, monkeypatch):
+    seed(srv, monkeypatch, board())
+    h = hero(build(srv).decode("utf-8"))
+    m = re.search(r'(?s)<div class="ctas">\s*<a class="btn primary" href="([^"]+)">([^<]+)</a>\s*</div>\s*<p class="terms">([^<]+)</p>', h)
+    assert m, "the price and cancel line sits directly under the hero button"
+    assert m.group(1) == JOIN.replace("&", "&amp;") and m.group(2) == "Try Prop Grader free for 1 day"
+    assert m.group(3) == "Then $24.99/month. Cancel anytime from your Whop account."
+    assert '<a class="tlnk" href="/record">See the public record' in h and "Sign in with Whop" in h
+    assert "Know the chance <span class=\"ac\">before you pick.</span>" in h
+    t = text(h.encode())
+    assert ("Prop Grader gives every PrizePicks and Underdog line a model estimate and a letter grade, with the reason in plain English. "
+            "CS2, LoL, NBA and NFL.") in t
+    monkeypatch.setenv("SCOUT_SOCCER_ENABLED", "1")
+    monkeypatch.setenv("SCOUT_TENNIS_ENABLED", "1")
+    assert "with the reason in plain English. CS2, LoL, NBA, NFL, soccer and tennis." in text(build(srv))
+    s = build(srv).decode("utf-8")                                      # the phone bar: trial-first, with the price
+    assert '<div class="dock" id="dock"><a class="btn primary" href="' + JOIN.replace("&", "&amp;") + '">Try free for 1 day · then $24.99/mo</a></div>' in s
+
+
+def test_pricing_cards_featured_monthly_trial_and_weekly(srv, monkeypatch):
+    seed(srv, monkeypatch, board())
+    s = build(srv).decode("utf-8")
+    sec = re.search(r'(?s)<section class="pricing sec" id="pricing".*?</section>', s).group(0)
+    feat = re.search(r'(?s)<article class="plan-card feat-plan">.*?</article>', sec).group(0)
+    wk = re.search(r'(?s)<article class="plan-card wk-plan">.*?</article>', sec).group(0)
+    tf, tw = text(feat.encode()), text(wk.encode())
+    assert "1-day free trial" in tf and "Monthly" in tf and "$24.99 /month" in tf
+    assert f'<a class="btn primary" href="{JOIN.replace("&", "&amp;")}">Start free, then $24.99/mo</a>' in feat
+    for item in ("The board", "Grades at every line", "Line gaps and moves", "Slip Studio", "Player pages", "The public record"):
+        assert f"<b>{item}</b>" in feat, item
+    assert "Weekly" in tw and "$9.99 /week" in tw and f'href="{WEEK}"' in wk and "btn primary" not in wk
+    assert "Secure checkout on Whop · cancel anytime" in text(sec.encode())
+    assert "$" not in landing_v3.TEMPLATE.read_text(encoding="utf-8")                 # prices come from PRICE_M / PRICE_W only
+    assert set(re.findall(r"\$[\d.]+", text(s.encode()))) == {"$24.99", "$9.99"}
+
+
+def test_trial_and_weekly_urls_default_to_the_verified_plans(monkeypatch):
+    for k in ("LANDING_TRIAL_URL", "LANDING_WEEKLY_URL", "LANDING_JOIN_URL"):
+        monkeypatch.delenv(k, raising=False)
+    assert server.landing_trial_url() == "https://whop.com/checkout/plan_llXQ8ebwMzfRd"        # 1 day free, then $24.99/month
+    assert server.landing_weekly_url() == "https://whop.com/checkout/plan_4zOzRl7roBDFf"       # $9.99/week
+    assert server.landing_join_url() == server.landing_trial_url()                              # the flag-off page: the trial too
+    monkeypatch.setenv("LANDING_TRIAL_URL", "javascript:alert(1)")                             # only a whop.com link overrides
+    assert server.landing_trial_url() == "https://whop.com/checkout/plan_llXQ8ebwMzfRd"
+    monkeypatch.setenv("LANDING_JOIN_URL", "https://whop.com/checkout/plan_8d2GVuU7671mD")      # an old Monthly override: flag-off only
+    assert server.landing_trial_url() == "https://whop.com/checkout/plan_llXQ8ebwMzfRd"
+
+
+def test_brand_is_prop_grader_in_title_meta_and_copy(srv, monkeypatch):
+    monkeypatch.setenv("PUBLIC_URL", "https://cs2-scout.onrender.com")
+    seed(srv, monkeypatch, board())
+    s = build(srv).decode("utf-8")
+    assert "<title>Prop Grader · Know the chance before you pick</title>" in s
+    assert '<meta property="og:site_name" content="Prop Grader">' in s
+    assert '<meta property="og:title" content="Prop Grader · Know the chance before you pick">' in s
+    assert '<meta name="twitter:title" content="Prop Grader · Know the chance before you pick">' in s
+    assert 'content="Prop Grader: know the chance before you pick"' in s
+    head = s.split("</head>")[0]
+    head = re.sub(r'https://[^"]+', "", re.sub(r"(?s)<style>.*?</style>|<script>.*?</script>", "", head))   # the site's own URL aside
+    assert not re.search(r"scout|1time|\b1T\b", head, re.I)
+    body = re.sub(r'(?s)<figure class="rv">.*?</figure>', " ", s.split("</head>", 1)[1])     # member review text stays as written
+    t = text(body.encode())
+    assert not re.search(r"\bScout\b|1time|\b1T\b", t), re.findall(r".{30}(?:Scout|1time|1T).{30}", t)
+    assert t.count("Prop Grader") >= 8
+
+
+def test_proof_strip_numbers_come_from_live_data(srv, monkeypatch):
+    seed(srv, monkeypatch, board())
+    p = re.search(r'(?s)<ul class="proof" id="proof".*?</ul>', build(srv).decode("utf-8")).group(0)
+    t = html.unescape(text(p.encode()))
+    total = 100 + 90 + 50 + 40 + 300 + 280 + 80 + 70
+    assert f"{total:,} decided picks on the public record, losses included" in t
+    assert "★ 4.8 from 12 member reviews" in t
+    assert f"{len(landing_v3.BOOKS)} Lines from PrizePicks, Underdog and more" in t
+    assert "“" not in p and "Grader 4 mans: roughly <b>+46U</b> in the past week, and Grader has only been live 2 weeks" in p
+    assert "Prop Grader on X, Nov 20" in t
+    srv._store_result(landing_v3.record_key("nba"), 200, json.dumps(record_doc("nba", 10, 5, 0)).encode(), 600, 600)
+    more = dict(REVIEWS, summary={"count": 31, "average": 4.9, "breakdown": {}})
+    srv._store_result(landing_v3._reviews_key(), 200, json.dumps(more).encode(), 600, 600)
+    t2 = html.unescape(text(re.search(r'(?s)<ul class="proof".*?</ul>', build(srv).decode("utf-8")).group(0).encode()))
+    assert f"{total - 580 + 15:,} decided picks" in t2 and "★ 4.9 from 31 member reviews" in t2     # the tiles follow the data
+    # no number typed into the proof strip's template other than the owner's attributed post (a constant, shown with its source)
+    raw = landing_v3.TEMPLATE.read_text(encoding="utf-8")
+    block = re.search(r'(?s)<ul class="proof" id="proof".*?</ul>', raw).group(0)
+    assert not re.search(r"\d", re.sub(r"\{\{[A-Z_0-9]+\}\}", "", block))
+    assert "{{OWNER_POST}}" in block and "{{OWNER_POST_BY}}" in block and "roughly" in landing_v3.OWNER_POST
+    page = text(build(srv))
+    assert page.count("+46U") == 1 and page.count("46") == 1                           # the owner's post, once, nowhere else
+
+
+def test_proof_tiles_drop_without_their_data(srv, monkeypatch):
+    monkeypatch.setenv("SCOUT_PUBLIC_RECORD", "0")
+    monkeypatch.setattr(reviews, "page_on", lambda: False)
+    s = build(srv).decode("utf-8")
+    p = re.search(r'(?s)<ul class="proof" id="proof".*?</ul>', s).group(0)
+    assert "decided picks" not in p and "member reviews" not in p and "★" not in p
+    assert "+46U" in p and "Lines from PrizePicks, Underdog and more" in text(p.encode())
+
+
+def test_members_section_has_the_attributed_six_man_story_and_real_reviews_only(srv, monkeypatch):
+    seed(srv, monkeypatch, board())
+    s = build(srv).decode("utf-8")
+    sec = re.search(r'(?s)<section class="proofwall sec" id="members".*?</section>', s).group(0)
+    st = re.search(r'(?s)<figure class="story">.*?</figure>', sec).group(0)
+    assert "Shared by Prop Grader on X" in st and "A member ran his first ever 6 man with Grader and cashed." in st
+    assert len(re.findall(r'<figure class="rv">', sec)) == 3                             # three real reviews (reviews.py answer)
+    names = re.findall(r"<figcaption><b>([^<]+)</b>", sec)
+    assert set(names) <= {r["name"] for r in REVIEWS["reviews"]}                         # no invented reviewer
+    monkeypatch.setattr(reviews, "page_on", lambda: False)                              # no reviews: the story stays, attributed
+    sec = re.search(r'(?s)<section class="proofwall sec" id="members".*?</section>', build(srv).decode("utf-8")).group(0)
+    assert '<figure class="rv">' not in sec and "Shared by Prop Grader on X" in sec and 'id="reviews"' not in sec
+
+
+def test_faq_answers_the_free_day_bankroll_and_apps_questions(srv, monkeypatch):
+    seed(srv, monkeypatch, board())
+    t = text(re.search(r'(?s)<section class="faq.*?</section>', build(srv).decode("utf-8")).group(0).encode())
+    assert ("What happens after my free day? Your membership renews at $24.99/month unless you cancel from your Whop account "
+            "before the free day ends.") in t
+    assert "Do I need a big bankroll? No. Grades are chances, not promises" in t and "21 and over" in t and "1-800-GAMBLER" in t
+    assert f"Which apps does it cover? The boards carry lines from {landing_v3._list(list(landing_v3.BOOKS))}" in t
+    for q in ("Is this a picks group?", "How do I know the grades are honest?", "Will I win every day?", "Is esports an afterthought?",
+              "Can I cancel?"):
+        assert q in t, q
+
+
+def test_sections_follow_the_blueprint_order_and_wording(srv, monkeypatch):
+    seed(srv, monkeypatch, board())
+    s = build(srv).decode("utf-8")
+    order = ['id="hero-title"', 'id="proof"', 'id="terminal"', 'id="how"', 'id="tools"', 'id="hand-title"', 'id="record"',
+             'id="members"', 'id="pricing"', 'id="faq"', 'id="close-title"']
+    at = [s.index(x) for x in order]
+    assert at == sorted(at), order
+    t = text(s.encode())
+    assert "Pick your app and sport" in t and "See the grade and model estimate at your exact line, with the why" in t
+    assert "Build your slip in Slip Studio and check the record after" in t
+    assert f"One row instead of {len(landing_v3.BOOKS)} apps." in t and "By hand vs Grader" in t
+    assert "Saved before the game. Scored after. Losses included." in t
+    assert "Start my free day" in t and "Know the chance before you pick. Try it free for 1 day" in t
+    css = landing_v3.ASSETS["PAGE_CSS"].read_text(encoding="utf-8")                     # the phone bar's room is static CSS
+    assert re.search(r"@media \(max-width:859px\)\{body\{padding-bottom:calc\(68px \+ env\(safe-area-inset-bottom\)\)\}\}", css)
+
+
+def test_built_page_keeps_the_banned_words_out(srv, monkeypatch):
+    """The ad-safe list on the whole built page's own words (Python constants and fills included), member review quotes and the
+    record's own rule sentences aside. Grader numbers are a model estimate: never a hit rate, a lock or a guarantee."""
+    seed(srv, monkeypatch, board())
+    s = build(srv).decode("utf-8")
+    s = re.sub(r'(?s)<figure class="rv">.*?</figure>|<p class="rule">.*?</p>', " ", s)
+    t = text(s.encode()).lower()
+    for bad in (r"guarantee", r"\block", r"win[- ]rate", r"hit rate", r"accura", r"profit", r"\broi\b", r"\bbeat\b", r"\+ev\b",
+                r"\bstake", r"bovada", r"thunderpick", r"free money", r"sure thing", r"can'?t lose", r"\bunits?\b",
+                r"financial advice", r"not advice", r"\bheld\b", r"\bmaybe\b", r"provisional", r"unconfirmed"):
+        assert not re.search(bad, t), bad

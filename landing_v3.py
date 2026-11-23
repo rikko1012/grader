@@ -69,6 +69,20 @@ _PRODUCT = re.compile(r"stat|breakdown|reason|navigat|design|analy[sz]|matchup|i
                       r"\bboard\b|explain|\bdata\b", re.I)
 FEATURE_N = 3
 
+# Pricing and the trial (owner blueprint, Nov 22 2026). Read from the public Whop checkout pages on Nov 23: the free-trial plan
+# (server.LANDING_TRIAL_URL) says "1 day free, then $24.99 per month"; Monthly plan_8d2GVuU7671mD = $24.99/month; Weekly
+# plan_4zOzRl7roBDFf = $9.99/week. All three are on the Plays product, whose live memberships (trialing included) unlock the site
+# (whop_auth._row_paid). These are the only prices on the page; the template itself carries no "$" (tests/test_landing_v3.py).
+PRICE_M = "$24.99"
+PRICE_W = "$9.99"
+# The only numbers on the page that do not come from the site's own data: two posts the owner shared, word for word, always shown
+# with their attribution (owner blueprint: "Grader 4 mans: roughly +46U ..." from the Prop Grader X account, Nov 20 2026, and the
+# member 6-man story). Nothing else may be typed in (tests/test_landing_v3.py checks the page's other numbers come from data).
+OWNER_POST = "Grader 4 mans: roughly <b>+46U</b> in the past week, and Grader has only been live 2 weeks"
+OWNER_POST_BY = "Prop Grader on X, Nov 20"
+OWNER_STORY = "A member ran his first ever 6 man with Grader and cashed."
+OWNER_STORY_BY = "One member, one night: a result, not a promise."
+
 _STATE = {"page": None, "built": 0.0, "key": None, "board": (None, None), "last": {}}
 _LOCK = threading.RLock()
 _TPL = {"mtime": None, "text": ""}
@@ -325,7 +339,7 @@ def minis(board):
         p = _pct((rs[0].get("scout") or {}).get("p_side"))
         if be and p and "BE" not in out:
             out["BE"] = (f'<span class="mt big" style="--p:{esc(p)}"><i></i><u style="--b:{esc(be)}"></u></span>'
-                         f'<span class="lbl"><b>Scout {esc(p)}%</b><b>Break-even {esc(be)}%</b></span>'
+                         f'<span class="lbl"><b>Model estimate {esc(p)}%</b><b>Break-even {esc(be)}%</b></span>'
                          f'<span class="num">{esc((rs[0].get("parity") or {}).get("entry") or "")}</span>' + _who(rs[0]))
     return out
 
@@ -338,7 +352,7 @@ def hand_minis(board):
     rs = pick[0][0]
     p, be = _pct((rs[0].get("scout") or {}).get("p_side")), _pct((rs[0].get("parity") or {}).get("be"))
     bar = (f'<span class="mt big" style="--p:{esc(p)}" aria-hidden="true"><i></i><u style="--b:{esc(be)}"></u></span>'
-           f'<span class="lbl"><b>Scout {esc(p)}%</b><b>Break-even {esc(be)}%</b></span>') if p and be else ""
+           f'<span class="lbl"><b>Model estimate {esc(p)}%</b><b>Break-even {esc(be)}%</b></span>') if p and be else ""
     return _span_cells(rs), bar
 
 
@@ -361,7 +375,7 @@ def _detail(i, lead, opened):
     app = esc(of.get("platform_label") or "")
     hid = lambda v: "" if v else " hidden"
     cells = [f'<div><dt>Grade at this line</dt><dd><b class="gt {_gcls(sc.get("grade"))}" data-k="g">{esc(sc.get("grade") or "–")}</b></dd></div>',
-             f'<div><dt>Scout&#x27;s chance at exactly <span data-k="line">{line}</span></dt><dd class="big"><b data-k="p">{esc(p)}</b>%</dd></div>']
+             f'<div><dt>Model estimate at exactly <span data-k="line">{line}</span></dt><dd class="big"><b data-k="p">{esc(p)}</b>%</dd></div>']
     if isinstance(proj, (int, float)):
         cells.append(f'<div><dt>Why</dt><dd>Projection <b>{float(proj):.1f}</b> vs line <b data-k="line">{line}</b></dd></div>')
     l10s = f"{l10[0]} of {l10[1]}" if l10 else ""
@@ -742,9 +756,20 @@ def wall(doc):
     rv = (doc or {}).get("reviews") or []
     days = sorted({f"{_day(x.get('created'))}, {_ts(x.get('created')).year}" for x in rv if _ts(x.get("created"))})
     when = f" All {n} were posted on {days[0]}." if len(rv) == n and len(days) == 1 else ""
-    note = ("Written on Scout's reviews page by paying members (sign-in with Whop checks the membership), one review each. "
+    note = ("Written on the site's reviews page by paying members (sign-in with Whop checks the membership), one review each. "
             "Every review is published, whatever its rating." + when)
     return head, "".join(cards), n, note
+
+
+def rating_tile(doc):
+    """The hero proof tile for the reviews: the live average and count (the average only from 10 reviews, as on the wall)."""
+    s = (doc or {}).get("summary") or {}
+    n, avg = int(s.get("count") or 0), s.get("average")
+    if not n:
+        return ""
+    if n >= 10 and avg is not None:
+        return f'<b class="star">★ {float(avg):.1f}</b><span>from {n} member reviews</span>'
+    return f'<b>{n}</b><span>member reviews, all published</span>'
 
 
 # --------------------------------------------------------------------------------------------------------------------- the slip
@@ -780,7 +805,7 @@ def slip_card():
     book = _BOOK.get(doc.get("book"), str(doc.get("book") or "").title())
     n = len(legs)
     head = (f'<div class="sl-h"><span class="sl-k">{n}-pick slip · {esc(book)}</span>'
-            f'<p class="sl-all"><b>{p_all * 100:.1f}<i>%</i></b><span>chance all {n} hit</span></p>'
+            f'<p class="sl-all"><b>{p_all * 100:.1f}<i>%</i></b><span>model estimate, all {n} hit</span></p>'
             f'<span class="mt big" style="--p:{p_all * 100:.1f}" aria-hidden="true"><i></i></span></div>')
     cap = f"The latest {n}-pick slip built in Slip Studio when this sample was saved, shown as built (legs, lines, chances, grades)."
     return head + f'<ol class="sl-legs">{"".join(rows)}</ol>', cap
@@ -826,8 +851,24 @@ def public_base():
     return v if re.match(r"^https://[A-Za-z0-9.-]+(:\d+)?$", v) else ""
 
 
+def weekly_url(srv):
+    try:
+        return srv.landing_weekly_url()
+    except Exception:
+        return WEEKLY_URL
+
+
+WEEKLY_URL = "https://whop.com/checkout/plan_4zOzRl7roBDFf"
+
+
+def _sport_sub(sp):
+    """'CS2, LoL, NBA, NFL, soccer and tennis' (mid-sentence: soccer / tennis lower case)."""
+    return _list([LABEL[s] if s in ("cs2", "lol", "nba", "nfl") else LABEL[s].lower() for s in sp])
+
+
 def build(srv, join_url, fetch=True):
-    """The page bytes from the inputs above. Pure assembly: escaping, no computation beyond counting."""
+    """The page bytes from the inputs above. Pure assembly: escaping, no computation beyond counting. join_url = the free-trial
+    checkout every primary button opens (server.landing_trial_url)."""
     inp = _inputs(srv, fetch)
     sp = sports_on()
     board, saved = inp["board"], False
@@ -850,7 +891,14 @@ def build(srv, join_url, fetch=True):
     base = public_base()
     unrec = [LONG[s].lower() for s in sp if s not in SPORTS and s in LONG]
     fill = {
-        "JOIN_URL": esc(join_url),
+        "TRIAL_URL": esc(join_url),
+        "WEEKLY_URL": esc(weekly_url(srv)),
+        "PRICE_M": esc(PRICE_M), "PRICE_W": esc(PRICE_W),
+        "OWNER_POST": OWNER_POST, "OWNER_POST_BY": esc(OWNER_POST_BY),
+        "OWNER_STORY": esc(OWNER_STORY), "OWNER_STORY_BY": esc(OWNER_STORY_BY),
+        "SPORT_SUB": esc(_sport_sub(sp)),
+        "BOOK_TOP": esc(", ".join(BOOKS[:2])),
+        "RV_TILE": rating_tile(inp["reviews"]),
         "SPORT_CHIPS": "".join(f'<li data-sport="{s}">{LABEL[s]}</li>' for s in sp),
         "SPORT_LIST": esc(_list([LONG[s] for s in sp])),
         "SPORT_SHORT": esc(_list([LABEL[s] for s in sp])),
@@ -889,7 +937,7 @@ def build(srv, join_url, fetch=True):
     }
     out = _template()
     # optional blocks: <!--if:NAME--> ... <!--/if:NAME--> kept only when NAME has content
-    for name, on in (("TERM", nrows > 0), ("NOTERM", nrows == 0), ("SAVED", saved), ("MORE", more > 0), ("LEDGER", bool(cells)),
+    for name, on in (("TERM", nrows > 0), ("NOTERM", nrows == 0), ("SAVED", saved), ("MORE", more > 0), ("NOMORE", more <= 0), ("HANDBE", bool(hb)), ("LEDGER", bool(cells)),
                      ("REVIEWS", bool(nrv)), ("TOTAL", bool(total)), ("RVN", bool(nrv)), ("GW", bool(gw)), ("POOL", bool(pm)), ("EV", tools[1]),
                      ("ARB", tools[0]), ("GAP", "GAP" in mi), ("NOGAP", "GAP" not in mi), ("MOVE", "MOVE" in mi), ("BE", "BE" in mi), ("BASE", bool(base)),
                      ("SLIP", bool(slip)), ("UNREC", bool(unrec and rec_names)), ("RVREST", nrv - nfeat > 0)):
@@ -900,7 +948,7 @@ def build(srv, join_url, fetch=True):
 
 def page(srv, join_url):
     """The current page bytes (one object per build). Request path: never computes; at most one background rebuild runs."""
-    key = (join_url, " ".join(sports_on()), _mt(), os.environ.get("SCOUT_PUBLIC_RECORD"), os.environ.get("PUBLIC_URL"))
+    key = (join_url, weekly_url(srv), " ".join(sports_on()), _mt(), os.environ.get("SCOUT_PUBLIC_RECORD"), os.environ.get("PUBLIC_URL"))
     pg = _STATE["page"]
     if pg is None or _STATE["key"] != key:
         with _LOCK:

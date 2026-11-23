@@ -210,12 +210,14 @@ def test_landing_bytes_are_one_object_per_version(srv, monkeypatch):
 
 
 def test_landing_join_goes_to_checkout_by_default(srv, monkeypatch):
-    """Owner 2026-11-16: every Join button goes to Whop checkout (Monthly plan), never the member app page that paywalls an
-    ad visitor; the member upgrade link (WHOP_UPGRADE_URL) does not change it."""
+    """Owner 2026-11-16: every Join button goes to Whop checkout, never the member app page that paywalls an ad visitor; the
+    member upgrade link (WHOP_UPGRADE_URL) does not change it. Owner blueprint 2026-11-22: the checkout is the 1-day free trial
+    (then $24.99/month), no longer paid Monthly checkout straight away."""
     monkeypatch.delenv("LANDING_JOIN_URL")
     monkeypatch.setenv("WHOP_UPGRADE_URL", "https://whop.com/1timeesports/exp_W6a3m1Ps4dxbCG/app/")
     s = landing().decode("utf-8")
-    assert s.count('href="https://whop.com/checkout/plan_8d2GVuU7671mD"') >= 3 and "exp_W6a3m1Ps4dxbCG" not in s
+    assert s.count('href="https://whop.com/checkout/plan_llXQ8ebwMzfRd"') >= 3 and "exp_W6a3m1Ps4dxbCG" not in s
+    assert "plan_8d2GVuU7671mD" not in s
 
 
 def test_landing_ad_safe_wording(srv):
