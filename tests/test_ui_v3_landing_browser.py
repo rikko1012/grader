@@ -217,6 +217,23 @@ def test_landing_v3_motion_plays_once_and_reduced_motion_shows_final_frames(brow
         ctx.close()
 
 
+def test_landing_v3_inside_text_shows_with_motion_and_no_map_panel(browser, lbase):
+    """No HLTV in these tests: row B has no panel to reveal, so its text must not wait for one."""
+    warm(lbase, 12)
+    for size in (DESK, PHONE):
+        ctx, page = open_page(browser, lbase, size, "dark", motion="no-preference")
+        try:
+            assert page.locator(".kbars").count() == 0
+            for sel in (".irow.flip .itxt", ".irow:not(.flip) .itxt"):
+                page.locator(sel).scroll_into_view_if_needed()
+                page.wait_for_timeout(900)
+                assert page.evaluate(f"getComputedStyle(document.querySelector('{sel}')).opacity") == "1", sel
+            box = page.locator(".irow.flip .itxt").bounding_box()
+            assert box["x"] < size["width"] / 2                                      # un-flipped to the left when it stands alone
+        finally:
+            ctx.close()
+
+
 def test_landing_v3_faq_is_an_accessible_accordion(browser, lbase):
     warm(lbase, 12)
     ctx, page = open_page(browser, lbase, DESK, "dark", motion="no-preference")

@@ -667,6 +667,8 @@ def ledger(record):
             continue
         t = d["totals"]
         w, l, p = int(t.get("wins") or 0), int(t.get("losses") or 0), int(t.get("pushes") or 0)
+        if not (w + l):
+            continue                                     # nothing decided yet: the row is left out, never shown as 0 / 0
         total += w + l
         a = _ts(d.get("as_of"))
         asof = a if asof is None or (a and a < asof) else asof

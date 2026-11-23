@@ -36,7 +36,7 @@
 <header class="nav">
   <div class="wrap nav-in">
     <a class="brand" href="/" aria-label="Prop Grader home"><span class="mark" aria-hidden="true">1T</span><span translate="no">Prop Grader</span></a>
-    <nav class="links" aria-label="Sections"><a href="#how">How it works</a><a href="#inside">Inside</a><!--if:SLIP--><a href="#slip">Slip Studio</a><!--/if:SLIP--><!--if:LEDGER--><a href="#record">Record</a><!--/if:LEDGER--><a href="#pricing">Pricing</a></nav>
+    <nav class="links" aria-label="Sections"><a href="#how">How it works</a><!--if:INSIDE--><a href="#inside">Inside</a><!--/if:INSIDE--><!--if:SLIP--><a href="#slip">Slip Studio</a><!--/if:SLIP--><!--if:LEDGER--><a href="#record">Record</a><!--/if:LEDGER--><a href="#pricing">Pricing</a></nav>
     <div class="nav-cta"><a class="tl" href="/auth/login">Sign in</a><a class="btn btn-nav" href="{{TRIAL_URL}}">Try free</a></div>
   </div>
 </header>
@@ -127,6 +127,7 @@
   </div>
 </section>
 
+<!--if:INSIDE-->
 <section class="sec inside" id="inside" aria-labelledby="inside-title">
   <div class="wrap">
     <div class="hd-c">
@@ -163,6 +164,8 @@
     </div>
   </div>
 </section>
+
+<!--/if:INSIDE-->
 
 <!--if:SLIP-->
 <section class="sec slip" id="slip" aria-labelledby="slip-title">

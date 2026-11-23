@@ -204,6 +204,7 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 .ipanel{grid-column:6 / span 7}
 .irow.flip .itxt{grid-column:8 / span 5;padding:0 0 0 40px;grid-row:1}
 .irow.flip .ipanel{grid-column:1 / span 7;grid-row:1}
+.irow.flip:not(:has(.ipanel)) .itxt{grid-column:1 / span 6;padding:0}
 .itxt p{margin-top:16px;color:var(--color-text-body);font-size:18px;line-height:28px;max-width:44ch}
 .panel{background:var(--color-surface);border:1px solid var(--color-border);border-radius:12px;padding:24px}
 .pnh{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--color-text-body);font-size:14px;line-height:1.4;margin-bottom:20px}
@@ -373,7 +374,7 @@ h3{font-size:30px;line-height:1.2;font-weight:600;letter-spacing:-.02em;text-wra
 /* reveals (html.motion only; never hero content) */
 .motion .rv{opacity:0;transform:translateY(14px);transition:opacity var(--dur-reveal) var(--ease-out),transform var(--dur-reveal) var(--ease-out)}
 .motion .rv.in{opacity:1;transform:none}
-.motion .irow .itxt{opacity:0;transform:translateY(14px);transition:opacity var(--dur-reveal) var(--ease-out) 80ms,transform var(--dur-reveal) var(--ease-out) 80ms}
+.motion .irow:has(.rv) .itxt{opacity:0;transform:translateY(14px);transition:opacity var(--dur-reveal) var(--ease-out) 80ms,transform var(--dur-reveal) var(--ease-out) 80ms}
 .motion .irow.in .itxt{opacity:1;transform:none}
 .motion .kb>span{transform:scaleX(0);transition:transform var(--dur-reveal) var(--ease-out)}
 .motion .rv.in .kb>span{transform:none}

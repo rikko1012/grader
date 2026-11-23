@@ -334,6 +334,7 @@ def test_missing_inputs_drop_their_blocks_and_the_page_still_serves(srv, monkeyp
     s = build(srv).decode("utf-8")
     assert 'class="browser"' in s and "Nov 22, 2026" in s                  # the saved board, dated, instead of live rows
     assert 'id="record"' not in s and "decided picks" not in s and "member reviews" not in s and 'class="rqs"' not in s
+    assert 'id="inside"' not in s and 'href="#inside"' not in s           # one-app saved board, no map panel: no Inside section at all
     assert '<ul class="kbars">' not in s                    # the saved board never drives the map panel
     assert "{{" not in s and "<!--if:" not in s and ">0<" not in s
     assert s.count(f'href="{JOIN.replace("&", "&amp;")}"') == 7
@@ -774,7 +775,11 @@ def test_map_module_is_omitted_cleanly(srv, monkeypatch, maps_loader, case):
     if case == "error":
         assert landing_v3.POOL_TRIES > 1 and calls == 1
     assert pool_html(page) is None and 'class="kbars"' not in s and not re.search(r"\{\{[A-Z_0-9]+\}\}", s)
-    assert "Built for CS2, not bolted on." in s and 'class="browser"' in s
+    assert 'class="browser"' in s
+    if case == "saved_board":                                            # one-app saved board, no panel: no Inside section
+        assert 'id="inside"' not in s
+    else:
+        assert "Built for CS2, not bolted on." in s
 
 
 def test_map_module_never_shows_zero_for_a_missing_value(srv, monkeypatch, maps_loader):
@@ -837,3 +842,20 @@ def test_map_module_never_picks_a_match_that_has_locked(srv, monkeypatch, maps_l
             r["event"]["lock_utc"] = r["event"]["start_utc"] = iso(old + timedelta(hours=1))
     seed(srv, monkeypatch, b)
     assert pool_html(landing_v3.build(srv, JOIN, fetch=True)) is None and maps_loader.calls == []
+
+
+def test_inside_keeps_the_cs2_row_as_text_when_only_the_gap_panel_exists(srv, monkeypatch):
+    seed(srv, monkeypatch, board())                                       # no HLTV here: row B has no panel
+    s = build(srv).decode("utf-8")
+    assert 'id="inside"' in s and 'href="#inside"' in s and "Built for CS2, not bolted on." in s and '<ul class="kbars">' not in s
+    css = landing_v3.ASSETS["PAGE_CSS"].read_text(encoding="utf-8")
+    assert ".motion .irow:has(.rv) .itxt{opacity:0" in css and ".irow.flip:not(:has(.ipanel)) .itxt" in css
+
+
+def test_a_sport_with_nothing_decided_is_left_out_never_zero(srv, monkeypatch):
+    seed(srv, monkeypatch, board(), recs=False)
+    for sp, t in (("cs2", (100, 90, 2)), ("lol", (50, 40, 1)), ("nba", (300, 280, 3)), ("nfl", (0, 0, 0))):
+        srv._store_result(landing_v3.record_key(sp), 200, json.dumps(record_doc(sp, *t)).encode(), 600, 600)
+    s = build(srv).decode("utf-8")
+    rec = block(s, 'id="record"')
+    assert "<span>NFL</span>" not in rec and ">0<" not in rec and 'data-to="860"' in s
