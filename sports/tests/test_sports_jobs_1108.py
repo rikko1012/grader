@@ -592,6 +592,7 @@ def test_settle_no_post_writes_the_same_settlements_and_post_does_the_rest(monke
     full_dir, split_dir = tmp_path / "full", tmp_path / "split"
     results = {}
     from sports.model import learning
+    monkeypatch.setattr(learning, "now_utc", lambda: "2026-10-24T06:00:00Z")   # the 30-day scorecard window follows the test's clock, not the wall clock (failed from Nov 23)
     real_ws, real_ls = snapshots.write_results, learning.on_settled
     for d, no_post in ((full_dir, False), (split_dir, True)):
         d.mkdir()
