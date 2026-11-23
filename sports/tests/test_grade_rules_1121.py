@@ -498,3 +498,38 @@ def test_featured_leg_key_is_absent_unless_featured():
     star = pool.Leg(**dict(base, leg_id="l2", record_id="r2", featured=True))
     back = pickle.loads(pickle.dumps(star, protocol=5))
     assert back["featured"] is True and builder.leg_view(back)["featured"] is True
+
+
+DEFAULT_OFF = {"NBA_MVLEAN1": lambda: grade_rules.mvlean_on("nba"), "SPORTS_PP_ONESIDED": grade_rules.pp_onesided_on,
+               "SPORTS_GP_SIDE_FIX": grade_rules.side_fix_on, "NBA_BEST_PROP": lambda: grade_rules.best_prop_on("nba"),
+               "SPORTS_LATEST_LINE": lambda: grade_rules.latest_line_on("nba")}
+
+
+@pytest.mark.parametrize("value", ["none", "disabled", "n", "2", "", "  ", "of"])
+def test_f3_unknown_value_never_turns_an_untested_rule_on(monkeypatch, value):
+    """sweep 2026-11-23 F3: the flags were a denylist, so a mistyped value ('none', 'disabled', '2') switched on an untested
+    grade rule; default-off flags are now an allowlist like sports/model/ac2.enabled()."""
+    for name, on in DEFAULT_OFF.items():
+        monkeypatch.setenv(name, value)
+        assert not on(), (name, value)
+        monkeypatch.delenv(name)
+    monkeypatch.setenv("SPORTS_LATEST_LINE", "1")
+    monkeypatch.setenv("SPORTS_LATEST_LINE_NFL", value)
+    assert not grade_rules.latest_line_on("nfl")
+
+
+@pytest.mark.parametrize("value", ["1", "true", "YES", " on "])
+def test_f3_explicit_yes_still_turns_rules_on(monkeypatch, value):
+    for name, on in DEFAULT_OFF.items():
+        monkeypatch.setenv(name, value)
+        assert on(), (name, value)
+        monkeypatch.delenv(name)
+
+
+def test_f3_side_hold_empty_keeps_the_default_and_explicit_off_rolls_back(monkeypatch):
+    for value in ("", "  ", "none", "1"):
+        monkeypatch.setenv("SPORTS_PP_SIDE_HOLD", value)
+        assert grade_rules.pp_side_hold_on(), value
+    for value in ("0", "false", "No", "OFF"):
+        monkeypatch.setenv("SPORTS_PP_SIDE_HOLD", value)
+        assert not grade_rules.pp_side_hold_on(), value

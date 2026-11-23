@@ -378,15 +378,37 @@ def board_player_ids(con, league, now):
     return sorted(out)
 
 
-def ingest_history(con, league, player_ids, observed_at=None, seasons=2, cache_only=False, max_players=400):
+HISTORY_BUDGET_S = 720.0      # the scheduler kills the history job at 900 s (sports/scheduler.py): stop starting players well before
+
+
+def history_budget_s():
+    """SPORTS_HISTORY_BUDGET_S overrides; a missing, unreadable or non-positive value keeps the default."""
+    try:
+        v = float(os.environ.get("SPORTS_HISTORY_BUDGET_S") or HISTORY_BUDGET_S)
+    except ValueError:
+        return HISTORY_BUDGET_S
+    return v if v > 0 else HISTORY_BUDGET_S
+
+
+def ingest_history(con, league, player_ids, observed_at=None, seasons=2, cache_only=False, max_players=400, deadline=None):
     """Game logs for these players -> typed records (store.put_many; invalid ones quarantined). Idempotent: same content
-    is a duplicate, a corrected game-log value is a revision."""
+    is a duplicate, a corrected game-log value is a revision. deadline (time.monotonic()): no new player starts after it;
+    the rest keep their place at the front of the rotation (only players actually read are stamped checked)."""
     observed_at = observed_at or now_utc()
     c = {"players": 0, "unchanged": 0, "no_log": 0, "errors": 0, "inserted": 0, "duplicate": 0, "revision": 0, "invalid": 0}
     # least recently checked first (never checked first of all), so small frequent runs cover every board player
     # instead of re-reading the same first max_players in id order
     order = sorted(player_ids, key=lambda p: (cache.get("ui:gamelog_checked", p) or "", p))
-    for pid in order[:max_players]:
+    batch = order[:max_players]
+    t0 = time.monotonic()
+    for i, pid in enumerate(batch):
+        if deadline is not None and time.monotonic() >= deadline:
+            # sweep 2026-11-23 (nbanfl-3 / SO-3): five runs in a row hit the 900 s job timeout and were killed; a run now
+            # stops starting players at its wall-clock budget and exits cleanly with what it finished
+            c["budget_stopped"] = len(batch) - i
+            break
+        if i and i % 10 == 0:
+            sys.stderr.write(f"  history {league}: {i}/{len(batch)} players in {time.monotonic() - t0:.0f} s\n")
         cache.put("ui:gamelog_checked", pid, observed_at)
         aid = pid.rsplit(":", 1)[-1]
         try:
@@ -2053,6 +2075,7 @@ def main(argv=None):
         s.add_argument("--no-history", action="store_true")
         s.add_argument("--no-results", action="store_true", help="leave results.json to the settle job")
     a = p.parse_args(argv)
+    t_start = time.monotonic()
     flags.require("SPORTS_INGEST")
     now = utc(a.now) if a.now else now_utc()
     out = {}
@@ -2061,12 +2084,31 @@ def main(argv=None):
             if lg not in LEAGUES:
                 raise SystemExit(f"league {lg}: nba or nfl")
             if a.cmd == "history":
-                out[lg] = ingest_history(con, lg, board_player_ids(con, lg, now), cache_only=a.cache_only,
-                                         max_players=a.max_players)
+                # wall-clock budget from process start (store open + the board scan included), split so the first league
+                # never uses the second's share; each league may also use what an earlier one left
+                i = a.leagues.index(lg)
+                deadline = t_start + history_budget_s() * (i + 1) / len(a.leagues)
+                t0 = time.monotonic()
+                ids = board_player_ids(con, lg, now)
+                sys.stderr.write(f"  history {lg}: board_player_ids {len(ids)} players in {time.monotonic() - t0:.1f} s\n")
+                t0 = time.monotonic()
+                out[lg] = ingest_history(con, lg, ids, cache_only=a.cache_only, max_players=a.max_players, deadline=deadline)
+                sys.stderr.write(f"  history {lg}: {out[lg]} in {time.monotonic() - t0:.1f} s\n")
             else:
                 out[lg] = build(con, lg, now=now, history=not a.no_history, results=not a.no_results)
     print(json.dumps(out, indent=1, default=str))
+    if a.cmd == "history" and history_starved(out):
+        # the budget ran out before a single player was read (e.g. the board scan alone used it): a failed run, so the
+        # scheduler keeps counting failures and job_failing stays up instead of a clean exit hiding a job that refreshes nothing
+        sys.stderr.write("  history: budget used up before any player was read" + "\n")
+        raise SystemExit(2)
     return out
+
+
+def history_starved(out):
+    """True when a history run read no player in any league and stopped on its budget."""
+    tried = sum(c.get(k, 0) for c in out.values() for k in ("players", "unchanged", "no_log", "errors"))
+    return tried == 0 and any(c.get("budget_stopped") for c in out.values())
 
 
 if __name__ == "__main__":

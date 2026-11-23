@@ -45,7 +45,14 @@ def _eligible(offer, sport, now):
         return False
 
 
-def _forecast(o, research, forecasts):
+PUBLICATION_FRESH_S = 86400      # a forecasts.json publication older than this is not read (the publisher stopped)
+
+
+def _forecast(o, research, forecasts, published_at=None):
+    """The saved forecast of this exact offer revision, or None. A frozen forecast keeps its first-issue made_at for as long as
+    its offer revision is unchanged (sports/expansion_forecasts.publish republishes it), so its age is not a freshness test:
+    sweep 2026-11-23 ST-1 - letters disappeared 24 h after first issue even before kickoff. The publication's own time
+    (forecasts_at, when the sports service sends it) is; made_at must still be in the past and before the start."""
     key = hashlib.sha256(json.dumps([o[k] for k in ('sport','platform','offer_id','revision')],
         sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
     f = forecasts.get(key) or {}
@@ -54,7 +61,9 @@ def _forecast(o, research, forecasts):
                 any(f[k] != o[k] for k in ('sport','stat','scope','line','platform','offer_id','start')) or
                 f['offer_revision'] != o['revision'] or f['side'] not in ('over','under') or
                 (f['side'] not in o['sides'] and f.get('grade') is not None) or
-                not 0 <= time.time()-datetime.fromisoformat(f['made_at'].replace('Z','+00:00')).timestamp() < 86400 or
+                not 0 <= time.time()-datetime.fromisoformat(f['made_at'].replace('Z','+00:00')).timestamp() or
+                (published_at is not None and
+                 not 0 <= time.time()-datetime.fromisoformat(str(published_at).replace('Z','+00:00')).timestamp() < PUBLICATION_FRESH_S) or
                 datetime.fromisoformat(f['made_at'].replace('Z','+00:00')) >= datetime.fromisoformat(o['start'].replace('Z','+00:00'))):
             return None
         probabilities = [f['p_'+s] for s in ('over','under','push')]
@@ -161,7 +170,7 @@ def _build(srv, sport):
         # offered prop graded) a current lettered forecast for this exact revision (thin-history / player-only models).
         if not research.get('identity'):
             continue
-        forecast = _forecast(o, research, doc.get('forecasts') or {})
+        forecast = _forecast(o, research, doc.get('forecasts') or {}, doc.get('forecasts_at'))
         if not research.get('games') and not (forecast and forecast.get('grade')):
             continue
         r = _record(o, research, forecast)
@@ -249,8 +258,10 @@ def line_doc(srv, sport, book, rid):
                       'p_side': item['scout']['p_side'], 'grade': item['scout']['grade']})
     if x.get('forecast'):
         f=x['forecast']
-        context.extend([{'label':'Forecast sample','value':f"{f['sample']} completed games",'group':'Used in forecast'},
-                        {'label':'Prediction method','value':'Game-to-game variation and historical scoring rate','group':'Used in forecast'}])
+        # the board record's own unit (tennis counts matches; sweep 2026-11-23 ST-3: the card said "games" for tennis)
+        tennis = r['sport'] == 'tennis'
+        context.extend([{'label':'Forecast sample','value':f"{f['sample']} completed {'matches' if tennis else 'games'}",'group':'Used in forecast'},
+                        {'label':'Prediction method','value':('Match-to-match' if tennis else 'Game-to-game')+' variation and historical scoring rate','group':'Used in forecast'}])
         context.extend({'label':'Surface' if k=='surface' else 'Match format',
                         'value':v if k=='surface' else f'Best of {v} sets','group':'Used in forecast'}
                        for k,v in f.get('context_used',{}).items())

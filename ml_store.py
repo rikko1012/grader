@@ -793,7 +793,11 @@ def admin_lookup(q):
 # Thresholds (documented in MODEL_VERSIONS / the module docstring; admin pages and /health ops only, never a member label):
 #   writes_stopped:<platform>  the platform's source is current (ok) and has listings, yet no quote of that platform was
 #                              saved for > STALL_ALERT_MIN minutes (counted from the later of the last saved quote and this
-#                              process's start, so a restart after an outage does not alert before it had the chance to write)
+#                              process's start, so a restart after an outage does not alert before it had the chance to write;
+#                              while the store REFUSES writes (snapshot_error set: cap / disk floor) it counts from the last
+#                              saved quote, so a stall that lasted days is not hidden for 30 min after every deploy)
+#   cap_unrecoverable          live pages over the cap and the last archive pass had nothing it may move (pending_days 0):
+#                              the archive cannot bring the store back under the cap by itself (an operator step is needed)
 #   live_size                  live pages + WAL > SIZE_ALERT_SHARE x the cap (moneyline.SNAPSHOT_MAX_MB)
 #   disk_free                  free disk < DISK_ALERT_FACTOR x the write floor (moneyline.DISK_FLOOR_MB)
 #   archive_error              the last archive pass failed (rows stay live; the next pass retries)
@@ -834,7 +838,9 @@ def compute_alerts(st, sources, now_ts=None, boot_ts=None, verify=None):
     last = st.get("last_received") or {}
     for name, s in sorted((sources or {}).items()):
         lt = _parse_iso(last.get(name))
-        since = max(t for t in (lt, boot_ts) if t is not None)
+        refused = bool(s.get("snapshot_error"))
+        # sweep 2026-11-23 SO-1: writes refused by the store (cap / disk floor) are not an outage the restart may recover
+        since = lt if (refused and lt is not None) else max(t for t in (lt, boot_ts) if t is not None)
         mins = round((now_ts - since) / 60, 1)
         ok, n = bool(s.get("ok")), int(s.get("listings") or 0)
         flags[f"writes_stopped:{name}"] = {"on": bool(ok and n and mins > STALL_ALERT_MIN), "source_ok": ok, "listings": n,
@@ -848,6 +854,10 @@ def compute_alerts(st, sources, now_ts=None, boot_ts=None, verify=None):
                               "alert_mb": th["disk_alert_mb"], "floor_mb": th["disk_floor_mb"]}
     lp = st.get("last_pass") or {}
     err = lp.get("error")
+    if st.get("live_mb") is not None and lp.get("pending_days") is not None:
+        flags["cap_unrecoverable"] = {"on": bool(st["live_mb"] > th["cap_mb"] and lp.get("pending_days") == 0 and not err),
+                                      "live_mb": st["live_mb"], "cap_mb": th["cap_mb"], "pending_days": lp.get("pending_days"),
+                                      "kept_old_rows": lp.get("kept_old_rows"), "at": lp.get("at")}
     flags["archive_error"] = {"on": bool(err and err != "another pass is running"), "error": err, "at": lp.get("at")}
     if verify:
         flags["archive_integrity"] = {"on": bool(verify.get("problems")), "problems": verify.get("problems"),

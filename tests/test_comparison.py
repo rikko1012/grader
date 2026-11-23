@@ -97,6 +97,7 @@ def test_no_grade_no_panel_and_board_failure_is_harmless():
 
 def test_snapshots_append_only_on_change(tmp_path, monkeypatch):
     monkeypatch.setattr(cmp, "snapshot_path", lambda: tmp_path / "s.jsonl"); monkeypatch.setattr(cmp, "_LAST", {})
+    monkeypatch.setattr(cmp, "_disk_free_mb", lambda p: 10_000.0)          # SO-2 floor: never the test host's free disk
     res = _res()
     p1 = cmp.panel(res, [_row()], now=NOW)
     assert cmp.snapshot(res, p1, "TAG") is True
@@ -217,3 +218,45 @@ def test_other_maps_line_is_named_not_compared():
     assert p["offers"] == []
     assert p["other_scope"] == [{"source": "prizepicks", "line": 26.0, "scope": "123", "alt": False, "odds_type": None}]
     assert any("different maps" in r["reason"] for r in p["rejected"]) and any("namesake" in r["reason"] for r in p["rejected"])
+
+
+def _fresh(monkeypatch, path, free=10_000.0):
+    monkeypatch.setattr(cmp, "snapshot_path", lambda: path)
+    monkeypatch.setattr(cmp, "_LAST", {})
+    monkeypatch.setattr(cmp, "_SEEDED", {"path": None})
+    monkeypatch.setattr(cmp, "STATS", dict.fromkeys(cmp.STATS, 0))
+    monkeypatch.setattr(cmp, "_disk_free_mb", lambda p: free)
+
+
+def test_so2_restart_does_not_rewrite_unchanged_lines(tmp_path, monkeypatch):
+    """sweep 2026-11-23 SO-2: the change-only dedupe lived in memory only, so every restart / deploy wrote a fresh snapshot of
+    every graded line. It is now seeded from the file's tail."""
+    path = tmp_path / "s.jsonl"
+    _fresh(monkeypatch, path)
+    res = _res()
+    assert cmp.snapshot(res, cmp.panel(res, [_row()], now=NOW), "TAG") is True
+    _fresh(monkeypatch, path)                                                    # a new process
+    assert cmp.snapshot(res, cmp.panel(res, [_row()], now=NOW + timedelta(minutes=5)), "TAG") is False
+    assert cmp.STATS["seeded"] == 1
+    assert cmp.snapshot(res, cmp.panel(res, [_row(id="u9", line=31.5)], now=NOW), "TAG") is True     # a real change still writes
+    assert len(path.read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_so2_seed_reads_only_the_tail_window(tmp_path, monkeypatch):
+    path = tmp_path / "s.jsonl"
+    path.write_text("".join(json.dumps({"key": f"k{i}", "hash": f"h{i}", "pad": "x" * 200}) + "\n" for i in range(50)), encoding="utf-8")
+    _fresh(monkeypatch, path)
+    monkeypatch.setattr(cmp, "SEED_BYTES", 2000)
+    with cmp._SNAP_LOCK:
+        cmp._seed_last(path)
+    assert "k49" in cmp._LAST and "k0" not in cmp._LAST and 1 <= cmp.STATS["seeded"] < 50
+
+
+def test_so2_low_disk_writes_nothing_and_counts_it(tmp_path, monkeypatch):
+    path = tmp_path / "s.jsonl"
+    _fresh(monkeypatch, path, free=cmp.DISK_FLOOR_MB - 1)
+    res = _res()
+    assert cmp.snapshot(res, cmp.panel(res, [_row()], now=NOW), "TAG") is False
+    assert not path.exists() and cmp.STATS["skipped_low_disk"] == 1
+    monkeypatch.setattr(cmp, "_disk_free_mb", lambda p: cmp.DISK_FLOOR_MB + 1)
+    assert cmp.snapshot(res, cmp.panel(res, [_row()], now=NOW), "TAG") is True                       # written once space is back

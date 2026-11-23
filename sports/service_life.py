@@ -156,6 +156,40 @@ def boot(version=None):
         return None
 
 
+KEEP_HIGH = 20
+
+
+def high_water(detail, now=None):
+    """sweep 2026-11-23 SO-5: one record when service RSS passes the trim threshold (the watchdog rate-limits it), so a memory
+    climb that ends in an rss_over_max restart names what was being served at its start, not only at the exit. Last 20 kept."""
+    try:
+        with _LOCK:
+            ring = list(_RING)[-5:]
+        rec = {"at": _utc(now), "pid": os.getpid(), **detail, "rss_tail": ring}
+        path = _dir() / "rss_high.jsonl"
+        lines = []
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()[-(KEEP_HIGH - 1):]
+        except OSError:
+            pass
+        lines.append(json.dumps(rec, separators=(",", ":"), default=str))
+        tmp = path.parent / f".rss_high.{os.getpid()}.tmp"
+        tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        os.replace(tmp, path)
+        return rec
+    except Exception:                                   # noqa: BLE001 - never break the watchdog
+        return None
+
+
+def high_recent(n=5):
+    """The last n high-water records, newest last (ops 'rss_high')."""
+    try:
+        lines = (_dir() / "rss_high.jsonl").read_text(encoding="utf-8").splitlines()[-n:]
+        return [json.loads(x) for x in lines if x.strip()]
+    except (OSError, ValueError):
+        return []
+
+
 def recent(n=10):
     """The last n boot records, newest last (ops 'restarts')."""
     try:

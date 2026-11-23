@@ -275,3 +275,60 @@ def test_zero_game_lettered_line_renders_row_and_drawer(ctx, env, expansion, siz
     text = p.locator('#hub-detail').inner_text()
     assert 'NaN' not in text and 'undefined' not in text
     no_h_scroll(p)
+
+
+@pytest.mark.parametrize('sport', adapter.SPORTS)
+def test_card_forecast_sample_unit_matches_the_board_record(expansion, sport):
+    """sweep 2026-11-23 ST-3: the tennis card said 'N completed games' while the board record says 'N completed matches'
+    (the sample counts matches). Soccer keeps its exact wording."""
+    import hashlib
+    import server
+    adapter.reset()
+    doc = expansion[sport]; offer = doc['offers'][0]; facts = doc['research'][adapter._key(offer)]
+    doc['forecasts'] = {forecast_key(offer): forecast_fixture(offer, facts)}
+    snap = adapter.snapshot(server, sport)
+    rid = 'e-' + hashlib.sha256(offer['offer_id'].encode()).hexdigest()[:24]
+    r = next(x for x in json.loads(snap['body'])['records'] if x['offer']['offer_id'] == rid)
+    unit = 'matches' if sport == 'tennis' else 'games'
+    assert f'20 completed {unit}' in r['scout']['validation']['detail']
+    st, card = adapter.line_doc(server, sport, 'prizepicks', rid)
+    rows = {x['label']: x['value'] for x in card['context']['rows'] if x['group'] == 'Used in forecast'}
+    assert st == 200 and rows['Forecast sample'] == f'20 completed {unit}'
+    assert rows['Prediction method'] == ('Match-to-match' if sport == 'tennis' else 'Game-to-game') + ' variation and historical scoring rate'
+
+
+def test_st1_saved_forecast_older_than_a_day_keeps_its_letter_before_kickoff():
+    """sweep 2026-11-23 ST-1: a frozen forecast keeps its first-issue made_at for as long as its offer revision holds, so the
+    old 24 h made_at limit dropped live letters ~17 h before kickoff. Freshness is the publication time (forecasts_at)."""
+    now = datetime.now(timezone.utc)
+    doc = source('tennis'); offer = doc['offers'][0]; facts = doc['research'][adapter._key(offer)]
+    offer['start'] = (now + timedelta(hours=17)).isoformat()
+    f = forecast_fixture(offer, facts); f['made_at'] = (now - timedelta(hours=30)).isoformat()
+    key = forecast_key(offer)
+    assert adapter._forecast(offer, facts, {key: f}) == f                                   # older sports service: no forecasts_at
+    assert adapter._forecast(offer, facts, {key: f}, (now - timedelta(minutes=3)).isoformat()) == f
+    assert adapter._forecast(offer, facts, {key: f}, (now - timedelta(hours=25)).isoformat()) is None   # publisher stopped
+    assert adapter._forecast(offer, facts, {key: f}, 'not a time') is None
+    future = dict(f, made_at=(now + timedelta(minutes=5)).isoformat())
+    assert adapter._forecast(offer, facts, {key: future}) is None                           # never a future issue time
+    late = dict(f, made_at=(now + timedelta(hours=18)).isoformat())
+    assert adapter._forecast(offer, facts, {key: late}) is None
+
+
+def test_st1_board_reads_the_publication_time(expansion):
+    import hashlib
+    import server
+    adapter.reset()
+    now = datetime.now(timezone.utc)
+    doc = expansion['tennis']; offer = doc['offers'][0]; facts = doc['research'][adapter._key(offer)]
+    f = forecast_fixture(offer, facts); f['made_at'] = (now - timedelta(hours=30)).isoformat()
+    doc['forecasts'] = {forecast_key(offer): f}
+    doc['forecasts_at'] = (now - timedelta(minutes=2)).isoformat()
+    rid = 'e-' + hashlib.sha256(offer['offer_id'].encode()).hexdigest()[:24]
+    def rec():
+        adapter._build(server, 'tennis')         # not srv.shared's 20 s cache: one fresh build per case
+        return next(r for r in json.loads(adapter._SNAP['tennis']['body'])['records'] if r['offer']['offer_id'] == rid)
+    assert rec()['scout']['grade'] == 'A'
+    doc['forecasts_at'] = (now - timedelta(hours=26)).isoformat()
+    rec = rec()
+    assert rec['scout']['grade'] is None

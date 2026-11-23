@@ -62,6 +62,7 @@ NEAR_ZERO_PROJ = 0.10                               # projection under 10% of th
 LEAD_S = 120                                        # a line that starts within 2 minutes is not offered for a new slip
 MIN_PICKS, MAX_PICKS, MAX_SLIPS = 2, 6, 12
 POOL_CAP = 60
+MIXED_RESERVE = 8          # mix=mixed: each sport keeps at least its best 8 legs in the search pool (SR-1)
 NODE_LIMIT = 20000
 REUSE_PENALTY = 0.35                                # log-chance per earlier use of the same prop or player (repeats allowed)
 REPLACE_GAIN = 0.02                                 # a replacement is suggested when it ranks this much higher
@@ -425,7 +426,23 @@ def _score(l, uses):
 
 def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, goblin_cap=None):
     """Exact branch-and-bound for one slip. -> (legs or None, nodes, exact)."""
-    scored = sorted(((_score(l, uses), l) for l in cands), key=lambda t: (-t[0], t[1]["key"]))[:POOL_CAP]
+    ranked = sorted(((_score(l, uses), l) for l in cands), key=lambda t: (-t[0], t[1]["key"]))
+    scored = ranked[:POOL_CAP]
+    if mix == "mixed":
+        # sweep 2026-11-23 SR-1: the top POOL_CAP legs can all be one sport (60+ NBA legs above every CS2 leg), and a mixed slip
+        # needs 2 sports, so nothing was built. The pool keeps today's top POOL_CAP and adds each sport's best MIXED_RESERVE legs
+        # left out by the cap, in score order (a superset: a pool that already held them is unchanged).
+        have = {}
+        for _, l in scored:
+            have[l["sport"]] = have.get(l["sport"], 0) + 1
+        extra = []
+        for t in ranked[POOL_CAP:]:
+            sp = t[1]["sport"]
+            if have.get(sp, 0) < MIXED_RESERVE:
+                have[sp] = have.get(sp, 0) + 1
+                extra.append(t)
+        if extra:
+            scored = sorted(scored + extra, key=lambda t: (-t[0], t[1]["key"]))
     scores = [s for s, _ in scored]
     legs = [l for _, l in scored]
     n = len(legs)
@@ -470,6 +487,8 @@ def _best_slip(cands, size, platform, entry_type, same_match, mix, uses, taken, 
                 continue                                    # Underdog publishes no mixed-sport entry
             if mix == "single" and chosen and l["sport"] != chosen[0]["sport"]:
                 continue
+            if mix == "mixed" and need == 1 and all(c["sport"] == l["sport"] for c in chosen):
+                continue                                    # the last leg of a mixed slip must add a second sport (leaf() rule)
             g = 1 if l.get("line_type") == "goblin" else 0
             if g and goblin_cap is not None and gob[0] >= goblin_cap:
                 continue                                    # the member's goblin rule: at most goblin_cap goblins per slip
@@ -573,6 +592,9 @@ def build(legs, opts):
             mw = "match" if matches == 1 else "matches"           # T18 (UI sweep 2026-11-12): "1 matches"
             shortage = (f"The eligible legs for {where} come from {matches} {mw} at most; a {size}-pick slip needs {size} different matches."
                         if one_sport else f"The eligible legs on {label} come from {matches} {mw}; a {size}-pick slip needs {size} different matches.")
+        elif mix == "mixed" and (len(by_sport) < 2 or not slips):
+            shortage = (f"Mixed sports needs legs from 2 sports; the eligible legs on {label} are all one sport right now."
+                        if len(by_sport) < 2 else f"No valid mixed-sport slip could be formed from the eligible legs on {label}.")
         elif no_repeat:
             shortage = "No props were repeated: the unused eligible legs could not form more valid slips."
         else:

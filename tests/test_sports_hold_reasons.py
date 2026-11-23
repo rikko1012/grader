@@ -106,3 +106,12 @@ def test_exchange_rows_carry_their_own_price_per_side():
     q.pop('k')
     o=ws.record_of('nba',{'fc':{}},m,q,{})[0]['offer']
     assert 'ask' not in o['over'] and 'ask' not in o['under']
+
+
+def test_pp_side_hold_names_its_reason_on_the_row():
+    """sweep 2026-11-23 (nbanfl-2): an os-2 side hold (PrizePicks does not list Scout's side) says so in plain words on the
+    row instead of a bare "No grade"; side, letter and stake stay removed exactly as before."""
+    text="Scout's side is not offered on this line"            # sports/grade_rules.HOLD_TEXT (CS2 tests never import sports)
+    s=record({'b':'side','t':text,'v':'os-2'})
+    assert s['hold']['short']=='Side not offered' and s['hold']['reason']==text
+    assert s['side'] is None and s['grade'] is None and s['units'] is None

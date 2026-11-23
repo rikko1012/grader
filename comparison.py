@@ -352,6 +352,63 @@ def panel(res, rows, board_at=None, now=None, id_map=None):
 # ---------------------------------------------------------------- immutable snapshots (append-only, changes only)
 _SNAP_LOCK = threading.Lock()
 _LAST = {}
+# sweep 2026-11-23 SO-2: the file is append-only with no cap on the 10 GB /data disk (1.25 GB, disk 96.5% full). It never takes
+# the last free space (below DISK_FLOOR_MB free nothing is written; counted in STATS), and after a restart the change-only
+# dedupe is re-read from the file's tail instead of writing every unchanged line again. Archiving the file is an ops step.
+DISK_FLOOR_MB = float(os.environ.get("COMPARISON_DISK_FLOOR_MB") or 500)
+DISK_CHECK_S = 10.0
+SEED_BYTES = 16 * 1024 * 1024
+STATS = {"written": 0, "skipped_low_disk": 0, "seeded": 0, "write_errors": 0}
+_DISK = {"at": 0.0, "path": None, "free_mb": None}
+_SEEDED = {"path": None}
+
+
+def _disk_free_mb(path):
+    """Free MB on the disk holding `path` (checked at most every DISK_CHECK_S; None when it cannot be read)."""
+    now = time.monotonic()
+    d = str(Path(path).parent)
+    if _DISK["path"] == d and now - _DISK["at"] < DISK_CHECK_S:
+        return _DISK["free_mb"]
+    try:
+        import shutil
+        free = shutil.disk_usage(d).free / 1048576
+    except OSError:
+        free = None
+    _DISK.update(at=now, path=d, free_mb=free)
+    return free
+
+
+def _seed_last(path):
+    """Fill the change-only dedupe from the newest SEED_BYTES of the file, once per path per process (called with _SNAP_LOCK).
+    The newest line of a key wins; a key already set in this process is never overwritten."""
+    if _SEEDED["path"] == str(path):
+        return
+    _SEEDED["path"] = str(path)
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - SEED_BYTES))
+            chunk = f.read()
+    except OSError:
+        return
+    lines = chunk.splitlines()
+    if size > SEED_BYTES:
+        lines = lines[1:]                                    # the first line of the window is partial
+    seen = {}
+    for ln in lines:
+        if not ln.strip():
+            continue
+        try:
+            rec = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(rec, dict) and rec.get("key") and rec.get("hash"):
+            seen[rec["key"]] = rec["hash"]
+    for k, h in seen.items():
+        if k not in _LAST:
+            _LAST[k] = h
+            STATS["seeded"] += 1
 
 
 def snapshot_path():
@@ -374,16 +431,24 @@ def snapshot(res, pnl, model_version, key=None):
             "internal": pnl["internal"], "independent": pnl["independent"]["count"], "rejected": pnl["rejected"]}
     h = hashlib.sha1(json.dumps(core, sort_keys=True, default=str).encode()).hexdigest()
     with _SNAP_LOCK:
+        path = snapshot_path()
+        _seed_last(path)
         if _LAST.get(key) == h:
+            return False
+        free = _disk_free_mb(path)
+        if free is not None and free < DISK_FLOOR_MB:
+            STATS["skipped_low_disk"] += 1
             return False
         rec = dict(pnl, key=key, model_version=model_version, match=(res.get("next_match") or {}).get("slug"),
                    sources=[{k: s[k] for k in ("id", "kind", "status")} for s in SOURCES], hash=h)
         try:
-            with open(snapshot_path(), "a", encoding="utf-8") as f:
+            with open(path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, default=str) + "\n"); f.flush(); os.fsync(f.fileno())
             _LAST[key] = h
+            STATS["written"] += 1
             return True
         except OSError:
+            STATS["write_errors"] += 1
             return False
 
 

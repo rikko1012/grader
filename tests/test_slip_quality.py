@@ -511,3 +511,22 @@ def test_nba_nfl_legs_rank_by_their_leagues_settled_band_not_the_stated_chance()
     assert s["all_hit"] < 0.40
     nfl = next(l for l in legs if l["sport"] == "nfl")
     assert sq.band_text(nfl["band"], "nfl").startswith("NFL picks stated 65%+") and "no settled record" not in sq.why_line([nfl], 4, True, False)
+
+
+@pytest.mark.parametrize("size", [2, 3])
+def test_sr1_mixed_builds_when_one_sport_fills_the_pool_cap(size):
+    """sweep 2026-11-23 SR-1: 70 CS2 legs ranked above every LoL leg filled the top POOL_CAP=60, so a mixed batch built 0 slips
+    and claimed every combination was already in the batch."""
+    recs = [rec(f"c{i}", f"e{i}", .70 - i / 1000) for i in range(70)] + [rec(f"l{i}", f"l{i}", .56 - i / 1000, sport="lol") for i in range(10)]
+    b = build(recs, mix="mixed", size=size, count=4)
+    assert len(b["slips"]) == 4 and b["shortage"] is None
+    assert all(len({l["sport"] for l in s["legs"]}) == 2 and len(s["legs"]) == size for s in b["slips"])
+    assert all(not sq.problems(s["legs"], "prizepicks", "power") for s in b["slips"])
+
+
+def test_sr1_mixed_shortage_is_honest_and_any_is_unchanged():
+    recs = [rec(f"c{i}", f"e{i}", .70 - i / 1000) for i in range(6)]
+    b = build(recs, mix="mixed", count=2)
+    assert not b["slips"] and "2 sports" in b["shortage"] and "already in this batch" not in b["shortage"]
+    a = build(recs, mix="any", count=2)
+    assert len(a["slips"]) == 2 and a["search"]["pool_cap"] == sq.POOL_CAP
