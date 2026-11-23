@@ -57,8 +57,18 @@ HOLD_TEXT = SIDE_TEXT[None]               # SPORTS_PP_SIDE_HOLD alone: the line'
 MV_WHY = "Shown as Lean: this line already moved more than 0.75 toward Scout's side since it opened"
 
 
+_YES = ("1", "true", "yes", "on")
+_NO = ("0", "false", "no", "off")
+
+
 def _on(name, default="1"):
-    return os.environ.get(name, default).strip().lower() not in ("0", "false", "no", "off", "")
+    """A rule flag. Default-off rules are an allowlist: only 1 / true / yes / on turn one on (an unknown or mistyped value
+    such as 'none', 'disabled', 'n' or '2' never switches on an untested rule; sports/model/ac2.py reads the same way).
+    A default-on flag turns off only for an explicit 0 / false / no / off: an empty value keeps its default (sweep 2026-11-23 F3)."""
+    v = os.environ.get(name, "").strip().lower()
+    if default == "1":
+        return v not in _NO
+    return v in _YES
 
 
 def _utc(v):
