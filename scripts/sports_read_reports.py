@@ -18,6 +18,7 @@ REPORTS = {
     "operations": "/api/sports/admin/ops",
     "gradecheck": "/api/sports/admin/model/gradecheck",
     "learning": "/api/sports/admin/model/learning",
+    "model-comparisons": "/api/sports/admin/model/comparisons",
     "nba-results": "/api/sports/results?league=nba",
     "nfl-results": "/api/sports/results?league=nfl",
     "results-summary": "/api/sports/results/public",
