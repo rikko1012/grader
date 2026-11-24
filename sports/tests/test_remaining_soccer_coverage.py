@@ -94,3 +94,15 @@ def test_unmatched_repair_obeys_retry_cooldown(tmp_path):
     assert len(calls) == 1
     saved = json.loads((tmp_path/'detail-identity-rechecks.json').read_text())
     assert saved[match['event_id']]['version'] == detail.IDENTITY_REPAIR
+
+
+@pytest.mark.parametrize('tid,canonical,book', [('494','Slavia Prague','Slavia'),('132','Bayern Munich','FC Bayern')])
+def test_verified_ucl_labels_still_require_fixture_identity(tid, canonical, book):
+    match = {'event_id': 'soccer:espn:uefa.champions:1:1', 'competition': 'uefa.champions',
+             'start': '2026-11-25T20:00:00Z',
+             'participants': [{'id': 'soccer:team:espn:'+tid, 'name': canonical}, {'id':'opponent','name':'Other Team'}],
+             'players':[{'id':'player','name':'Test Player','team_id':'soccer:team:espn:'+tid}]}
+    offer = {'sport':'soccer','team':book,'teams':[book,'Other Team'],'player':'Test Player',
+             'start':match['start'],'competition_code':'uefa.champions'}
+    assert history.resolve(offer,[match])['player_id'] == 'player'
+    assert history.resolve(dict(offer, teams=[book,'Wrong Team']),[match]) is None

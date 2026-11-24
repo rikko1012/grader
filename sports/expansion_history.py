@@ -150,6 +150,9 @@ def _team_sets(offer):
 # side matched exactly, one ESPN fixture at that time. Exact labels only - never a prefix, never fuzzy; a label that was
 # not seen live is not listed (Melbourne City, Newcastle Jets wait for their first observed fixture).
 BOOK_TEAM_ALIASES = {
+    # Nov 25 UCL fixtures 401915293 (17:45Z) and 401915377 (20:00Z), verified in both feeds.
+    'soccer:team:espn:494': ('Slavia',),
+    'soccer:team:espn:132': ('FC Bayern',),
     # Verified 2026-11-24: PP Shabab/Abha at 11-26 15:05Z matches ESPN 401900443;
     # PP NEOM/Ittihad also matches ESPN's 11-27 17:30Z fixture exactly.
     'soccer:team:espn:793': ('Shabab',),
