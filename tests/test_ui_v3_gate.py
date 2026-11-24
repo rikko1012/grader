@@ -122,7 +122,9 @@ def test_no_admin_token_means_no_preview(v3env, monkeypatch):
     assert ui_v3.preview_value(None) is None and not ui_v3.preview_ok("anything", None)
 
 
-def test_flag_on_everyone_gets_v3_with_its_own_etag(v3env, monkeypatch):
+@pytest.mark.parametrize("story, marker", [("0", b'class="browser"'), ("1", b'class="wrap hero-layout"')])
+def test_flag_on_everyone_gets_v3_with_its_own_etag(v3env, monkeypatch, story, marker):
+    monkeypatch.setenv("SCOUT_LANDING_STORY", story)
     off = {p: get(v3env.base, p, "good-u1") for p in ("/", "/lol")}
     off_landing = get(v3env.base, "/")
     off_record = get(v3env.base, "/record")
@@ -134,7 +136,7 @@ def test_flag_on_everyone_gets_v3_with_its_own_etag(v3env, monkeypatch):
             .replace(ui_v3.head(name)[0], b"", 1).replace(b'<script src="/v3/member.js" defer></script>', b"", 1) == off[p][1]
         assert get(v3env.base, p, "good-u1", {"If-None-Match": hdr["ETag"]})[0] == 304
     st, body, _ = get(v3env.base, "/")
-    assert st == 200 and b'data-v3-page="landing"' in body and b'class="browser"' in body and body != off_landing[1]
+    assert st == 200 and b'data-v3-page="landing"' in body and marker in body and body != off_landing[1]
     st, body, _ = get(v3env.base, "/record")
     assert st == 200 and b'data-v3-page="record"' in body and b"family=Outfit:wght@400;500;600" in body and body != off_record[1]
     for path in ("/v3/landing.css", "/v3/landing.js", "/v3/record.css", "/v3/record.js", "/v3/art/rift-red.svg"):

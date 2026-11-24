@@ -124,6 +124,9 @@ def hltv_off(monkeypatch, loader=None):
 
 @pytest.fixture
 def srv(monkeypatch, tmp_path):
+    # This suite retains the previous landing's rollback contract. The default
+    # split presentation is covered by test_landing_story.py and browser QA.
+    monkeypatch.setenv("SCOUT_LANDING_STORY", "0")
     monkeypatch.setattr(whop_auth, "enabled", lambda: True)
     monkeypatch.setattr(whop_auth, "has_access", lambda *a, **k: False)
     monkeypatch.setenv("SESSION_SECRET", "landing-v3-secret")

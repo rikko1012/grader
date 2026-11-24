@@ -50,6 +50,15 @@ TEMPLATE = ROOT / "web" / "v3" / "landing.html"
 FALLBACK = ROOT / "web" / "v3" / "landing-fallback.json"
 # The page CSS restates the live default-theme values itself (tokens.css is the member pages' file and is not inlined here).
 ASSETS = {"PAGE_CSS": ROOT / "web" / "v3" / "landing-page.css", "PAGE_JS": ROOT / "web" / "v3" / "landing-page.js"}
+# The owner-approved split hero replaces the presentation only. The prior landing
+# remains available for immediate rollback with SCOUT_LANDING_STORY=0.
+STORY_TEMPLATE = ROOT / "web" / "v3" / "landing-story.html"
+STORY_ASSETS = {"STORY_CSS": ROOT / "web" / "v3" / "landing-story.css",
+                "STORY_JS": ROOT / "web" / "v3" / "landing-story.js"}
+
+
+def story_enabled():
+    return os.environ.get("SCOUT_LANDING_STORY", "1").strip().lower() not in ("0", "false", "off")
 STALE_S = 900                      # a page not rebuilt for this long (no visitors) is rebuilt from cached bodies before serving
 REBUILD_S = 120                    # the page changes at most this often (frame rows, ledger, reviews)
 BOARD_READ = True                  # tests switch this off (no feed read from the background builder)
@@ -111,15 +120,18 @@ def _mt():
             return f.stat().st_mtime
         except OSError:
             return None
-    return (TEMPLATE.stat().st_mtime,) + tuple(f.stat().st_mtime for f in ASSETS.values()) + (m(FALLBACK),)
+    story = story_enabled()
+    template, assets = (STORY_TEMPLATE, STORY_ASSETS) if story else (TEMPLATE, ASSETS)
+    return (story, template.stat().st_mtime) + tuple(f.stat().st_mtime for f in assets.values()) + (m(FALLBACK),)
 
 
 def _template():
     """The template with the page CSS and JS inlined (one request for the whole first screen). Re-read on change."""
     mt = _mt()
     if _TPL["mtime"] != mt:
-        text = TEMPLATE.read_text(encoding="utf-8")
-        for k, f in ASSETS.items():
+        template, assets = (STORY_TEMPLATE, STORY_ASSETS) if story_enabled() else (TEMPLATE, ASSETS)
+        text = template.read_text(encoding="utf-8")
+        for k, f in assets.items():
             body = f.read_text(encoding="utf-8")
             if f.suffix == ".css":              # source comments are for the repo, not view-source (tokens.css names the old brand)
                 body = re.sub(r"(?s)/\*.*?\*/", "", body)
