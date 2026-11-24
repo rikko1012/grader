@@ -14,7 +14,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 import landing_v3
 import server
-from tests.test_landing_v3 import srv, seed, board, JOIN, WEEK, get, wait_builder, text
+from tests.test_landing_v3 import srv, seed, board, JOIN, WEEK, get, wait_builder, text, review
 
 
 @pytest.fixture
@@ -62,6 +62,7 @@ def test_story_structure_and_checkout_are_complete(story):
     assert '{{' not in s
     assert 'hero-grade-body' in doc.ids and 'demo-phone' in doc.ids
     assert 'feature-tab-2' in doc.ids and 'review-next' in doc.ids
+    assert 'signin-error' in doc.ids
 
 
 def test_proof_counts_and_reviews_are_from_shared_answers(story):
@@ -92,10 +93,11 @@ def test_missing_proof_is_not_invented(story,monkeypatch):
 
 
 def test_proof_escapes_untrusted_review_text(story,monkeypatch):
-    doc={'summary':{'count':12,'average':4.5},'reviews':[{'body':'The stats <img src=x onerror=alert(1)> explain the board.', 'rating':5,'created':'2026-11-20T00:00:00Z'}]}
+    doc={'summary':{'count':12,'average':4.5},'reviews':[review(91, 'reader', 'The cards explain each line clearly. <img src=x onerror=alert(1)> The stats help me research the board.')]}
     # Independently check the presentation cannot expose markup from the renderer.
     _,cards,_,_=landing_v3.wall(doc)
-    assert '<img src=x' not in cards
+    assert cards and '<img src=x' not in cards
+    assert '&lt;img' in cards
     s=render(story)
     assert 'ADMIN_TOKEN' not in s and 'SPORTS_TOKEN_SECRET' not in s
 
