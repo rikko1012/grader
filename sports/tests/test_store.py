@@ -68,6 +68,32 @@ def test_feed_freshness_uses_small_index_and_preserves_sightings(db):
     assert store.migrate(db) == store.MIGRATIONS[-1][0]
 
 
+def test_feed_freshness_seeks_books_instead_of_scanning_history(db):
+    for i in range(240):
+        store.put(db, h.offer(platform=('prizepicks', 'underdog', 'kalshi')[i % 3], oid=f'feed-{i}'))
+    # Preserve even an imported legacy row with an absent platform.
+    db.execute("UPDATE records SET platform=NULL WHERE rid=(SELECT min(rid) FROM records)")
+    db.commit()
+    old = "SELECT platform, max(coalesce(last_seen_at, observed_at)) FROM records WHERE kind='offer' GROUP BY platform"
+
+    def measured(sql):
+        steps = [0]
+        def tick():
+            steps[0] += 1
+            return 0
+        db.set_progress_handler(tick, 1)
+        try:
+            rows = dict(db.execute(sql).fetchall())
+        finally:
+            db.set_progress_handler(None, 0)
+        return rows, steps[0]
+
+    expected, scan_steps = measured(old)
+    actual, seek_steps = measured(store.FEED_SIGHTINGS_SQL)
+    assert actual == expected
+    assert seek_steps < scan_steps / 2, (seek_steps, scan_steps)
+
+
 def test_dedupe_by_identity_and_hash_and_sighting_counter(db):
     a = h.offer()
     r1 = store.put(db, a)
