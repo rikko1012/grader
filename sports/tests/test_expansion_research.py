@@ -52,6 +52,26 @@ def test_research_fit_keeps_earliest_starts_under_the_read_limit():
     assert list(research.fit(players, starts, limit=2 * one)) == ['b', 'c']
 
 
+def test_size_limit_preserves_member_markets_before_alternate_research():
+    players = {'alternate': {'games': ['x' * 80]},
+               'standard': {'games': ['y' * 80], 'component_model': 'fantasy_goalie'}}
+    starts = {'alternate': '2026-11-24', 'standard': '2026-11-25'}
+    limit = len(json.dumps(players['standard'], separators=(',', ':'))) + 40
+    kept = research.fit(players, starts, limit=limit, priority={'standard'})
+    assert kept == {'standard': players['standard']}
+    assert len(players) == 2  # only the serving cache is fitted; input records are untouched
+
+
+def test_document_passes_member_priority_to_its_size_budget(monkeypatch):
+    original = research.fit
+    monkeypatch.setattr(research, 'fit', lambda players, starts, priority=():
+                        original(players, starts, limit=130, priority=priority))
+    players = {'alternate': {'games': ['x' * 40]}, 'standard': {'games': ['y' * 40]}}
+    doc = research.document('soccer', players, {'alternate':'2026-11-24', 'standard':'2026-11-25'},
+                            {}, None, priority={'standard'})
+    assert list(doc['players']) == ['standard']
+
+
 # ---------------------------------------------------------------- sg-fair (soccer-grades-1120): research shared fairly
 
 def _fair_setup(tmp_path, monkeypatch, n_count=10, n_comp=5):
@@ -103,6 +123,16 @@ def test_standard_member_lines_get_budget_without_starving_alternates(tmp_path, 
     standard = {o['player'] for o in ordered[-4:]}
     assert set(order[:3]) <= standard
     assert len(set(order) - standard) >= 2
+
+
+def test_standard_variant_keeps_priority_when_an_alternate_was_seen_first(tmp_path, monkeypatch):
+    offers, order = _fair_setup(tmp_path, monkeypatch, n_count=10, n_comp=0)
+    for o in offers:
+        o.update(start='2099-01-01T00:00:00Z', variant='demon')
+    chosen = sorted(offers, key=research.key)[-1]
+    offers.append(dict(chosen, variant='standard'))
+    research.publish('soccer', budget_s=2)
+    assert order[0] == chosen['player']
 
 
 def test_fresh_resolved_entries_are_carried_and_unresolved_ones_retried(tmp_path, monkeypatch):

@@ -40,16 +40,16 @@ def saved(sport):
 RESEARCH_BYTES = 3_600_000   # saved() ignores a research.json over 4,000,000 bytes (all research would vanish)
 
 
-def fit(players, starts, limit=RESEARCH_BYTES):
-    """Keep research.json under its read limit: when too large, leave out the entries for the latest-starting
-    offers first (they are researched again on a later run)."""
+def fit(players, starts, limit=RESEARCH_BYTES, priority=()):
+    """Bound the serving cache, retaining current member markets before alternate research.
+    The underlying historical records are untouched; omitted entries can be rebuilt."""
     sizes = {k: len(json.dumps(v, separators=(',', ':'))) + 40 for k, v in players.items()}
     total = sum(sizes.values())
     if total <= limit:
         return players
     keep, used = {}, 0
-    # sg-stats: component-model entries (expansion_stats) go last, so they can never push out a count-model entry.
-    for k in sorted(players, key=lambda k: (bool(players[k].get('component_model')), starts.get(k, ''), k)):
+    # Within each priority group, keep the existing count/component and start-time order.
+    for k in sorted(players, key=lambda k: (k not in priority, bool(players[k].get('component_model')), starts.get(k, ''), k)):
         if used + sizes[k] > limit:
             break
         keep[k] = players[k]
@@ -155,11 +155,11 @@ def _events(sport, players, matches):
     return fit_events(out, starts)
 
 
-def document(sport, players, starts, events, results_at):
+def document(sport, players, starts, events, results_at, priority=()):
     """research.json: players fitted to their own RESEARCH_BYTES (events never shrink it), events to EVENTS_BYTES
     (already fitted by _events), and a last guard that drops events - never players - if the file would still reach
     saved()'s read limit."""
-    doc = {'sport': sport, 'at': now_utc(), 'results_at': results_at, 'players': fit(players, starts)}
+    doc = {'sport': sport, 'at': now_utc(), 'results_at': results_at, 'players': fit(players, starts, priority=priority)}
     if events:
         doc['events'] = events
         if len(json.dumps(doc, separators=(',', ':'))) > READ_LIMIT - 1000:
@@ -269,7 +269,7 @@ def _publish(sport, budget_s=20, results_at=None):
     # Standard member lines get the first half of this bounded run. The other
     # half keeps the existing oldest-checked rotation, so thousands of alternate
     # markets cannot delay the member board indefinitely, or be starved by it.
-    member_keys = {k for k, o in unique.items()
+    member_keys = {key(o) for o in board['offers']
                    if (o.get('variant') == 'standard' or
                        (o.get('platform') == 'underdog' and o.get('variant') == 'balanced'))
                    and o.get('start', '') > now_utc()}
@@ -419,7 +419,7 @@ def _publish(sport, budget_s=20, results_at=None):
         events = {}                                   # research rows never block the player research
     researched = len(players)
     doc = document(sport, players, {k: unique[k].get('start') or '' for k in players}, events,
-                   results_at or history.results_at(sport))
+                   results_at or history.results_at(sport), priority=member_keys)
     players = doc['players']
     history.atomic_json(boards.root(sport) / 'research.json', doc)
     history.atomic_json(carry_path, {k: v for k, v in new_sigs.items() if k in players})
