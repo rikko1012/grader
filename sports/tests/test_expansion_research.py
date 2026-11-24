@@ -52,6 +52,92 @@ def test_research_fit_keeps_earliest_starts_under_the_read_limit():
     assert list(research.fit(players, starts, limit=2 * one)) == ['b', 'c']
 
 
+def test_large_entry_does_not_hide_smaller_member_entries():
+    players = {'large': {'games': ['x' * 1000]}, 'small': {'games': [1, 2]}}
+    assert research.fit(players, {'large': '2026-11-24', 'small': '2026-11-25'},
+                        limit=100, priority=set(players)) == {'small': players['small']}
+
+
+def test_worker_reuses_readers_without_changing_results(setup, monkeypatch):
+    from sports import expansion_history as history
+    import sqlite3
+    root, path, match, offer = setup
+    signature = history._file_signature(path)
+    before = '2099-01-01T00:00:00Z'
+    # Discover the fixture's actual player/stat without relying on fixture IDs.
+    with history.store.opened(path, read_only=True) as con:
+        row = con.execute("SELECT player_id, stat FROM records WHERE kind='stat' LIMIT 1").fetchone()
+    args = (str(path), signature, row['player_id'], row['stat'], 'full_game', before)
+    history._history.cache_clear()
+    expected = history._history(*args)
+    assert [g['value'] for g in expected] == [10, 8, 6, 4, 2]
+    opened = []
+    connect = history.store.connect
+    def tracked(*a, **kw):
+        con = connect(*a, **kw)
+        opened.append(con)
+        return con
+    monkeypatch.setattr(history.store, 'connect', tracked)
+    history._EVENTS_ON[0] = True
+    try:
+        for _ in range(3):
+            history._history.cache_clear()
+            assert history._history(*args) == expected
+        assert len(opened) == 1
+        # A changed file signature must never reuse the previous reader.
+        history._history_reader(str(path), ('changed',))
+        assert len(opened) == 2
+        import pytest
+        with pytest.raises(sqlite3.ProgrammingError):
+            opened[0].execute('SELECT 1')
+    finally:
+        history._EVENTS_ON[0] = False
+        history._EVENTS.clear()
+        history.close_research_readers()
+        history._history.cache_clear()
+    assert not history._RESEARCH_READERS
+
+
+def test_failed_publish_closes_worker_readers(setup, monkeypatch):
+    from sports import expansion_history as history
+    import pytest
+    _, path, _, _ = setup
+    def fail(*args):
+        history._history_reader(str(path), history._file_signature(path))
+        raise RuntimeError('interrupted')
+    monkeypatch.setattr(research, '_publish', fail)
+    with pytest.raises(RuntimeError, match='interrupted'):
+        research.publish('tennis')
+    assert not history._RESEARCH_READERS and not history._EVENTS_ON[0]
+
+
+def test_research_readers_are_bounded_and_member_reads_are_unshared(setup, monkeypatch):
+    from sports import expansion_history as history
+    import sqlite3
+    import pytest
+    _, path, _, _ = setup
+    connect = history.store.connect
+    monkeypatch.setattr(history.store, 'connect', lambda *args, **kwargs: connect(path, read_only=True))
+    history._EVENTS_ON[0] = True
+    try:
+        opened = []
+        for n in range(7):
+            con, owned = history._history_reader(f'competition-{n}', (n,))
+            opened.append(con)
+            assert not owned and len(history._RESEARCH_READERS) <= 4
+        with pytest.raises(sqlite3.ProgrammingError):
+            opened[0].execute('SELECT 1')
+    finally:
+        history._EVENTS_ON[0] = False
+        history.close_research_readers()
+    first, owned = history._history_reader(str(path), ('member',))
+    second, owned2 = history._history_reader(str(path), ('member',))
+    try:
+        assert owned and owned2 and first is not second and not history._RESEARCH_READERS
+    finally:
+        first.close(); second.close()
+
+
 def test_size_limit_preserves_member_markets_before_alternate_research():
     players = {'alternate': {'games': ['x' * 80]},
                'standard': {'games': ['y' * 80], 'component_model': 'fantasy_goalie'}}

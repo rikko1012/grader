@@ -1179,6 +1179,31 @@ def _matches(path, stamp, size):
 _EVENTS = {}          # sg-fair: (path, signature) -> {(event_id, before): event record}; same store file = same answers
 _EVENTS_ON = [False]  # on only while research.publish runs (worker); member requests never fill it
 _MISS = object()
+_RESEARCH_READERS = {}  # bounded, read-only, worker-run lifetime; never used by member requests
+
+
+def close_research_readers():
+    for con in _RESEARCH_READERS.values():
+        con.close()
+    _RESEARCH_READERS.clear()
+
+
+def _history_reader(path, signature):
+    if not _EVENTS_ON[0]:
+        return store.connect(path, read_only=True), True
+    key = (path, signature)
+    if key not in _RESEARCH_READERS:
+        # Every stat used to reinstall archive views on a new connection. Reuse
+        # only unchanged stores, with a small bound on SQLite's combined cache.
+        for old in list(_RESEARCH_READERS):
+            if old[0] == path:
+                _RESEARCH_READERS.pop(old).close()
+        if len(_RESEARCH_READERS) >= 4:
+            _RESEARCH_READERS.pop(next(iter(_RESEARCH_READERS))).close()
+        con = store.connect(path, read_only=True)
+        con.execute('PRAGMA cache_size=-512')
+        _RESEARCH_READERS[key] = con
+    return _RESEARCH_READERS[key], False
 
 
 def _event(con, path, signature, event_id, before):
@@ -1238,7 +1263,7 @@ def history_games(path, signature, player, stat, scope, before):
 
 @lru_cache(maxsize=64)
 def _history(path, signature, player, stat, scope, before):
-    con = store.connect(path, read_only=True)
+    con, owned = _history_reader(path, signature)
     try:
         # Bound the read by this player's stat, never all forecasts / all sports.
         rows = store._latest_rows(con, 'stat', 'player_id=? AND stat=?', [player,stat], before, 2000)
@@ -1262,7 +1287,8 @@ def _history(path, signature, player, stat, scope, before):
                            'source': obs.source, 'known_at': obs.known_at})
         return sorted(result, key=lambda r:r['date'], reverse=True)[:20]
     finally:
-        con.close()
+        if owned:
+            con.close()
 
 
 def history(req):

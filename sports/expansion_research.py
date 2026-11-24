@@ -51,7 +51,7 @@ def fit(players, starts, limit=RESEARCH_BYTES, priority=()):
     # Within each priority group, keep the existing count/component and start-time order.
     for k in sorted(players, key=lambda k: (k not in priority, bool(players[k].get('component_model')), starts.get(k, ''), k)):
         if used + sizes[k] > limit:
-            break
+            continue
         keep[k] = players[k]
         used += sizes[k]
     return keep
@@ -207,6 +207,7 @@ def publish(sport, budget_s=20, results_at=None):
     finally:
         history._EVENTS_ON[0] = False
         history._EVENTS.clear()
+        history.close_research_readers()
 
 
 def _publish(sport, budget_s=20, results_at=None):
