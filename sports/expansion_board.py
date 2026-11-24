@@ -230,6 +230,7 @@ def save(sport, rows, sources, observed_at, directory=None, game_odds=None):
 QUOTES_CAP_MB = 250             # quote revision history: live pages + WAL (expansion_archive.live_bytes)
 QUOTE_STATUS = "quotes-history.json"
 QUOTE_COLD_H = 72               # a revision first seen this long ago may move to the verified archive ...
+QUOTE_PRESSURE_COLD_H = 24      # near the cap, archive superseded revisions sooner; never discard them
 QUOTE_KEEP_START_H = 24         # ... unless it is an offer's LATEST revision and that offer is on the board now, or
                                 # its start is less than this long ago / unknown (it may still be offered: the dedupe
                                 # lookup needs its latest revision hot)
@@ -305,6 +306,7 @@ def record_quote_history(directory, history_rows, observed_at, now=None, budget_
         if due:
             arch = archive_quotes(directory, {(r['platform'], r['offer_id']) for r in history_rows},
                                   now=now, budget_s=QUOTE_ARCHIVE_BUDGET_S if budget_s is None else budget_s,
+                                  cold_h=QUOTE_PRESSURE_COLD_H if live > 0.8 * cap else QUOTE_COLD_H,
                                   cursor=int(arch.get("cursor") or 0) if arch.get("pending") else 0)
             arch["ran_at_epoch"] = round(t, 1)
     except Exception as e:                              # noqa: BLE001 - the archive never fails the quotes run

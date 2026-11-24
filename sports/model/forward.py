@@ -303,6 +303,27 @@ def build_forecast(o, rid, forecast_at, model_version, artifact_version, pmf, lo
     return fc, pol
 
 
+def _slate_offers(scon, league, event_ids, **filters):
+    """Read current offers only for the forecast slate, not historical events.
+
+    Use the board's current hot-slate reader: resolve each identity's latest
+    revision before checking its event, so a corrected link cannot resurrect an
+    old line. Archived historical offers are not new forecast candidates.
+    """
+    from ..snapshots import _slate_offers as read_slate
+    ids = set(event_ids)
+    for rid, offer, _ in read_slate(scon, league, ids, now_utc()):
+        if offer.event_id not in ids:
+            continue
+        if filters.get("stat") is not None and offer.stat != filters["stat"]:
+            continue
+        if filters.get("platforms") is not None and offer.platform not in filters["platforms"]:
+            continue
+        if offer.platform in (filters.get("exclude_platforms") or ()):
+            continue
+        yield rid, offer
+
+
 def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     """sm-1 + mi-1 + mc-1 + single-source market forecasts for every gradable target offer of `league`."""
     forecast_at = forecast_at or now_utc()
@@ -323,7 +344,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     # market quotes are the non-target offers: read just those (same rows, same order - store.iter_offers)
     # AU reference feeds are deliberately not model inputs. Exclude them in SQL
     # so adding display coverage cannot accumulate unused quotes in this worker.
-    for rid, q in store.iter_offers(scon, league=league, limit=500000,
+    for rid, q in _slate_offers(scon, league, (key[0] for key in idmap),
                                    exclude_platforms=TARGETS + ("unibet_au", "pointsbet_au")):
         if (q.event_id, q.player_id) not in idmap or q.stat not in SPORT_MARKETS[league]:
             continue
@@ -376,7 +397,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
         # the store.put calls below; once the books job (beside_exclusive since 2026-11-06) committed, that stale
         # snapshot could not become a write transaction -> "database is locked" (SQLITE_BUSY_SNAPSHOT, no busy wait)
         # and model-forward exited 1. Same query, same rows, same order: forecasts unchanged.
-        for rid, o in list(store.iter_offers(scon, league=league, stat=mk, platforms=TARGETS, limit=500000)):
+        for rid, o in list(_slate_offers(scon, league, (key[0] for key in idmap), stat=mk, platforms=TARGETS)):
             if o.platform not in TARGETS or (o.event_id, o.player_id) not in idmap:
                 continue
             ok, _ = capabilities.gate(o)

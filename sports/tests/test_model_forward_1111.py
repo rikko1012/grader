@@ -107,6 +107,46 @@ def test_platform_filter_keeps_the_same_rows_in_the_same_order():
     assert list(store.iter_offers(con, league="nba", platforms=())) == []
 
 
+def test_forecast_slate_reads_preserve_current_revisions_and_skip_other_events(monkeypatch):
+    con = store.connect()
+    _offer_world(con)
+    expected = {rid: o.to_dict() for rid, o in store.iter_offers(
+        con, league="nba", limit=500000, platforms=forward.TARGETS)
+        if o.event_id == "nba:espn:1"}
+    from sports import snapshots
+    real = snapshots._slate_offers
+    reads = []
+
+    def scoped(con, league, event_ids, at):
+        reads.append(set(event_ids))
+        assert set(event_ids) == {"nba:espn:1"}
+        return real(con, league, event_ids, at)
+
+    monkeypatch.setattr(snapshots, "_slate_offers", scoped)
+    got = {rid: o.to_dict() for rid, o in forward._slate_offers(
+        con, "nba", ["nba:espn:1", "nba:espn:1"], platforms=forward.TARGETS)}
+    assert got == expected and len(got) > 0
+    assert reads == [{"nba:espn:1"}]
+    monkeypatch.setattr(snapshots, "_slate_offers", real)
+    assert list(forward._slate_offers(con, "nba", [], platforms=forward.TARGETS)) == []
+
+
+def test_slate_reads_do_not_resurrect_moved_offers_or_change_saved_data():
+    from sports import snapshots
+    con = store.connect()
+    store.put(con, h.event())
+    store.put(con, h.offer(oid="moving"))
+    store.put(con, h.offer(oid="moving", event_id="nba:espn:old",
+                           observed_at="2026-10-23T21:00:00Z"))
+    store.put(con, h.offer(oid="stays", player_id="nba:player:espn:42"))
+    before = list(con.execute("SELECT record_id, payload FROM records ORDER BY record_id"))
+    got = list(forward._slate_offers(con, "nba", ["nba:espn:1"]))
+    assert [o.offer_id for _, o in got] == ["stays"]
+    assert snapshots.board_player_ids(con, "nba", "2026-10-23T22:00:00Z") == ["nba:player:espn:42"]
+    after = list(con.execute("SELECT record_id, payload FROM records ORDER BY record_id"))
+    assert [tuple(r) for r in after] == [tuple(r) for r in before]
+
+
 def test_current_offer_ids_same_as_the_old_query():
     from sports.model import pipeline
     con = store.connect()

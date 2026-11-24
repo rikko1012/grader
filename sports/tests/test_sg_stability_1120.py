@@ -185,6 +185,31 @@ def test_record_quote_history_runs_the_archive_hourly_and_saves_samples(tmp_path
     assert st['samples'] and st['live_mb'] is not None and st['cap_mb'] == board.QUOTES_CAP_MB
 
 
+def test_near_cap_uses_verified_archive_sooner_without_losing_revisions(tmp_path, monkeypatch):
+    cur = _fill_history(tmp_path)
+    before = _all_revisions(tmp_path / 'quotes.db')
+    # Exercise the pressure decision with the real archive, not a deletion stub.
+    monkeypatch.setattr(xa, 'live_bytes', lambda path: 0.9 * board.QUOTES_CAP_MB * 1048576)
+    real = board.archive_quotes
+    ages = []
+
+    def capture(*args, **kwargs):
+        ages.append(kwargs['cold_h'])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(board, 'archive_quotes', capture)
+    board._write_status(tmp_path, {})
+    board.record_quote_history(tmp_path, cur, NOW, now=NOW, budget_s=30)
+    assert ages == [24]
+    after = _all_revisions(tmp_path / 'quotes.db')
+    with sqlite3.connect(tmp_path / 'quotes.db') as con:
+        archived = list(xa.read(con, tmp_path / 'archive' / 'quotes', 'revisions'))
+        assert xa.verify(con, tmp_path / 'archive' / 'quotes')['bad'] == []
+    cols = ('id', 'platform', 'offer_id', 'revision', 'observed_at', 'payload')
+    restored = {tuple(d[c] for c in cols) for d in archived} | set(after)
+    assert set(before) <= restored
+
+
 # ------------------------------------------------------------------------------------- forecasts.db / learning.db
 from contextlib import closing  # noqa: E402
 

@@ -431,7 +431,7 @@
     }
     const short = picked.length < count ? (note || (last && last.shortage) || "Fewer valid slips than asked with these settings.") : "";
     return { version: 1, generator: last ? last.version : null, created_at: new Date().toISOString(), options: opts, slips: picked, note: short,
-      pool: last ? { legs: last.pool.legs, matches: last.pool.matches } : null };
+      pool: last ? { legs: last.pool.legs, matches: last.pool.matches, markets: last.pool.markets || [] } : null };
   }
   async function useGenerated(slip) {
     if(!slip||!Array.isArray(slip.legs)||slip.legs.some(l=>!cleanLeg(l)))throw new Error('This saved lineup is invalid. Generate again.');

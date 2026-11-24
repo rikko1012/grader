@@ -364,10 +364,10 @@ def _gamelog_bodies(league, athlete_id, seasons, cache_only):
 def board_player_ids(con, league, now):
     """Resolved ESPN players with an open, gradable-family offer on an upcoming game."""
     events = {e.event_id: e for _, e, _ in _latest(con, "event", "league = ?", [league], now)
-              if e.start_source == "espn"}
+              if e.start_source == "espn" and e.start_utc and e.start_utc >= now}
     out = []
     seen = set()
-    for _, o, _ in _iter_latest(con, "offer", "league = ?", [league], now):
+    for _, o, _ in _slate_offers(con, league, events, now):
         ev = events.get(o.event_id)
         if not o.player_id or o.player_id in seen or not ev or not ev.start_utc or ev.start_utc < now:
             continue

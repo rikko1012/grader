@@ -91,6 +91,20 @@ def test_rotation_reaches_every_offer_least_recently_checked_first(tmp_path, mon
     assert set.union(*runs) == {o['player'] for o in offers}  # 18 reads over 3 runs reach all 15 offers
 
 
+def test_standard_member_lines_get_budget_without_starving_alternates(tmp_path, monkeypatch):
+    offers, order = _fair_setup(tmp_path, monkeypatch, n_count=10, n_comp=0)
+    for o in offers:
+        o['start'] = '2099-01-01T00:00:00Z'
+        o['variant'] = 'demon'
+    ordered = sorted(offers, key=research.key)
+    for o in ordered[-4:]:
+        o['variant'] = 'standard'
+    research.publish('soccer', budget_s=6)
+    standard = {o['player'] for o in ordered[-4:]}
+    assert set(order[:3]) <= standard
+    assert len(set(order) - standard) >= 2
+
+
 def test_fresh_resolved_entries_are_carried_and_unresolved_ones_retried(tmp_path, monkeypatch):
     from sports.contracts import now_utc
     offers, order = _fair_setup(tmp_path, monkeypatch, n_count=3, n_comp=0)
