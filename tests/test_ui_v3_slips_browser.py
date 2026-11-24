@@ -70,6 +70,11 @@ def test_v3_slip_studio_my_slip_auto_build_and_tracked(browser, env, monkeypatch
         assert p.locator('.sb-build > details summary').inner_text() == 'How lineups are built'
         cards = p.locator('#hub-generated .h-generated-card')
         assert cards.count() >= 1 and p.locator('#hub-generated .h-batch-head h2').inner_text().endswith('separate slips')
+        market_detail = p.locator('#hub-generated details').filter(has_text='Available markets used for ranking')
+        market_detail.locator('summary').click()
+        assert 'eligible props' in market_detail.inner_text()
+        no_h_scroll(p)
+        market_detail.locator('summary').click()
         for i in range(cards.locator('li').count()):                                          # each leg: chance + its texts stay
             li = cards.locator('li').nth(i)
             assert re.fullmatch(r"\d+\.\d%", li.locator(':scope > b').inner_text()), li.inner_text()
