@@ -11,6 +11,7 @@ MEMBER  GET /api/sports/model/forecasts?league=nba|nfl[&event_id=&player_id=&sta
         GET /api/sports/model/registry      versions, artifacts, validation states, registered study summaries
         GET /api/sports/model/features      feature registry fr-1 with observed effects
 ADMIN   GET /api/sports/admin/model/learning   scorecard, forward gate F status, diagnostic queue
+        GET /api/sports/admin/model/comparisons   saved, one-time challenger evaluations (no scoring on request)
         GET /api/sports/admin/model/gradecheck[?part=headline]   daily grade check, containment, cal-mi log (A9a)
 """
 from __future__ import annotations
@@ -97,6 +98,8 @@ def model(req):
 
 def admin_model(req):
     rest = (req.rest or "").strip("/")
+    if rest == 'comparisons':
+        return 200, saved_comparisons()
     if rest == 'gradecore-comparison':
         from gradecore.reporting import comparisons
         league = _league(req.query or {})
@@ -124,6 +127,39 @@ def admin_model(req):
         return 404, {"error": "not found"}
     d = _load("admin_learning.json")
     return (200, d) if d is not None else (503, {"error": "model_snapshot_not_ready"})
+
+
+COMPARISON_FILES = {
+    'nba_sm2_l2': 'l2_nba.json',
+    'nfl_sm2_l2': 'l2_nfl.json',
+    'nfl_v2_h2': 'heldout_nflv2.json',
+    'nfl_sn1': 'heldout_sn1.json',
+}
+COMPARISON_MAX_BYTES = 256 * 1024
+
+
+def saved_comparisons():
+    """Owner-only route reads a fixed allowlist of bounded files; never imports or executes model workers."""
+    reports = {}
+    for name, filename in COMPARISON_FILES.items():
+        path = config.DATA_DIR / 'model' / filename
+        try:
+            with path.open('rb') as source:
+                raw = source.read(COMPARISON_MAX_BYTES + 1)
+                saved_ns = os.fstat(source.fileno()).st_mtime_ns
+            if len(raw) > COMPARISON_MAX_BYTES:
+                reports[name] = {'state': 'report_too_large'}
+                continue
+            value = json.loads(raw)
+            if not isinstance(value, dict):
+                raise ValueError('report must be an object')
+            reports[name] = {'state': 'available', 'saved_at_ns': saved_ns, 'report': value}
+        except FileNotFoundError:
+            reports[name] = {'state': 'not_scored'}
+        except (OSError, ValueError):
+            reports[name] = {'state': 'report_unavailable'}
+    return {'mode': 'read-only saved evaluations', 'reports': reports,
+            'note': 'A historical pass is not a release decision. Real-offer gates and the release review still apply.'}
 
 
 def admin_gradecheck(req):
