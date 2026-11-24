@@ -166,8 +166,10 @@ def upcoming_rows(scon, hcon, league, now):
     for r in hcon.execute(sql):
         pos[r["player_id"]] = r["position"]
     rows, idmap, skipped = {}, {}, {}
-    # only target-platform offers are used below: read just those (same rows, same order - store.iter_offers)
-    for rid, o in store.iter_offers(scon, league=league, limit=500000, platforms=TARGETS):
+    # Historical offers cannot create an upcoming player row. Read the current
+    # revision for upcoming events, without a history-size-dependent row cap.
+    slate_ids = [eid for eid, event in events.items() if event.start_utc and event.start_utc > now]
+    for rid, o in _slate_offers(scon, league, slate_ids, platforms=TARGETS):
         if o.platform not in TARGETS:
             continue
         ok, why = capabilities.gate(o)
