@@ -54,6 +54,7 @@ def browser():
 
 @pytest.fixture
 def base(monkeypatch, tmp_path):
+    monkeypatch.setenv("SCOUT_LANDING_STORY", "0")  # prior presentation / rollback coverage
     """tests/test_landing_browser.py's signed-out server, with v3 on for everyone (and the public record route open)."""
     monkeypatch.setenv("SCOUT_UI_V3", "1")
     monkeypatch.setenv("SCOUT_PUBLIC_RECORD", "1")
