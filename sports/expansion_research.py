@@ -266,6 +266,14 @@ def _publish(sport, budget_s=20, results_at=None):
         return sig_cache[name]
 
     queues = {False: [], True: []}
+    # Standard member lines get the first half of this bounded run. The other
+    # half keeps the existing oldest-checked rotation, so thousands of alternate
+    # markets cannot delay the member board indefinitely, or be starved by it.
+    member_keys = {k for k, o in unique.items()
+                   if (o.get('variant') == 'standard' or
+                       (o.get('platform') == 'underdog' and o.get('variant') == 'balanced'))
+                   and o.get('start', '') > now_utc()}
+    member_deadline = time.monotonic() + max(0, budget_s) / 2
     for k in sorted(unique, key=lambda k: (previous.get(k, {}).get('checked_at', ''), k)):
         old = previous.get(k)
         if old is not None and _fresh(old, now_ts):
@@ -293,7 +301,10 @@ def _publish(sport, budget_s=20, results_at=None):
             group = spent[True] < COMPONENT_SHARE * (spent[True] + spent[False])
         else:
             group = bool(queues[True])
-        k = queues[group].pop(0)
+        position = 0
+        if time.monotonic() < member_deadline:
+            position = next((i for i, candidate in enumerate(queues[group]) if candidate in member_keys), 0)
+        k = queues[group].pop(position)
         if time.monotonic() >= deadline:
             if k in previous:
                 players[k] = previous[k]

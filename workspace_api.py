@@ -2344,9 +2344,18 @@ def _generate(srv, o, ev_doc=None, log=True):
     legs = _ranked(legs)
     b = sq.build(legs, o)
     mine = [l for l in legs if l["book"] == o["platform"]]
+    markets = {}
+    for leg in mine:
+        if not sq.line_ok(leg, o.get("lines", "all")):
+            continue
+        key = (leg["sport"], leg["stat"])
+        row = markets.setdefault(key, {"sport": leg["sport"], "stat": leg["stat"],
+                                       "label": leg["stat_label"], "legs": 0})
+        row["legs"] += 1
     doc = {"version": sq.VERSION, "built_at": now.isoformat(timespec="seconds"), "options": dict(o, sports=list(o["sports"]), exclude=len(o["exclude"])),
            "pool": {"legs": len(mine), "matches": len({(l["sport"], l["event"]) for l in mine}), "excluded": why, "unavailable": missing,
-                    "banded": bool(table and table.get("cells"))},
+                    "banded": bool(table and table.get("cells")),
+                    "markets": sorted(markets.values(), key=lambda x: (x["sport"], -x["legs"], x["stat"]))},
            "slips": [_wire_slip(s, srv, now) for s in b["slips"]], "shortage": b["shortage"], "search": b["search"]}
     if log:                                 # workspace_auto's background scan builds unlogged: the record keeps member-generated slips only
         _log_generated(srv, o, b["slips"], now, "ev-slips" if ev_doc is not None else "generate")

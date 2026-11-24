@@ -41,6 +41,9 @@ def test_held_lines_never_enter_even_with_research(env, monkeypatch):
     monkeypatch.setattr(server.Handler, "_sports_owner", lambda self: True)
     st, doc = gen(env, research=1, sports="nba,nfl", slips=12)
     assert st == 200
+    assert doc["pool"]["markets"]
+    assert all(m["sport"] in ("nba", "nfl") and m["legs"] > 0 for m in doc["pool"]["markets"])
+    assert sum(m["legs"] for m in doc["pool"]["markets"]) <= doc["pool"]["legs"]
     board = {}
     for lg in ("nba", "nfl"):
         st, b = call(env, "GET", API + f"board?sport={lg}", user="u1")
