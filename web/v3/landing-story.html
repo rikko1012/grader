@@ -56,7 +56,7 @@
 <div class="hero-bottom"><div class="real-tour-controls" role="group" aria-label="Product demo tour"><button data-capture="0" aria-pressed="true">Board &amp; player</button><button data-capture="1" aria-pressed="false">Key insights</button><button data-capture="2" aria-pressed="false">Behind the grade</button><button id="mobile-product-play" class="mobile-product-play" aria-label="Play mobile product animation">Play</button></div><p class="real-caption">Interactive saved examples · not current picks. Explore the reasoning; decide for yourself.</p></div>
 </div></section>
 <section class="member-carousel" id="members" aria-labelledby="member-heading" aria-roledescription="carousel">
-<div class="wrap review-heading"><div><p class="section-kicker">FROM THE MEMBERS</p><h2 id="member-heading">The research is the difference.</h2></div><div class="review-meta"><a href="/reviews"> {{RV_LINE}}</a><div class="review-controls"><button id="review-prev" aria-label="Previous review">‹</button><button id="review-play" aria-label="Pause review carousel">Pause</button><button id="review-next" aria-label="Next review">›</button></div></div></div>
+<div class="wrap review-heading"><div><p class="section-kicker">FROM THE MEMBERS</p><h2 id="member-heading">The research is the difference.</h2></div><div class="review-meta"><a href="/reviews"> <!--if:REVIEWS-->{{RV_LINE}} · <!--/if:REVIEWS-->All reviews</a><div class="review-controls"><button id="review-prev" aria-label="Previous review">‹</button><button id="review-play" aria-label="Pause review carousel">Pause</button><button id="review-next" aria-label="Next review">›</button></div></div></div>
 <div class="review-window" tabindex="0" aria-label="Member reviews. Scroll to browse; movement pauses while focused."><ul class="review-track">{{RV_CARDS}}</ul></div></section>
 <section class="feature-theatre" id="inside" aria-labelledby="feature-heading"><div class="wrap">
 <div class="feature-intro"><p class="section-kicker">LESS GUESSWORK. MORE TO GO ON.</p><h2 id="feature-heading">Don’t just see a pick.<br><span>Understand your next move.</span></h2><p>The line. The player. The entry. Explore the actual tools you’ll use before you make a decision.</p></div>
@@ -69,7 +69,7 @@
 <!--if:TOTAL--><section class="proof" aria-label="Proof">
   <div class="wrap">
     <div class="pf">
-      <div class="pc"><p class="pn"><span class="tk" aria-hidden="true" data-to="13090" style="min-width:6ch">{{LEDGER_TOTAL}}</span><span class="sr-only">{{LEDGER_TOTAL}}</span></p><p class="pl">decided picks on the public record, saved before the game, losses included.</p><p class="cap"><a class="tl" href="/record">See the record</a></p></div>
+      <div class="pc"><p class="pn"><span class="tk" aria-hidden="true" data-to="{{LEDGER_N}}" style="min-width:6ch">{{LEDGER_TOTAL}}</span><span class="sr-only">{{LEDGER_TOTAL}}</span></p><p class="pl">decided picks on the public record, saved before the game, losses included.</p><p class="cap"><a class="tl" href="/record">See the record</a></p></div>
       
     </div>
   </div>
@@ -97,7 +97,7 @@
         <thead><tr><th scope="col">Sport</th><th scope="col">Won</th><th scope="col">Lost</th><th scope="col">Push<span class="sr-only"> (not counted)</span></th></tr></thead>
         <tbody>{{LEDGER_ROWS}}</tbody>
       </table><!--/if:LEDGER-->
-      <p class="cap">From the public record, {{LEDGER_ASOF}}. {{LEDGER_NOTE}}</p>
+      <!--if:LEDGER--><p class="cap">From the public record, {{LEDGER_ASOF}}. {{LEDGER_NOTE}}</p><!--/if:LEDGER-->
     </div>
   </div>
 </section>
