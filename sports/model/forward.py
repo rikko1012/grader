@@ -578,7 +578,7 @@ def _nba8_league(scon, hcon, forecast_at, up, idmap, events, out, icon, log):
     feats = {}
     w = out.setdefault("written", {})
     for mk in sorted(live):
-        for rid, o in list(store.iter_offers(scon, league="nba", stat=mk, platforms=TARGETS, limit=500000)):
+        for rid, o in _slate_offers(scon, "nba", (key[0] for key in idmap), stat=mk, platforms=TARGETS):
             if o.platform not in TARGETS or (o.event_id, o.player_id) not in idmap:
                 continue
             ok, _ = capabilities.gate(o)
@@ -659,7 +659,7 @@ def _nba8_shadow(scon, hcon, forecast_at, idmap, events, path=None):
         for mk in mks:
             # the in-population offers first (a small list), so the store cursor is closed before any model work
             todo = []
-            for rid, o in store.iter_offers(scon, league="nba", stat=mk, platforms=TARGETS, limit=500000):
+            for rid, o in _slate_offers(scon, "nba", (key[0] for key in idmap), stat=mk, platforms=TARGETS):
                 ev = events.get(o.event_id)
                 if ev is None or ev.start_utc <= forecast_at or not capabilities.nba8_tested(o):
                     continue

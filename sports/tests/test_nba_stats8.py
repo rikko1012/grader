@@ -200,6 +200,11 @@ def test_forward_writes_nba8_for_a_passed_stat_and_replays_identically(tmp_path,
     with store.opened(tmp_path / "canonical.db") as scon:
         _store_world(scon)
         rid = _pra_offer(scon)
+        original_iter = store.iter_offers
+        def bounded_stats(*args, **kwargs):
+            assert not kwargs.get("stat"), "NBA extra-market full-history scan"
+            return original_iter(*args, **kwargs)
+        monkeypatch.setattr(store, "iter_offers", bounded_stats)
         res = forward.forecast_league(scon, hcon, "nba", "2026-01-31T21:00:00Z", log=lambda *x: None)
         assert res["written"].get("sm-1") == 1 and res["written"].get("nba8-1") == 1, res
         assert "nba8_error" not in res
@@ -235,6 +240,11 @@ def test_flag_off_writes_no_canonical_forecast_only_the_shadow(tmp_path, monkeyp
     with store.opened(tmp_path / "canonical.db") as scon:
         _store_world(scon)
         rid = _pra_offer(scon)
+        original_iter = store.iter_offers
+        def bounded_stats(*args, **kwargs):
+            assert not kwargs.get("stat"), "NBA extra-market full-history scan"
+            return original_iter(*args, **kwargs)
+        monkeypatch.setattr(store, "iter_offers", bounded_stats)
         res = forward.forecast_league(scon, hcon, "nba", "2026-01-31T21:00:00Z", log=lambda *x: None)
         assert res["written"].get("sm-1") == 1 and "nba8-1" not in res["written"]
         assert not [f for _, f in store.forecasts(scon, model_version="nba8-1")]

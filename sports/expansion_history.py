@@ -150,6 +150,10 @@ def _team_sets(offer):
 # side matched exactly, one ESPN fixture at that time. Exact labels only - never a prefix, never fuzzy; a label that was
 # not seen live is not listed (Melbourne City, Newcastle Jets wait for their first observed fixture).
 BOOK_TEAM_ALIASES = {
+    # Verified 2026-11-24: PP Shabab/Abha at 11-26 15:05Z matches ESPN 401900443;
+    # PP NEOM/Ittihad also matches ESPN's 11-27 17:30Z fixture exactly.
+    'soccer:team:espn:793': ('Shabab',),
+    'soccer:team:espn:2276': ('Ittihad',),
     'soccer:team:espn:5328': ('Mel Victory',),            # Melbourne Victory  (v Auckland FC, 2026-11-21 04:00Z)
     'soccer:team:espn:5322': ('Perth',),                  # Perth Glory FC     (v CC Mariners, 2026-11-21 06:00Z)
     'soccer:team:espn:5325': ('Central Coast',),          # Central Coast Mariners FC (same fixture)
@@ -358,6 +362,35 @@ def tab_rows(directory, now=None):
             except (KeyError, TypeError, ValueError, AttributeError):
                 continue
     return out
+
+
+def soccer_offer_dates(directory, today, offset=0):
+    """At most two rotating offered dates beyond the normal two-day horizon.
+    Uses existing request/time limits; never guesses an event or league identity.
+    The four normal live dates and the backfill request remain in the queue.
+    """
+    rows = tab_rows(directory)
+    try:
+        path = directory / 'board.json'
+        if path.stat().st_size <= 3_000_000:
+            rows += json.loads(path.read_text(encoding='utf-8')).get('offers', [])
+    except (OSError, ValueError, AttributeError):
+        pass
+    days = set()
+    for row in rows:
+        if row.get('sport') != 'soccer':
+            continue
+        try:
+            day = parse_utc(row['start']).date()
+        except (KeyError, TypeError, ValueError):
+            continue
+        if today + timedelta(days=2) < day <= today + timedelta(days=7):
+            days.add(day)
+    days = sorted(days)
+    if days:
+        pivot = offset % len(days)
+        days = (days[pivot:] + days[:pivot])[:2]
+    return [day.strftime('%Y%m%d') for day in days]
 
 
 # soccer-grades-1120: a team of an offered fixture whose roster was NEVER loaded gets a roster-only read in this pass
@@ -850,6 +883,8 @@ def collect(sport, max_requests=16, max_seconds=150):
     # longer returns it (verified: Stockholm, last day 2026-11-14, absent on 20261115); tomorrow for one about to start.
     requests = ([('live', f'{today+timedelta(days=i):%Y%m%d}') for i in range(-1, 3)]
                 if sport == 'soccer' else [('live', f'{today+timedelta(days=i):%Y%m%d}') for i in (0, -1, 1)])
+    if sport == 'soccer':
+        requests.extend(('live', day) for day in soccer_offer_dates(directory, today, offset))
     # Tennis providers accept bounded date ranges. Seven days per request
     # avoids spending 7.5 hours walking 90 individual dates on a new store.
     width = 7 if sport == 'tennis' else 1
