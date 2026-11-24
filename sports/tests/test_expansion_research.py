@@ -135,6 +135,27 @@ def test_standard_variant_keeps_priority_when_an_alternate_was_seen_first(tmp_pa
     assert order[0] == chosen['player']
 
 
+def test_quote_gap_preserves_future_member_research_without_publishing_old_offers(tmp_path, monkeypatch):
+    offers, order = _fair_setup(tmp_path, monkeypatch, n_count=1, n_comp=0)
+    offers[0].update(start='2099-01-01T00:00:00Z', variant='standard')
+    offer = dict(offers[0])
+    research.publish('soccer', budget_s=2)
+    first = research.saved('soccer')['players']
+    offers.clear()
+    research.publish('soccer', budget_s=2)
+    assert research.saved('soccer')['players'] == first
+    # Kept research cannot manufacture a board row when the quote is absent.
+    assert research.attach('soccer', {'offers': []})['research'] == {}
+    offers.append(offer)
+    research.publish('soccer', budget_s=0)
+    assert research.saved('soccer')['players'] == first
+    # It is bounded serving state, not a permanently pinned historical cache.
+    offers.clear()
+    monkeypatch.setattr(research, 'now_utc', lambda: '2100-01-01T00:00:00Z')
+    research.publish('soccer', budget_s=0)
+    assert research.saved('soccer')['players'] == {}
+
+
 def test_fresh_resolved_entries_are_carried_and_unresolved_ones_retried(tmp_path, monkeypatch):
     from sports.contracts import now_utc
     offers, order = _fair_setup(tmp_path, monkeypatch, n_count=3, n_comp=0)

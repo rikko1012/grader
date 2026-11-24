@@ -269,10 +269,20 @@ def _publish(sport, budget_s=20, results_at=None):
     # Standard member lines get the first half of this bounded run. The other
     # half keeps the existing oldest-checked rotation, so thousands of alternate
     # markets cannot delay the member board indefinitely, or be starved by it.
-    member_keys = {key(o) for o in board['offers']
+    member_starts = {k: v['_member_start'] for k, v in previous.items()
+                     if isinstance(v.get('_member_start'), str) and v['_member_start'] > now_utc()}
+    member_starts.update({key(o): o['start'] for o in board['offers']
                    if (o.get('variant') == 'standard' or
                        (o.get('platform') == 'underdog' and o.get('variant') == 'balanced'))
-                   and o.get('start', '') > now_utc()}
+                   and o.get('start', '') > now_utc()})
+    member_keys = set(member_starts)
+    # A rate-limited quote refresh must not erase built research for a future fixture.
+    # attach() still requires a current offer; this carries no quote or forecast forward.
+    for k in member_keys - unique.keys():
+        if k in previous:
+            players[k] = previous[k]
+            if k in old_sigs:
+                new_sigs[k] = old_sigs[k]
     member_deadline = time.monotonic() + max(0, budget_s) / 2
     for k in sorted(unique, key=lambda k: (previous.get(k, {}).get('checked_at', ''), k)):
         old = previous.get(k)
@@ -418,7 +428,9 @@ def _publish(sport, budget_s=20, results_at=None):
     except (OSError, ValueError, KeyError, TypeError):
         events = {}                                   # research rows never block the player research
     researched = len(players)
-    doc = document(sport, players, {k: unique[k].get('start') or '' for k in players}, events,
+    for k in players.keys() & member_keys:
+        players[k] = dict(players[k], _member_start=member_starts[k])
+    doc = document(sport, players, {k: unique.get(k, {}).get('start') or member_starts.get(k, '') for k in players}, events,
                    results_at or history.results_at(sport), priority=member_keys)
     players = doc['players']
     history.atomic_json(boards.root(sport) / 'research.json', doc)
