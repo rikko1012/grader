@@ -120,8 +120,23 @@ MIGRATIONS = [
 # the newest sighting of a stored row - records_offer_seen holds its three plain columns, so the expression is read
 # from the index on every SQLite version (an expression index is only covering on newer SQLite; CI's was not)
 SEEN_SQL = "COALESCE(last_seen_at, observed_at, known_at)"
-FEED_SIGHTINGS_SQL = ("SELECT platform, max(coalesce(last_seen_at, observed_at)) FROM records "
-                     "WHERE kind = 'offer' GROUP BY platform")
+# One seek per platform instead of grouping every historical index entry.
+# Keep NULL platforms too for compatibility with an old/imported database.
+FEED_SIGHTINGS_SQL = """WITH RECURSIVE platforms(platform) AS (
+    SELECT min(platform) FROM records INDEXED BY records_feed_seen WHERE kind='offer'
+    UNION ALL
+    SELECT (SELECT min(platform) FROM records INDEXED BY records_feed_seen
+            WHERE kind='offer' AND platform > platforms.platform)
+    FROM platforms WHERE platform IS NOT NULL
+)
+SELECT p.platform, (SELECT max(coalesce(last_seen_at, observed_at))
+                   FROM records INDEXED BY records_feed_seen
+                   WHERE kind='offer' AND platform=p.platform)
+FROM platforms p WHERE p.platform IS NOT NULL
+UNION ALL
+SELECT NULL, max(coalesce(last_seen_at, observed_at))
+FROM records INDEXED BY records_feed_seen
+WHERE kind='offer' AND platform IS NULL HAVING count(*) > 0"""
 CURRENT_SQL = "late = 0"                           # the predicate every 'current' reader adds (see module docstring)
 UNIQUE_REVISION_INDEX = ("CREATE UNIQUE INDEX IF NOT EXISTS records_ident_rev ON records "
                          "(kind, source, source_key, revision)")
