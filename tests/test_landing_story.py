@@ -70,6 +70,7 @@ def test_proof_counts_and_reviews_are_from_shared_answers(story):
     assert '1,010 decided picks' in s  # wins + losses only; pushes stay separate
     assert '12 reviews, all published' in s and '4.8' in s
     assert '13,090' not in s and '1,439' not in s
+    assert 'data-to="1010"' in s and 'data-to="13090"' not in s
     assert '<td class="w">300</td>' in s and '<td class="p">3</td>' in s
 
 
@@ -90,6 +91,9 @@ def test_missing_proof_is_not_invented(story,monkeypatch):
     assert '13,090' not in s and '5.0 · 15' not in s
     assert '<table class="rec">' not in s
     assert '<ul class="review-track"></ul>' in s
+    assert '0 reviews, all published' not in s
+    assert 'From the public record, .' not in s
+    assert 'All reviews</a>' in s
 
 
 def test_proof_escapes_untrusted_review_text(story,monkeypatch):
