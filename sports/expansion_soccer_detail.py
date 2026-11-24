@@ -13,7 +13,25 @@ from .expansion import Feed, _number
 from . import net
 
 # Source team name verified against the Nov 2 fixture in both feeds.
-TEAM_ALIASES = {109705: ('RB Bragantino', 'Red Bull Bragantino', 'Bragantino')}
+TEAM_ALIASES = {109705: ('RB Bragantino', 'Red Bull Bragantino', 'Bragantino'),
+                # 2026-11-22 19:00Z, 4-2 vs Remo: ESPN 401841318 / FotMob 5103721.
+                10273: ('Athletico Paranaense', 'Athletico-PR')}
+# Verified 2026-11-24 from both current team rosters: same birth date and shirt.
+# IDs are source-specific; a match still needs exact teams, time, final score,
+# and the mapped ESPN player on that team's match roster. No fuzzy names.
+PLAYER_LINKS = {
+    '1130833': ('soccer:player:espn:287774', 'Bidu', 'Matheus Bidu'),       # 1999-05-04, #21
+    '535944': ('soccer:player:espn:201793', 'Zé Welison', 'José Welison'),  # 1995-03-11, #28
+    '936701': ('soccer:player:espn:206952', 'Marcelo', 'Marcelo Rangel'),   # 1988-05-17, #88
+}
+IDENTITY_REPAIR = 'identity-1124-v1'
+
+
+def repair_match(match):
+    """Only matches affected by the verified identity repairs need an early reread."""
+    ids = {v[0] for v in PLAYER_LINKS.values()}
+    return (any(p.get('id') in ids for p in match.get('players', [])) or
+            any(p.get('id') == 'soccer:team:espn:3458' for p in match.get('participants', [])))
 # FotMob league id (listing primaryId; matchDetails parentLeagueId, = leagueId for a plain league) -> ESPN slug.
 # Keyed by id since 2026-11-18: (country, name) broke on group / stage names ("K-League 1 Final Group A") and on
 # renames ("Major League Soccer" in the listing, "MLS" in allLeagues). Every id checked against FotMob allLeagues
@@ -114,6 +132,10 @@ def parse_detail(body, competition, matches, observed_at):
     for player in players.values():
         team=team_ids.get(str(player.get('teamId')))
         candidates=[p for p in match.get('players',[]) if p['team_id']==team and normalized(p['name'])==normalized(player.get('name'))]
+        link = PLAYER_LINKS.get(str(player.get('id')))
+        if not candidates and link and normalized(player.get('name')) == normalized(link[1]):
+            candidates = [p for p in match.get('players', []) if p['team_id'] == team and
+                          p['id'] == link[0] and normalized(p['name']) == normalized(link[2])]
         if len(candidates)!=1 or candidates[0]['id'] in seen:
             continue
         pid=candidates[0]['id'];seen.add(pid)
@@ -138,17 +160,43 @@ def collect_details(catalogs,get,persist,directory,recent=None):
     path=directory/'detail-history-state.json'
     try:state=json.loads(path.read_text(encoding='utf-8'))
     except (OSError,ValueError):state={}
+    repair_path = directory / 'detail-identity-rechecks.json'
+    try:
+        repaired = json.loads(repair_path.read_text(encoding='utf-8'))
+        if not isinstance(repaired, dict):
+            repaired = {}
+    except (OSError, ValueError):
+        repaired = {}
     now=datetime.now(timezone.utc);errors=[]
+    def needs_repair(match):
+        previous = repaired.get(match['event_id'])
+        if not repair_match(match) or previous == IDENTITY_REPAIR:
+            return False
+        if isinstance(previous, dict) and previous.get('version') == IDENTITY_REPAIR:
+            try:
+                return (now-parse_utc(previous['attempted'])).total_seconds() >= 86400
+            except (KeyError, ValueError, TypeError):
+                pass
+        return True
+
+    def attempted(match):
+        if needs_repair(match):
+            repaired[match['event_id']] = {'version': IDENTITY_REPAIR, 'attempted': now_utc()}
+
     # A detail requires an ESPN match roster and final score before any fetch.
     available=[m for rows in catalogs.values() for m in rows.values()
                if m.get('competition') in LEAGUES.values() and
                (recent is None or m['competition'] in ORIGINAL or m['competition'] in recent) and
                m.get('status')=='final' and m.get('scores') and m.get('players')]
     due=[m for m in available if not state.get(m['event_id']) or
-         (now-parse_utc(state[m['event_id']])).total_seconds()>=86400]
+         (now-parse_utc(state[m['event_id']])).total_seconds()>=86400 or
+         needs_repair(m)]
     # The original six (forecast inputs) first, so a newer league's backlog never takes their date slot; with only
     # the six (recent={}) this is the 53dad0b order exactly.
-    due.sort(key=lambda m:(m['competition'] not in ORIGINAL,state.get(m['event_id']) or '',-parse_utc(m['start']).timestamp()))
+    due.sort(key=lambda m:(m['competition'] not in ORIGINAL,
+             not needs_repair(m),
+             '' if needs_repair(m) else state.get(m['event_id']) or '',
+             -parse_utc(m['start']).timestamp()))
     try:
         # One date per batch prevents broad league discovery from consuming the
         # entire request allowance; pending matches resume on the next run.
@@ -173,19 +221,26 @@ def collect_details(catalogs,get,persist,directory,recent=None):
         for match in due:
             if match['start'][:10]==day and match['event_id'] not in matched:
                 state[match['event_id']]=now_utc()
+                attempted(match)
         for row,competition,match in pending:
             try:
                 detail=get('https://www.fotmob.com/api/data/matchDetails',{'matchId':row['id']})
                 if str((detail.get('general') or {}).get('matchId'))!=str(row['id']):
                     raise ValueError('soccer detail identity mismatch')
                 feed=parse_detail(detail,competition,[match],now_utc())
-                persist(feed,competition)
+                accepted = persist(feed,competition)
+                attempted(match)
+                if repair_match(match) and feed.records and accepted is not False:
+                    repaired[match['event_id']] = IDENTITY_REPAIR
                 state[match['event_id']]=now_utc()
             except (net.HttpError,ValueError,OSError) as e:
+                attempted(match)
                 state[match['event_id']]=now_utc()
                 errors.append(type(e).__name__)
     except (net.HttpError,ValueError,OSError) as e:
         errors.append(type(e).__name__)
     finally:
         atomic_json(path,{k:v for k,v in state.items() if (now-parse_utc(v)).total_seconds()<100*86400})
+        available_ids = {m['event_id'] for m in available}
+        atomic_json(repair_path, {k:v for k,v in repaired.items() if k in available_ids})
     return errors
