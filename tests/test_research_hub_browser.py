@@ -680,7 +680,7 @@ def test_board_rows_show_real_counts_placeholders_chips_and_compare(ctx, env, si
     assert p.locator('#hub-detail .h-full-research a').get_attribute('href').startswith('/sports?view=classic#/player/')
     heads = p.locator('#hub-detail .h-stat-group h5').all_inner_texts()
     # card-and-chips 2026-11-06: factor-engine rows (weight 0) are headed as not part of Grader's forecast, never "Model inputs"
-    assert {'MATCHUP', 'AVERAGES', "MATCHUP NUMBERS (NOT PART OF SCOUT'S FORECAST)"} <= {h.upper() for h in heads} and 'MODEL INPUTS' not in {h.upper() for h in heads}, heads
+    assert {'MATCHUP', 'AVERAGES', "MATCHUP NUMBERS (NOT PART OF GRADER'S FORECAST)"} <= {h.upper() for h in heads} and 'MODEL INPUTS' not in {h.upper() for h in heads}, heads
     no_h_scroll(p)
     assert not p.errors
 

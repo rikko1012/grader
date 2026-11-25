@@ -165,7 +165,7 @@ def test_draftkings_in_main_board_selector(browser, env, monkeypatch, width):
         first = p.locator('tr[data-record]').first
         assert 'side not supplied' in first.text_content().lower() or ('Over' in first.locator('.h-c-scout').inner_text() and 'Under' in first.locator('.h-c-scout').inner_text())
         assert not p.locator('tr[data-record] button:has-text("+ Add")').count()
-        assert p.locator('th.h-c-scout').inner_text().strip().lower() == 'scout'          # the same column as every other book
+        assert p.locator('th.h-c-scout').inner_text().strip().lower() == 'grader'          # the same column as every other book
         p.locator('tr[data-record] .h-player').first.click()
         p.locator('.h-extra-detail').wait_for()
         assert '-117 / +105' in p.locator('.h-extra-detail').inner_text()
