@@ -76,7 +76,7 @@ def test_exclude_leaves_a_line_out(env):
     ({"platform": "underdog", "type": "flex", "picks": 2}, "Underdog Flex needs at least 3 picks."),
     ({"platform": "prizepicks", "type": "flex", "picks": 2}, "PrizePicks Flex needs at least 3 picks."),   # not offered in the app
     ({"platform": "underdog", "type": "standard", "mix": "mixed", "sports": "cs2,lol"}, "Underdog does not publish mixed-sport entries. Choose PrizePicks or one sport."),
-    ({"games": "stacks"}, "PrizePicks keeps its same-match limits in its app. Scout builds same-match legs on Underdog only."),
+    ({"games": "stacks"}, "PrizePicks keeps its same-match limits in its app. Grader builds same-match legs on Underdog only."),
     ({"sports": "chess"}, "Choose at least one sport."),
     ({"exclude": ",".join(f"k{i}" for i in range(61))}, "Too many lines to leave out. Generate again."),
 ])
@@ -215,7 +215,7 @@ def test_advice_takes_the_goblin_rule(env):
 
 
 def test_advice_one_goblin_counts_a_goblin_outside_the_pool(env):
-    """Review 2026-11-05: the member's own goblin below Scout's slip bar is not in the pool; the route reads its line type from the
+    """Review 2026-11-05: the member's own goblin below Grader's slip bar is not in the pool; the route reads its line type from the
     board (the client never sends one), so "at most 1 goblin" never offers a second goblin as the swap."""
     _with_goblin(env)
     env.rows.append(row("pp:7400", "prizepicks", "lowgob", "Basalt", "Quarry", 11.5, "More", .56, 904, env.rows[0]["start"], odds_type="goblin"))

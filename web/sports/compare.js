@@ -1,16 +1,16 @@
-/* Scout Sports - Compare (#/compare, compare agent, rule cmp-1). Classes "sw-cmp-*" under body.sw (web/sports/compare.css).
-   Members put up to MAX props (same game or other games, any stat, any book) side by side and see which line Scout's
+/* Prop Grader Sports - Compare (#/compare, compare agent, rule cmp-1). Classes "sw-cmp-*" under body.sw (web/sports/compare.css).
+   Members put up to MAX props (same game or other games, any stat, any book) side by side and see which line Grader's
    research rates better. Every number on a compared prop is SportsRows.propRow(market, offer, {fc, view, now})
-   (web/sports/table.js pr-1 - lean, Scout chance, market chance at that line, edge, research grade, L5 / L10, cf-2
+   (web/sports/table.js pr-1 - lean, Grader chance, market chance at that line, edge, research grade, L5 / L10, cf-2
    confidence, sanity hold, NFL not-validated label); this file only ranks rows and lays them out.
    RANKING RULE (cmp-1, deterministic, stated on the page):
-     eligible = a Scout lean, a positive edge for that side at that line, and that side offered by the book
+     eligible = a Grader lean, a positive edge for that side at that line, and that side offered by the book
                 (held rows, NFL not-validated rows, no-lean rows, rows without a market chance -> "Not ranked" + reason;
                 audit 2026-10-26: "Not ranked" (the card can still carry a Lean / research grade));
-     order    = edge (points) high first -> Scout chance of the lean side -> confidence -> player / stat / line / book.
+     order    = edge (points) high first -> Grader chance of the lean side -> confidence -> player / stat / line / book.
    BETTER BOOK LINE (same player + stat across books): for Over the lowest line, for Under the highest line, among the
-   books that offer that side; ties -> higher Scout chance at that line. Chances at each line are read from the
-   market's saved Scout distribution (the offer's own forecast or q.lr), never re-computed here.
+   books that offer that side; ties -> higher Grader chance at that line. Chances at each line are read from the
+   market's saved Grader distribution (the offer's own forecast or q.lr), never re-computed here.
    Same game: two compared props from one game get "Same game - results are related"; never a joint chance.
    Storage: localStorage scout.sports.compare.v1 = {nba: [item], nfl: [item]} (device only). Share link:
    #/compare?lg=..&c=<platform>~<offer id>~<line>,...; on load GET /api/sports/compare/check (sports/api_compare.py)
@@ -21,9 +21,9 @@
   var R = root.SportsRows || (typeof require !== "undefined" ? require("./table.js") : null);
   var S = root.SportsStats || (typeof require !== "undefined" ? require("./stats.js") : null);
   var RULE = "cmp-1", MAX = 6, LS = "scout.sports.compare.v1";
-  var RULE_TEXT = "Better line = the highest edge (Scout chance minus market chance at that line, in points) on the side Scout leans. " +
-    "Only props with a lean, a positive edge and that side offered qualify; ties go to the higher Scout chance, then the higher confidence. Research only - not a return estimate.";
-  var BOOK_RULE = "Same player and stat on several books: for Over the lowest line is better, for Under the highest; Scout chances at each line come from the same saved distribution.";
+  var RULE_TEXT = "Better line = the highest edge (Grader chance minus market chance at that line, in points) on the side Grader leans. " +
+    "Only props with a lean, a positive edge and that side offered qualify; ties go to the higher Grader chance, then the higher confidence. Research only - not a return estimate.";
+  var BOOK_RULE = "Same player and stat on several books: for Over the lowest line is better, for Under the highest; Grader chances at each line come from the same saved distribution.";
   var SAME_GAME = "Same game - results are related";
   var STD = /^(standard|balanced|main|ladder_rung)$/;
 
@@ -82,19 +82,19 @@
   }
   // why a row cannot be the better line, or null when it qualifies
   function noPickReason(r) {
-    if (!r.scout) return "No Scout chance at this line";
+    if (!r.scout) return "No Grader chance at this line";
     if (r.held) return r.held;
     if (r.notValidated) return r.notValidated + " - projection only, no edge";
     if (!r.lean) {
-      if (r.noLean) return "Scout favours " + side(r.noLean.side) + " but the market prices it higher (" + R.edgeText(r.noLean.edge) + " pts)";
-      return "No lean - Scout's chance and projection do not point to one side";
+      if (r.noLean) return "Grader favours " + side(r.noLean.side) + " but the market prices it higher (" + R.edgeText(r.noLean.edge) + " pts)";
+      return "No lean - Grader's chance and projection do not point to one side";
     }
     if (!nn(r.edge)) return "No market chance at this line, so no edge";
     if (!(r.edge > 1e-9)) return "Edge is not positive";
     if (r.leanOffered === false) return side(r.lean) + " is not offered on " + S.bookName(r.book);
     return null;
   }
-  // A10 (audit 2026-11-05): every compared prop side by side - Scout's chance at the line, the projection, the market's
+  // A10 (audit 2026-11-05): every compared prop side by side - Grader's chance at the line, the projection, the market's
   // chance and the player's history at that line - whether or not it has a lean or a rank (NBA / NFL models that are
   // not validated still show their projection and chances; only the edge and the rank stay out).
   function sideBySide(rows) {
@@ -128,7 +128,7 @@
     });
     return order.map(function (e) { return by[e]; }).filter(function (g) { return g.rows.length > 1; });
   }
-  // the same player + stat on every book of this market: Scout chance at each line, best line per side
+  // the same player + stat on every book of this market: Grader chance at each line, best line per side
   function bookLines(m, ctx) {
     var now = ctx.now || Date.now();
     var qs = (m.q || []).concat(m.kn || []).filter(function (q) { return S.quoteShown(q, now); });
@@ -266,7 +266,7 @@
   function field(label, val, cls) { return '<div class="sw-cmp-f' + (cls ? " " + cls : "") + '"><span class="sw-cmp-k">' + esc(label) + '</span><span class="sw-cmp-v">' + val + "</span></div>"; }
   function leanHtml(r) {
     var Lb = root.SportsLabels;
-    if (!r.scout) return '<span class="sw-faint">No Scout chance</span>';
+    if (!r.scout) return '<span class="sw-faint">No Grader chance</span>';
     if (r.held) return '<span class="sw-cmp-held" data-held="' + esc(r.heldCode) + '">' + esc(r.held) + "</span>";
     if (!r.lean) return '<span class="sw-faint">No lean</span>' + (r.notValidated ? ' <span class="sw-grade-nv">' + esc(r.notValidated) + "</span>" : "");
     if (r.grade && Lb) return Lb.gradeHtml(r.grade, r.lean, r.notValidated);
@@ -295,8 +295,8 @@
     return '<article class="sw-cmp-card' + (r.rank === 1 ? " best" : "") + '" data-rid="' + esc(r.rid) + '" data-event="' + esc(r.event) + '">' +
       '<div class="sw-cmp-f sw-cmp-top">' + head + "</div>" +
       field("Stat · line", "<b>" + esc(statName(B, r)) + " " + S.line(r.line) + '</b> <span class="sw-faint">' + esc(S.bookName(r.book)) + "</span>") +
-      field("Scout leans", leanHtml(r) + (r.gap ? ' <span class="sw-cmp-gap">Model vs market gap</span>' : "") + (r.leanOffered === false ? ' <span class="sw-faint">not offered here</span>' : ""), "sw-cmp-lean") +
-      field("Scout chance at " + S.line(r.line), scoutTxt) +
+      field("Grader leans", leanHtml(r) + (r.gap ? ' <span class="sw-cmp-gap">Model vs market gap</span>' : "") + (r.leanOffered === false ? ' <span class="sw-faint">not offered here</span>' : ""), "sw-cmp-lean") +
+      field("Grader chance at " + S.line(r.line), scoutTxt) +
       field("Market chance", mkTxt) +
       field("Edge (pts)", '<b data-cmp-edge="' + (nn(r.edge) ? r.edge.toFixed(4) : "") + '" class="' + (nn(r.edge) && r.edge > 0 ? "sw-cmp-pos" : "") + '">' + (r.notValidated || r.held ? "—" : R.edgeText(r.edge)) + "</b>") +
       field("Confidence", r.conf ? "<b>" + r.conf.score + '</b><span class="sw-faint">/5</span> <span class="sw-cmp-research" title="' + esc(r.conf.why.join("; ")) + '">Research</span>' : "—") +
@@ -311,7 +311,7 @@
     if (!rows.length) return "";
     var hitTxt = function (x) { return x ? R.hitText(x) + ' <span class="sw-faint">(' + x.n + ")</span>" : "—"; };
     return '<div class="sw-scroll sw-cmp-side"><table class="sw-mini" data-cmp-side><caption class="sw-cmp-side-cap">Side by side</caption><thead><tr>' +
-      '<th scope="col">Prop</th><th scope="col" class="num">Scout Over</th><th scope="col" class="num">Scout Under</th><th scope="col" class="num">Projection</th>' +
+      '<th scope="col">Prop</th><th scope="col" class="num">Grader Over</th><th scope="col" class="num">Grader Under</th><th scope="col" class="num">Projection</th>' +
       '<th scope="col" class="num">Market Over</th><th scope="col" class="num">L10</th><th scope="col" class="num">L5</th></tr></thead><tbody>' +
       sideBySide(rows).map(function (x) {
         return '<tr data-rid="' + esc(x.rid) + '"><th scope="row">' + esc(x.player) + ' <span class="sw-faint sw-small">' + esc(statName(B, x) + " " + S.line(x.line) + " · " + S.bookName(x.book)) + "</span></th>" +
@@ -323,9 +323,9 @@
     var h = '<section class="sw-panel sw-cmp-verdict-box" aria-labelledby="sw-cmp-vh"><h2 id="sw-cmp-vh">Better line</h2>';
     if (res.best) {
       var b = res.best;
-      h += '<p class="sw-cmp-best" data-best="' + esc(b.rid) + '"><b>' + esc(propTitle(B, b)) + "</b> · edge <b>" + R.edgeText(b.edge) + " pts</b> · Scout " + S.pct(b.pLean) +
+      h += '<p class="sw-cmp-best" data-best="' + esc(b.rid) + '"><b>' + esc(propTitle(B, b)) + "</b> · edge <b>" + R.edgeText(b.edge) + " pts</b> · Grader " + S.pct(b.pLean) +
         (b.grade && root.SportsLabels ? " · " + root.SportsLabels.gradeHtml(b.grade, b.lean, b.notValidated) : "") + "</p>";
-      if (res.ranked.length > 1) h += '<ol class="sw-cmp-order">' + res.ranked.map(function (r) { return "<li>" + esc(propTitle(B, r)) + " · " + R.edgeText(r.edge) + " pts · Scout " + S.pct(r.pLean) + (r.conf ? " · confidence " + r.conf.score + "/5" : "") + "</li>"; }).join("") + "</ol>";
+      if (res.ranked.length > 1) h += '<ol class="sw-cmp-order">' + res.ranked.map(function (r) { return "<li>" + esc(propTitle(B, r)) + " · " + R.edgeText(r.edge) + " pts · Grader " + S.pct(r.pLean) + (r.conf ? " · confidence " + r.conf.score + "/5" : "") + "</li>"; }).join("") + "</ol>";
     } else {
       h += '<p class="sw-cmp-best none" data-best="">No compared prop qualifies yet.</p>';
     }
@@ -333,7 +333,7 @@
     h += sideHtml(B, rows);
     groups.forEach(function (g) {
       h += '<p class="sw-banner warn sw-cmp-sgw" role="note"><b>' + SAME_GAME + "</b> (" + esc(g.matchup) + "): " + esc(g.rows.map(function (r) { return r.player + " " + statName(B, r); }).join(", ")) +
-        ". One game drives all of them, so they tend to win or lose together. Scout does not combine their chances.</p>";
+        ". One game drives all of them, so they tend to win or lose together. Grader does not combine their chances.</p>";
     });
     return h + '<p class="sw-cmp-rule sw-small sw-faint">' + esc(RULE_TEXT) + " (" + RULE + ")</p></section>";
   }
@@ -348,12 +348,12 @@
         var x = bl.best[s];
         if (!x) return side(s) + ": no book offers it";
         var p = s === "over" ? x.po : x.pu;
-        return side(s) + ": <b>" + S.line(x.line) + "</b> on " + esc(S.bookName(x.book)) + (nn(p) ? " · Scout " + S.pct(p) : "");
+        return side(s) + ": <b>" + S.line(x.line) + "</b> on " + esc(S.bookName(x.book)) + (nn(p) ? " · Grader " + S.pct(p) : "");
       }
       out += '<div class="sw-cmp-bk" data-key="' + esc(r.key) + '"><h3>' + esc(r.player + " · " + statName(B, r)) + "</h3>" +
         '<p class="sw-small"><span class="' + (lean === "over" ? "sw-cmp-lean-on" : "") + '" data-bestbook="over" data-bestline="' + (bl.best.over ? bl.best.over.line : "") + '">' + bestTxt("over") + "</span><br>" +
         '<span class="' + (lean === "under" ? "sw-cmp-lean-on" : "") + '" data-bestbook="under" data-bestline="' + (bl.best.under ? bl.best.under.line : "") + '">' + bestTxt("under") + "</span></p>" +
-        '<div class="sw-scroll"><table class="sw-mini"><thead><tr><th scope="col">Book</th><th scope="col" class="num">Line</th><th scope="col" class="num">Scout Over</th><th scope="col" class="num">Scout Under</th></tr></thead><tbody>' +
+        '<div class="sw-scroll"><table class="sw-mini"><thead><tr><th scope="col">Book</th><th scope="col" class="num">Line</th><th scope="col" class="num">Grader Over</th><th scope="col" class="num">Grader Under</th></tr></thead><tbody>' +
         bl.lines.map(function (x) {
           return "<tr><td>" + esc(S.bookName(x.book)) + (x.offered[0] ? "" : ' <span class="sw-faint">(no Over)</span>') + (x.offered[1] ? "" : ' <span class="sw-faint">(no Under)</span>') + '</td><td class="num">' + S.line(x.line) +
             '</td><td class="num">' + S.pct(x.po) + '</td><td class="num">' + S.pct(x.pu) + "</td></tr>";
@@ -399,7 +399,7 @@
       var ranked = rank(rows), groups = sameGame(rows), sgEv = {};
       groups.forEach(function (g) { sgEv[g.event] = 1; });
       var h = '<div class="sw-cmp"><div class="sw-eyebrow">' + esc(lg.toUpperCase()) + ' · Research</div><h1 class="sw-h1">Compare</h1>' +
-        '<p class="sw-muted sw-cmp-intro">Put up to ' + MAX + " props side by side - same game or different games, any stat, any book - and see which line Scout's research rates better. Add props with <b>Compare</b> on the Prop board, a player page or a sheet.</p>";
+        '<p class="sw-muted sw-cmp-intro">Put up to ' + MAX + " props side by side - same game or different games, any stat, any book - and see which line Grader's research rates better. Add props with <b>Compare</b> on the Prop board, a player page or a sheet.</p>";
       if (shared) {
         h += '<div class="sw-banner info sw-cmp-shared">Shared comparison, checked ' + esc(chk && chk.checked_at ? S.age(chk.checked_at) : "now") + ": " + items.length + " of " + shared.length +
           " props are still open at the same line." + (items.length ? ' <button type="button" class="sw-btn sw-btn-sm" id="sw-cmp-keep">Save as my comparison</button>' : "") +

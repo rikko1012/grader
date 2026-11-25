@@ -1,4 +1,4 @@
-"""Browser flows for the Scout Sports workspace (Playwright, Chromium). Skipped unless SPORTS_UI_BROWSER_URL points at a
+"""Browser flows for the Prop Grader Sports workspace (Playwright, Chromium). Skipped unless SPORTS_UI_BROWSER_URL points at a
 running esports server with SPORTS_UI / SPORTS_API on and a sports service answering its token (the dev preview
 configs sports_ui + sports_ui_api). Screenshots go to SPORTS_UI_SHOTS (default: pytest's tmp dir).
 
@@ -98,7 +98,7 @@ def test_board_player_game_slip_same_numbers(pw, shots):
     page.goto(URL + "/sports#/board?lg=nba")
     page.wait_for_selector(".sw-research-card", timeout=20000)
     page.screenshot(path=str(shots / "board_1280.png"))
-    # a Scout-model number (projection shown); cards and the player page both show 0.1% chances
+    # a Grader-model number (projection shown); cards and the player page both show 0.1% chances
     over = page.locator(".sw-research-grid .sw-scout [data-fcside=mean][data-fc]").first
     fid = over.get_attribute("data-fc")
     board = _numbers(page, fid, ".sw-research-grid")
@@ -498,7 +498,7 @@ MINE = {"version": "pk-1", "total": 4, "shown": 4, "stake_units": 0, "picks": [
     {"pick_id": "pk-b", "tracked_at": "2026-10-23T18:05:00Z", "league": "nba", "platform": "prizepicks", "player": "Test Won",
      "event_ref": "LAL @ GSW", "stat": "rebounds", "stat_label": "Rebounds", "line": 8.5, "side": "under", "record_id": "offer:pp:2:r1:bb",
      "revision": 1, "forecast_id": None, "model_version": None, "displayed_source": None, "p_side": None,
-     "validation_text": "No Scout chance on this line", "stake_units": 0,
+     "validation_text": "No Grader chance on this line", "stake_units": 0,
      "result": {"status": "win", "outcome": "under", "value": 6, "revision": 1, "settled_at": "2026-10-24T06:00:00Z", "corrected": False}},
     {"pick_id": "pk-c", "tracked_at": "2026-10-23T17:05:00Z", "league": "nba", "platform": "underdog", "player": "Test Corrected",
      "event_ref": "LAL @ GSW", "stat": "assists", "stat_label": "Assists", "line": 5.5, "side": "over", "record_id": "offer:ud:3:r2:cc",
@@ -508,7 +508,7 @@ MINE = {"version": "pk-1", "total": 4, "shown": 4, "stake_units": 0, "picks": [
     {"pick_id": "pk-d", "tracked_at": "2026-10-23T16:05:00Z", "league": "nba", "platform": "underdog", "player": "Test Void",
      "event_ref": "LAL @ GSW", "stat": "points", "stat_label": "Points", "line": 12.5, "side": "over", "record_id": "offer:ud:4:r1:dd",
      "revision": 1, "forecast_id": None, "model_version": None, "displayed_source": None, "p_side": None,
-     "validation_text": "No Scout chance on this line", "stake_units": 0,
+     "validation_text": "No Grader chance on this line", "stake_units": 0,
      "result": {"status": "void", "outcome": None, "value": None, "revision": 1, "settled_at": "2026-10-24T07:00:00Z", "corrected": False}}]}
 
 
@@ -529,7 +529,7 @@ def test_my_picks_dashboard(pw, shots, width):
     assert re.search(r"Model validation \(NBA, [^)]+\): [\d,]+ settled \(minimum 300\)", val), val
     assert page.locator(".sw-mp-val").bounding_box()["y"] > page.locator(".sw-mp-sum").bounding_box()["y"]    # separate panels
     row = page.locator(".sw-mp-row").first.inner_text()
-    for txt in ("Test Open", "Over 20.5", "Points", "Underdog", "61.2%", "Scout forecast", "sharp-2", "Not settled yet", "CDT"):
+    for txt in ("Test Open", "Over 20.5", "Points", "Underdog", "61.2%", "Grader forecast", "sharp-2", "Not settled yet", "CDT"):
         assert txt in row, (txt, row)
     # keyboard: arrows move between tabs
     page.locator("[role=tab][aria-selected=true]").focus()
@@ -537,7 +537,7 @@ def test_my_picks_dashboard(pw, shots, width):
     page.wait_for_selector("#sw-mp-t-settled[aria-selected=true]")
     assert page.evaluate("document.activeElement.id") == "sw-mp-t-settled"
     settled = page.locator("#sw-mp-panel").inner_text()
-    assert "Won" in settled and "Final 6 vs Under 8.5" in settled and "No Scout chance shown" in settled
+    assert "Won" in settled and "Final 6 vs Under 8.5" in settled and "No Grader chance shown" in settled
     assert "Corrected (revision 2)" in settled and "Final 5 vs Over 5.5" in settled
     page.keyboard.press("ArrowRight")
     page.wait_for_selector("#sw-mp-t-voided[aria-selected=true]")

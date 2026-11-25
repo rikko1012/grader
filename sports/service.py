@@ -1,4 +1,4 @@
-"""Scout Sports API service - its OWN process (and, in production, its own Render web service), so no esports request
+"""Prop Grader Sports API service - its OWN process (and, in production, its own Render web service), so no esports request
 thread ever executes sports work (owner brief 2; foundation measured +51% esports p99 with sports in-process).
 
     python -m sports.service [--host 0.0.0.0] [--port $PORT]

@@ -1,4 +1,4 @@
-"""Scout Sports UI snapshots (ui-snap-1): the JSON files the member pages read, built in the WORKER process.
+"""Prop Grader Sports UI snapshots (ui-snap-1): the JSON files the member pages read, built in the WORKER process.
 
 The web process never queries the store for a member page: sports/api_board.py only reads these files (bytes, cached by
 mtime). One build per league writes, atomically (temp file + os.replace):
@@ -59,7 +59,7 @@ SLATE_DAYS = {"nba": 2, "nfl": 8}                  # how far ahead the slate loo
 STARTED_KEEP_H = 4                                 # a started game stays on the slate this long (shown as started)
 LADDER_TOL = 0.005                                 # distribution must reproduce the stored chance within 0.5 points
 MAX_GAMES = 60
-# display preference when several models forecast one offer: Scout's own model first (owner 2026-10-24: a projection
+# display preference when several models forecast one offer: Grader's own model first (owner 2026-10-24: a projection
 # is not a market estimate; market estimates are shown separately as "Market estimate")
 DEFAULT_MODELS = ("sm-1", "mi-1", "sharp-2")
 PRIMARY_STATS = capabilities.SUPPORTED
@@ -70,7 +70,7 @@ FACTOR_PARTS = {
                    ("fta", "Free-throw attempts")],
     "football": [("targets", "Targets"), ("rec", "Receptions"), ("rush_att", "Carries"), ("pass_att", "Pass attempts")],
 }
-# owner factor list (OWNER_FACTORS.md, 2026-10-23) entries Scout does not hold - stated as not held, never shown as known
+# owner factor list (OWNER_FACTORS.md, 2026-10-23) entries Grader does not hold - stated as not held, never shown as known
 NOT_HELD = {          # fallback only; the player file lists player_context.NOT_HELD with a reason each
     "basketball": ["Likely defender", "Potential assists"],
     "football": ["Coverage scheme (licensed)", "PFF / NGS / DVOA (licensed)", "Defender matchup (licensed)",
@@ -535,7 +535,7 @@ def forecast_view(fc, offer_rid, for_revision=None):
             "contributions": None}
 
 
-FRESHNESS_RULE = ("a quote's age is measured from Scout's own last observation (last_seen_at) - the source's update "
+FRESHNESS_RULE = ("a quote's age is measured from Grader's own last observation (last_seen_at) - the source's update "
                   "time is shown only when the source gives one (source_time_unknown stays true otherwise; no source "
                   "time is ever invented)")
 STATUS_LABELS = {"scheduled": "Scheduled", "in_progress": "Live", "final": "Final", "postponed": "Postponed",
@@ -684,7 +684,7 @@ def _mean(xs):
 
 
 def factors(fam, games, next_event, teams_out):
-    """Owner-list factors Scout can compute from what it holds, each with its sample size and window."""
+    """Owner-list factors Grader can compute from what it holds, each with its sample size and window."""
     played = [g for g in games if g["participation"] == "played"]
     out = []
     for part, label in FACTOR_PARTS[fam]:
@@ -896,7 +896,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
             row_targets[key].append((rid, o))
         v = offer_view(rid, o, m)
         # owner 2026-11-06: a one-sided line (Over only / Under only) is shown with no forecast - a forecast saved for
-        # it before cap-2 is never attached, so it shows no Scout chance, grade, letter or stake
+        # it before cap-2 is never attached, so it shows no Grader chance, grade, letter or stake
         # NBA_STATS8 unset (default) / 0: a stored nba8-1 forecast is never attached; on: only to its own tested offer
         ch = None if capabilities.is_one_sided(o) else _choose(_live_attached(attached.get(rid, []), o))
         if ch:
@@ -949,7 +949,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
                                   events[row["event_id"]][1], now, league, dnp, fallback=market_view.fallback_on())
         row["market"] = mv
         scout_line_reads(row, forecasts)
-        for q in row["quotes"]:                          # THE Scout-chance definition (sports/scout_chance.py)
+        for q in row["quotes"]:                          # THE Grader-chance definition (sports/scout_chance.py)
             if scout_chance.is_scout_chance(q, forecasts, False):
                 q["sc"] = 1
         row["sc"] = sum(1 for q in row["quotes"] if q.get("sc"))
@@ -1133,7 +1133,7 @@ def build(con, league, now=None, base=None, history=True, results=True):
             opp_ids[r["key"]] = (e_.away_team_id if t_ == e_.home_team_id else e_.home_team_id) if t_ in (e_.home_team_id, e_.away_team_id) else None
         vrows = board_view.player_rows(rows, games, opp_ids)
         view_out.add(vrows)
-        for r in rows:                                   # vg-1 gate + sg-1 sanity guard on every Scout view (N1/N2)
+        for r in rows:                                   # vg-1 gate + sg-1 sanity guard on every Grader view (N1/N2)
             # sg-2 history rules (thin / stale) read the bv-1 row only when the history was actually read
             e_r = events[r["event_id"]][1]
             av = availability.hold(inj_cur.get(pid), av_desig.get(pid), e_r.start_utc,
@@ -1275,7 +1275,7 @@ def compact_row(r, league=None):
 
 
 def scout_view(q, forecasts):
-    """The Scout (sm-1 / mi-1) view at this quote's line: (po, pu, mu, model, forecast_id, 80% interval) or None - the
+    """The Grader (sm-1 / mi-1) view at this quote's line: (po, pu, mu, model, forecast_id, 80% interval) or None - the
     offer's own forecast, else the line read of the market's saved distribution (= web/sports/table.js scoutAt)."""
     f = forecasts.get(q.get("forecast_id") or "")
     if f and f.get("kind") != "market" and f.get("p_over") is not None and f.get("p_under") is not None:
@@ -1297,7 +1297,7 @@ def _view_push(q, forecasts, fid):
 
 
 def guard_row(league, row, forecasts, view_row, now, avail=None, opens=None):
-    """Row signal for every quote of one market row with a Scout view (sports/board_view.quote_x): q["x"] = a hold
+    """Row signal for every quote of one market row with a Grader view (sports/board_view.quote_x): q["x"] = a hold
     {"b", "t", "v"} (vg-1 gate / sg-1 sanity: no lean, edge, confidence or edge rank anywhere - board, sheets, slip
     pool) or the cf-2 signal {"ln", "pl", "e", "g", "c", "cw", "s", "n", "v"}. -> sanity log entries (sg-1 holds with
     their inputs; vg-1 holds are only counted). avail = the av-1 hold code (sports/availability.py) of this player for
@@ -1334,7 +1334,7 @@ def guard_row(league, row, forecasts, view_row, now, avail=None, opens=None):
             x, code = availability.x_of(avail), avail
         else:
             x = grade_rules.side_hold(q, x) or x         # os-2 (SPORTS_PP_SIDE_HOLD): no letter on a side PP does not list
-            grade_rules.mark_quote(league, row, q, x, opens,    # mvlean-1 (NBA, default off): moved toward Scout's side
+            grade_rules.mark_quote(league, row, q, x, opens,    # mvlean-1 (NBA, default off): moved toward Grader's side
                                    (forecasts.get(fid or "") or {}).get("forecast_at"))   # -> Lean (same test as the record)
         q["x"] = x
         if code:
@@ -1528,10 +1528,10 @@ def forward_run(league):
 
 
 def same_line_forecasts(row, forecasts):
-    """N10 (owner re-audit 2026-10-24): every book quoting the SAME line of the same market shows the same Scout
+    """N10 (owner re-audit 2026-10-24): every book quoting the SAME line of the same market shows the same Grader
     forecast. Forecasts are made for the target pick'em offers (forward run), so a sportsbook quote (FanDuel 3.5) had
-    no forecast of its own while PrizePicks / Underdog at 3.5 did ("No Scout projection yet"). An ordinary quote
-    without its own forecast takes the market's Scout (sm-1 / mi-1) forecast at the identical line - the same saved
+    no forecast of its own while PrizePicks / Underdog at 3.5 did ("No Grader projection yet"). An ordinary quote
+    without its own forecast takes the market's Grader (sm-1 / mi-1) forecast at the identical line - the same saved
     distribution, the same chances - marked fc_via = "same_line" (the forecast record still names the offer it was
     made for). Newest forecast first. -> number of quotes joined."""
     from .forecast_detail import kind
@@ -1555,7 +1555,7 @@ def same_line_forecasts(row, forecasts):
 
 
 def scout_line_reads(row, forecasts):
-    """A pick'em line with no forecast of its own, in a market that HAS a Scout (sm-1 / mi-1) forecast at another
+    """A pick'em line with no forecast of its own, in a market that HAS a Grader (sm-1 / mi-1) forecast at another
     line: the SAME saved distribution read at this line (no new projection - inputs unchanged). Marked `line_read`
     with the source forecast id, never stored as a forecast."""
     src = None
@@ -1577,27 +1577,27 @@ def scout_line_reads(row, forecasts):
 
 
 def no_forecast_reason(row, q, run):
-    """Why this shown line has no Scout number - from the pipeline's actual state, most specific first."""
+    """Why this shown line has no Grader number - from the pipeline's actual state, most specific first."""
     if row.get("capability") != "supported":
-        return "Market not supported by the Scout model" + (f": {row['capability_reason']}" if row.get(
+        return "Market not supported by the Grader model" + (f": {row['capability_reason']}" if row.get(
             "capability_reason") else "")
     if capabilities.is_one_sided(q):                   # owner 2026-11-06: labelled by its side, never graded
         side = capabilities.only_side(q)
         return ("Over only" if side == "over" else "Under only" if side == "under" else "One side only") + \
-            " line - Scout grades lines that offer both sides"
+            " line - Grader grades lines that offer both sides"
     if not q.get("gradable"):
         why = q.get("not_gradable_because") or []
         return "Line not modelled: " + (why[0] if why else "not an ordinary line")
     wn = run.get("why_none") or {}
     w = wn.get(f"{row['event_id']}|{row['player_id']}|{row['stat']}") or wn.get(f"{row['event_id']}|{row['player_id']}")
     if w:
-        return "No Scout forecast: " + w
+        return "No Grader forecast: " + w
     fa = run.get("forecast_at")
     if not fa:
         return "No forecast run yet"
     if (q.get("observed_at") or "") > fa:
         return "Line appeared after the last forecast run"
-    return "No Scout forecast in the last run"
+    return "No Grader forecast in the last run"
 
 
 def _schema_level(con):

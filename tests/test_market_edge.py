@@ -1,6 +1,6 @@
 """SCOUT_MARKET_EDGE (owner site audit 2026-11-06): the board's Market edge column and the best line and price per side across
 books (workspace_market_edge). Display only: the books' fair chance (the +EV board's own devig, 2+ fresh books) minus the app's
-verified 2-pick break-even, shown with or without a Scout side; best Over = lowest line then the cheapest payout, best Under =
+verified 2-pick break-even, shown with or without a Grader side; best Over = lowest line then the cheapest payout, best Under =
 highest line; standard lines listed for the discrepancy chip. Esports props carry the plain reason. Fixture data only."""
 import json
 import sys
@@ -39,11 +39,11 @@ def board(monkeypatch):
                   seen_at=book("x", 1, 1, 1, 60)["seen_at"], over={"offered": True, "payout": 1.80, "price": 1.80},
                   under={"offered": True, "payout": 2.02, "price": 2.02}))
     items = [
-        # Avdija-like: no Scout side, two fresh books -> a market edge for the side the books favour
+        # Avdija-like: no Grader side, two fresh books -> a market edge for the side the books favour
         (rec("p1", 6.5, app="underdog", stat="rebounds", mult=1.0), [book("fanduel", 6.5, 1.80, 2.02, 60), book("oddsapi:fanduel", 6.5, 1.81, 2.00, 60),
                                                                     book("betrivers", 6.5, 1.78, 2.05, 90)]),
         (rec("p1", 7.5, app="prizepicks", stat="rebounds"), [book("fanduel", 6.5, 1.80, 2.02, 60), book("betrivers", 6.5, 1.78, 2.05, 90)]),
-        # Scout leans Under, books favour Over: both edges
+        # Grader leans Under, books favour Over: both edges
         (scout(rec("p2", 20.5, app="prizepicks"), "under", 0.56), [book("fanduel", 20.5, 1.65, 2.30, 60), book("betrivers", 20.5, 1.70, 2.20, 60)]),
         (rec("p3", 9.5, app="prizepicks"), [book("fanduel", 9.5, 1.5, 2.8, 60)]),                                          # one book only
         (rec("p4", 9.5, app="prizepicks"), [book("fanduel", 9.5, 1.5, 2.8, 4000), book("betrivers", 9.5, 1.5, 2.8, 5000)]),  # stale

@@ -224,7 +224,7 @@ def test_lol_every_fitted_term_is_on_the_card(env):
     assert doc["grade_inputs"]["model"]["name"] == "lol-1" and set(terms) <= set(by) and not any(by[k]["live"] or "effect" in by[k] for k in terms)
     assert by["player_rate"]["live"] and "lpf1_correction" not in by
     # a line that offers one side only has no chance, side, letter or stake - the block says why and nothing else about a grade
-    why = "Over only: Scout grades lines that offer both sides."
+    why = "Over only: Grader grades lines that offer both sides."
     g = gi_mod.lol({"member": {"scope_games": "game 1 only"}, "gi": {"player_rate": 3.2}},
                    {"scout": {"side": None, "p_side": None, "projection": None, "grade": None, "units": None, "hold": {"label": "Over only", "reason": why}},
                     "offer": {"line": 7.5}, "player": {"opponent": "MVK Esports"}, "event": {"best_of": 3}})

@@ -6,9 +6,9 @@
 
    The page's own script still paints everything (real board rows, the record count, member reviews, the demos). This file only
    adds what the v3 shape needs and CSS cannot draw:
-   - the header wordmark reads "Scout" beside the 1T tile (the link keeps its "1time Scout" name);
+   - the header wordmark reads "Grader" beside the 1T tile (the link keeps its "Prop Grader" name);
    - the example pick card gets the v3 chance meter, filled from the chance the page itself prints (#hc-pct), and the approved
-     "Model estimate" label under the number (the card's own line still reads "Scout's chance at exactly <line>"). */
+     "Model estimate" label under the number (the card's own line still reads "Grader's chance at exactly <line>"). */
 (function () {
   'use strict';
   if (!window.ScoutV3) return;
@@ -18,7 +18,7 @@
     var a = D.querySelector('header.top .brand'), b = a && a.querySelector('b');
     if (!b || a.classList.contains('v3-named')) return;
     a.classList.add('v3-named');
-    b.textContent = 'Scout';
+    b.textContent = 'Grader';
   }
 
   function heroCard() {
@@ -49,7 +49,7 @@
     legend: '3 mo vs 12-mo avg; per-map vs line pace; rating vs 1.00',
     side: 'Over', line: 28.5, stat: 'Kills', scope: 'Maps 1-2', chance: 57.5, grade: 'B', tier: 'b', stake: '0.5U',
     last10: [37, 20, 24, 30, 26, 29, 26, 16, 29, 52], book: 'Underdog', checked: 9,
-    src: 'The player page · from the Scout CS2 board, Nov 19, 16:20 UTC',
+    src: 'The player page · from the Grader CS2 board, Nov 19, 16:20 UTC',
     row: { who: 'ROUX', sub: 'Over 10.5 Kills · Map 1 · Underdog', chance: 73.0, grade: 'A-', tier: 'a' },
     pool: { label: 'Anubis + Dust 2 · kills per map, pooled', val: '14.88', d: '+0.63', pace: 14.25, fill: 58.6, mark: 56.1 },
     strip: 'CS2 board, Nov 19, 16:20 UTC · Lucky’s map pool, HLTV to 28 Oct',
@@ -79,12 +79,12 @@
     var c = CAP, hits = c.last10.filter(function (v) { return v > c.line; }).length;
     var tiles = function (a) { return '<dl>' + a.map(function (t) { return '<div class="sc-stat is-' + t[3] + '"><dt>' + t[0] + '</dt><dd><b>' + t[1] + '</b><i>' + t[2] + '</i></dd></div>'; }).join('') + '</dl>'; };
     var f = h('figure', 'v3-crop');
-    f.setAttribute('aria-label', 'The Scout player page: ' + c.who + ', ' + c.side + ' ' + c.line + ' ' + c.stat.toLowerCase() + ', ' + c.scope + ', ' + c.chance.toFixed(1) + '% Model estimate, grade ' + c.grade + ', stake ' + c.stake);
+    f.setAttribute('aria-label', 'The Grader player page: ' + c.who + ', ' + c.side + ' ' + c.line + ' ' + c.stat.toLowerCase() + ', ' + c.scope + ', ' + c.chance.toFixed(1) + '% Model estimate, grade ' + c.grade + ', stake ' + c.stake);
     f.innerHTML = '<div class="v3-crop__in">'
       + '<div class="v3-crop__id"><span class="sc-avatar" style="--t1:#3b5bff"><span class="sc-avatar__face" aria-hidden="true">' + c.who.charAt(0) + '</span></span>'
       + '<div><b>' + c.who + '</b><small>' + c.role + ', ' + c.match + '</small><small>' + c.when + ' · ' + c.event + '</small></div><span class="sc-chip">CS2</span></div>'
       + '<div class="sc-statgrid v3-crop__grid">' + tiles([c.tiles[0], c.tiles[2]]) + tiles([c.tiles[1], c.tiles[3]]) + '<p class="sc-statgrid__legend">' + c.legend + '</p></div>'
-      + '<div class="sc-pick"><div class="sc-pick__side"><span class="sc-scout-tag">Scout</span><b>' + c.side + ' ' + c.line + '</b><small>' + c.stat + ' · ' + c.scope + '</small></div>'
+      + '<div class="sc-pick"><div class="sc-pick__side"><span class="sc-scout-tag">Grader</span><b>' + c.side + ' ' + c.line + '</b><small>' + c.stat + ' · ' + c.scope + '</small></div>'
       + '<div class="sc-pick__chance"><b class="sc-num">' + c.chance.toFixed(1) + '%</b><span class="sc-meter"><i style="width:' + c.chance.toFixed(1) + '%"></i></span><small>Model estimate</small></div>'
       + '<div class="sc-pick__stake"><span class="sc-grade sc-grade--lg" data-tier="' + c.tier + '">' + c.grade + '</span><small>Stake <b>' + c.stake + '</b></small></div>'
       + '<div class="sc-pick__foot"><span class="v3-l10">' + spark(c.last10, c.line) + '<span><b>' + hits + '/10</b> ' + c.side + '</span></span>'
@@ -94,7 +94,7 @@
   }
   function strip() {
     var r = CAP.row, p = CAP.pool, s = h('div', 'v3-strip');
-    s.setAttribute('aria-label', 'From the Scout board');
+    s.setAttribute('aria-label', 'From the Grader board');
     s.innerHTML = '<p class="v3-strip__h">On the board now</p>'
       + '<div class="sc-row v3-strip__row"><span class="sc-avatar" aria-hidden="true"><span class="sc-avatar__face">' + r.who.charAt(0) + '</span></span>'
       + '<span class="sc-row__who"><b>' + r.who + '</b><small>' + r.sub + '</small></span>'
@@ -115,9 +115,9 @@
     };
     var I = (window.ScoutV3 && ScoutV3.ICON) || {};
     var f = h('figure', 'v3-phone');
-    f.setAttribute('aria-label', 'The Scout player page on a phone: map stats, Anubis and Dust 2 picked and combined');
+    f.setAttribute('aria-label', 'The Grader player page on a phone: map stats, Anubis and Dust 2 picked and combined');
     f.innerHTML = '<div class="v3-phone__screen"><div class="v3-phone__ui">'
-      + '<div class="v3-ph__bar"><span class="v3-ph__brand"><span aria-hidden="true">1T</span>Scout</span><span class="v3-ph__grow"></span><span class="v3-ph__ic" aria-hidden="true">' + (I.search || '') + '</span><span class="v3-ph__ic" aria-hidden="true">' + (I.sun || '') + '</span></div>'
+      + '<div class="v3-ph__bar"><span class="v3-ph__brand"><span aria-hidden="true">1T</span>Prop Grader</span><span class="v3-ph__grow"></span><span class="v3-ph__ic" aria-hidden="true">' + (I.search || '') + '</span><span class="v3-ph__ic" aria-hidden="true">' + (I.sun || '') + '</span></div>'
       + '<div class="v3-ph__body"><div class="v3-ph__head"><b>Map stats</b><small>HLTV, last 12 months, to 28 Oct · colour vs all-maps avg</small></div>'
       + '<p class="v3-ph__h">Likeliest in Maps 1-2</p>' + card(CAP.maps[0]) + card(CAP.maps[1])
       + '<p class="v3-ph__sort">Sort the rest <span class="sc-pill" aria-pressed="true">In Maps 1-2</span></p>' + card(CAP.maps[2]) + card(CAP.maps[3]) + '</div>'

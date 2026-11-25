@@ -324,8 +324,8 @@ def test_sport_tabs_market_edge_and_best_lines_at_every_width_on_the_new_design(
             no_h_scroll(p)
             assert [round(x['l']) for x in p.evaluate(TABS)['tabs']] == before   # a count changing never moves a tab
             assert p.locator('#hub-table thead th.h-c-medge').count() == 1
-            assert p.locator('#hub-table thead th.h-c-edge').count() == 1      # Scout's Edge column stays
-        # NBA, Deni Avdija rebounds: one board row for the prop (PrizePicks 7.5, the line with a Scout side) and a ladder with both lines
+            assert p.locator('#hub-table thead th.h-c-edge').count() == 1      # Grader's Edge column stays
+        # NBA, Deni Avdija rebounds: one board row for the prop (PrizePicks 7.5, the line with a Grader side) and a ladder with both lines
         pick(p, 'nba')
         find_player(p, 'Deni Avdija')
         rows = p.locator('#hub-rows tr.h-row')
@@ -339,11 +339,11 @@ def test_sport_tabs_market_edge_and_best_lines_at_every_width_on_the_new_design(
         pp = lad.locator('tr[data-line^="nba|prizepicks|"]')
         assert lad.locator('tr[data-line]').count() == 2 and ud.count() == 1 and pp.count() == 1
         assert ud.locator('.h-ld-line b').inner_text() == '6.5' and pp.locator('.h-ld-line b').inner_text() == '7.5'
-        assert ud.locator('.h-ld-both').inner_text() == 'O 49.0% · U 51.0%'    # no Scout side on the Underdog line: both chances
+        assert ud.locator('.h-ld-both').inner_text() == 'O 49.0% · U 51.0%'    # no Grader side on the Underdog line: both chances
         assert pp.locator('.h-ld-best').text_content() == 'Best Under' and pp.locator('.h-ld-best').is_visible()   # the highest line
         assert pp.locator('.h-ld-p').inner_text() == '53.0%' and pp.locator('.h-ld-side').text_content().endswith('Under')
         btn.click()
-        # the Underdog line as the row (Platform filter): no Scout side, and still a market edge on the side the books favour
+        # the Underdog line as the row (Platform filter): no Grader side, and still a market edge on the side the books favour
         in_sheet(p, '#hub-platform [data-id=underdog]').click()
         close_sheet(p)
         p.wait_for_selector('#hub-rows tr.h-row[data-record^="nba|underdog|"]')
@@ -353,10 +353,10 @@ def test_sport_tabs_market_edge_and_best_lines_at_every_width_on_the_new_design(
         assert cell.locator('.h-medge b').text_content().startswith(('+', '−', '±'))
         assert cell.locator('.h-medge-side').first.text_content() in ('Over', 'Under')
         title = cell.locator('.h-medge-wrap').get_attribute('title')
-        assert 'an Underdog standard 2-pick needs 53.5%' in title and "not Scout’s grade" in title and 'BetRivers, FanDuel' in title
+        assert 'an Underdog standard 2-pick needs 53.5%' in title and "not Grader’s grade" in title and 'BetRivers, FanDuel' in title
         green = cell.locator('.h-medge').evaluate("e => e.classList.contains('positive')")
         assert green == (cell.locator('.h-medge b').text_content().startswith('+'))
-        if width >= 1281:      # wide desktop: Scout's edge first, the books' number labelled under it (its own column from 1700px)
+        if width >= 1281:      # wide desktop: Grader's edge first, the books' number labelled under it (its own column from 1700px)
             books = row.locator('td.h-c-edge .h-edge-books')
             assert books.is_visible() and books.inner_text().upper().startswith('BOOKS')
             assert row.locator('td.h-c-edge .h-edge').is_visible()
@@ -387,7 +387,7 @@ def test_sport_tabs_market_edge_and_best_lines_at_every_width_on_the_new_design(
         p.wait_for_selector('#hub-detail .h-best-lines', timeout=20000)
         best = p.locator('#hub-detail .h-best-lines')
         txt = best.inner_text()
-        assert 'best line per side' in txt.lower() and 'market edge' in txt.lower() and "The books’ number, not Scout’s grade." in txt
+        assert 'best line per side' in txt.lower() and 'market edge' in txt.lower() and "The books’ number, not Grader’s grade." in txt
         assert best.locator('tbody tr').count() == 2 and best.locator('.h-gap').count() == 1
         sides = [re.sub(r'\s+', ' ', x).strip() for x in best.locator('tbody tr').all_text_contents()]
         assert sides[0].startswith('Over') and '6.5 Underdog' in sides[0] and '53.5%' in sides[0], sides      # lowest line for the Over
@@ -414,9 +414,9 @@ LONG_SCOUT = """() => [...document.querySelectorAll('#hub-rows tr.h-row')].map(r
 @pytest.mark.parametrize("width", [320, 360, 390, 768])
 @pytest.mark.parametrize("mode", ["player", "prop"])
 def test_phone_rows_keep_the_card_button_and_the_stat_name_beside_a_long_scout_cell(browser, live, width, mode):
-    """Found porting the market edge test (fixed in upgrade-next.css 2026-11-12): a row whose Scout cell is long (side, chance,
+    """Found porting the market edge test (fixed in upgrade-next.css 2026-11-12): a row whose Grader cell is long (side, chance,
     Research estimate, Below break-even) left its first column 0-20px. By player that column is the row's Card button; By prop it
-    is the stat name, which was printed over the Scout side at 320-360px."""
+    is the stat name, which was printed over the Grader side at 320-360px."""
     c = nxt(browser, live, {"width": width, "height": 900 if width >= 768 else 844})
     c.add_init_script("try{localStorage.setItem('scout-board-group','%s')}catch(e){}" % mode)
     try:
@@ -433,7 +433,7 @@ def test_phone_rows_keep_the_card_button_and_the_stat_name_beside_a_long_scout_c
         for r in rows:
             assert r['card'][0] >= 44 and r['card'][1] >= 44 and not r['cardOverScout'], r      # the way to the card is a full target
             assert r['market'] >= 30 and r['name'] > 0 and not r['nameOverScout'], r            # the stat name has its own room (2026-11-12 phone plan: row 1, right; sized to the name)
-            assert r['scoutPast'] <= 0, r                                                         # the Scout cell stays inside the row
+            assert r['scoutPast'] <= 0, r                                                         # the Grader cell stays inside the row
         long_row = next(r['k'] for r in rows if r['long'])
         p.locator(f'#hub-rows tr.h-row[data-record="{long_row}"] .h-player').click()
         p.wait_for_selector('#hub-detail .h-card-head', timeout=20000)

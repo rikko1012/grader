@@ -1,4 +1,4 @@
-"""Scout Sports Slip Studio (NBA / NFL pick'em entries): platform rules, the batch builder, server-side revalidation,
+"""Prop Grader Sports Slip Studio (NBA / NFL pick'em entries): platform rules, the batch builder, server-side revalidation,
 joint-probability disclosure, slip logging and slip settlement. Pure sports code: never imports a CS2 / LoL module
 (sports/tests/test_sports_isolation.py) - only relative imports inside sports/.
 

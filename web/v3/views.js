@@ -94,7 +94,7 @@
   }
   function pickHead(pick, older) {
     if (!pick || !pick.team) return '';
-    return '<div class="v3x-ml-pick"><small>' + (older ? 'At last quote' : 'Scout pick') + (pick.basis ? ' · ' + esc(pick.basis) : '') + '</small><b>' + esc(pick.team) + '</b></div>';
+    return '<div class="v3x-ml-pick"><small>' + (older ? 'At last quote' : 'Grader pick') + (pick.basis ? ' · ' + esc(pick.basis) : '') + '</small><b>' + esc(pick.team) + '</b></div>';
   }
   function pickWhy(pick) {
     if (!pick || !pick.team || !(pick.factors || []).length) return '';
@@ -252,7 +252,7 @@
       (cards.length ? cards.slice(0, cap).join('') + more : '<p class="v3x-empty">' + esc(empty) + '</p>') +
       '<details class="v3x-det v3x-which" data-k="which"><summary>Which price is shown</summary><div><p><b>Thunderpick first.</b> Bookmaker odds with the margin removed, shown while they are current (retrieved within the last 75 minutes, before the match starts).</p>' +
       '<p><b>Exchanges.</b> Polymarket and Kalshi: each platform’s bid/ask midpoint for the first team, shown to 0.1%, when the quote is open, current and tight. A last trade is never used as a price.</p>' +
-      '<p>Expand the Scout pick to see which factors favour each team. The pick carries no stake or recommendation to wager.</p></div></details></section>';
+      '<p>Expand the Grader pick to see which factors favour each team. The pick carries no stake or recommendation to wager.</p></div></details></section>';
   }
   function countLine(term) {
     var d = ML.data;

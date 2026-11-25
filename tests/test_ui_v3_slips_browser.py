@@ -284,7 +284,7 @@ def test_v3_studio_arrives_on_auto_build_without_a_focus_ring(browser, env, monk
 
 @pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
 def test_v3_lean_leg_reads_model_estimate_not_no_grade(browser, env, monkeypatch, size):
-    """A sports line with Scout's side and no letter reads Lean Under / Stake 0U on the board; its slip leg kept the hub's raw
+    """A sports line with Grader's side and no letter reads Lean Under / Stake 0U on the board; its slip leg kept the hub's raw
     'No grade: No grade yet' under the chance (a status label). It reads 'Model estimate', as every other leg does."""
     c, p = v3_page(browser, env, monkeypatch, "board", size, "light")
     try:

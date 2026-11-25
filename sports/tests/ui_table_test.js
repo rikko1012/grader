@@ -52,11 +52,11 @@ assert.ok(r.conf.score <= 3 && r.conf.why.some(w => /gap/.test(w)));
 const q215 = {r: "r-x", p: "underdog", l: 21.5, o: [1, 1], t: T, f: "f1"};
 r = R.propRow(Object.assign({}, m, {q: [q215]}), q215, {fc, view, now: NOW});
 assert.strictEqual(r.market, null); assert.strictEqual(r.edge, null); assert.strictEqual(r.hit, null);
-// market-only records are not Scout's view: no lean, no edge, no confidence
+// market-only records are not Grader's view: no lean, no edge, no confidence
 const qm = {r: "r-pp", p: "prizepicks", l: 20.5, o: [1, 1], t: T, f: "mk1"};
 r = R.propRow(Object.assign({}, m, {q: [qm]}), qm, {fc, view, now: NOW});
 assert.strictEqual(r.scout, null); assert.strictEqual(r.lean, null); assert.strictEqual(r.conf, null);
-// a line read of the saved distribution counts as the same Scout distribution
+// a line read of the saved distribution counts as the same Grader distribution
 const qlr = {r: "r-pp", p: "prizepicks", l: 20.5, o: [1, 1], t: T, f: null, lr: {f: "f1", ln: 19.5, po: 0.6, pu: 0.4, pp: 0}};
 r = R.propRow(Object.assign({}, m, {q: [qlr]}), qlr, {fc, view, now: NOW});
 assert.strictEqual(r.scout.via, "line_read"); assert.strictEqual(r.scout.mu, 22.0); assert.strictEqual(r.lean, "over");
@@ -66,7 +66,7 @@ r = R.propRow(Object.assign({}, m, {q: [qo]}), qo, {fc, view, now: NOW});
 assert.strictEqual(r.lean, "over"); assert.strictEqual(r.leanOffered, false);
 
 // ------------------------------------------------------------------ N4: a lean needs a positive edge for its side
-// Barnes-like: 3PM 0.5, Scout Over 56% (mean above the line) but the market prices Over at 66.3% -> edge -10.3: No lean
+// Barnes-like: 3PM 0.5, Grader Over 56% (mean above the line) but the market prices Over at 66.3% -> edge -10.3: No lean
 const fcB = {fb: {id: "fb", m: "sm-1", mu: 0.9, po: 0.56, pu: 0.44, pp: 0, at: T, iv: [0, 2]}};
 const mB = Object.assign({}, m, {k: "kb", mk: {l: 0.5, c: {po: 0.663, pu: 0.337, pp: 0, n: 2, used: ["a", "b"]}, at: {}},
                                   q: [{r: "r-b", p: "underdog", l: 0.5, o: [1, 1], t: T, f: "fb"}]});

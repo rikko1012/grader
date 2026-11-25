@@ -136,7 +136,7 @@ def test_report_a_problem_and_preferences(ctx, env, size, monkeypatch):
     p.wait_for_selector('#hub-detail [data-hub=detail-add]', timeout=20000)
     size_line = p.locator('#hub-detail .h-dec-size')
     assert re.search(r'Break-even \d\.\d\d( · ½ Kelly: \$\d+\.\d\d)?$', size_line.inner_text())     # a size only on a staked, rated line
-    assert 'U' not in size_line.inner_text().replace('Under', '')            # never in units beside Scout's own stake
+    assert 'U' not in size_line.inner_text().replace('Under', '')            # never in units beside Grader's own stake
     # the grade, chance and the slip are unchanged by the preference (display only)
     assert p.locator('#hub-detail .h-dec-chance b').inner_text().endswith('%')
     p.evaluate("document.querySelector('#hub-detail [data-hub=card-close]').click()")
@@ -176,7 +176,7 @@ def test_held_cs2_letters_get_no_band_no_ev_and_no_size(ctx, env, monkeypatch):
 @pytest.mark.parametrize('sport', ['lol', 'cs2'])
 def test_unrated_prizepicks_rows_show_the_points_gap_not_no_payout(ctx, env, monkeypatch, sport):
     """Owner sign-off 2026-11-05: the PrizePicks help-center table is verified, so an unrated PrizePicks standard row (every LoL row,
-    a CS2 row whose settled results do not pass) shows Scout chance minus its PrizePicks break-even in points, never 'No fixed
+    a CS2 row whose settled results do not pass) shows Grader chance minus its PrizePicks break-even in points, never 'No fixed
     per-pick payout is published for this platform'."""
     parity_on(monkeypatch, passing=False)
     workspace_api.reset()

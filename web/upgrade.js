@@ -184,14 +184,14 @@
      line and price - no chance, side, letter, stake, slip or EV. The label is the server's (scout.hold.label), never worked out here */
   const ONE_SIDED = ["Over only", "Under only"];
   const oneSided = (rec) => { const l = rec && rec.scout && rec.scout.hold && rec.scout.hold.label; return ONE_SIDED.includes(l) ? l : null; };
-  const oneSidedNote = (rec) => `${oneSided(rec)}: Scout grades lines that offer both sides.`;
+  const oneSidedNote = (rec) => `${oneSided(rec)}: Grader grades lines that offer both sides.`;
   function verdictText(rec, side) {
     const s = rec.scout, sd = side || s.side;
     if (oneSided(rec)) return oneSided(rec);
     if (!sd) return "No lean";
-    if (s.side && sd !== s.side) return `Scout side is ${cap(s.side)}`;
+    if (s.side && sd !== s.side) return `Grader side is ${cap(s.side)}`;
     if (s.hold) return s.hold.short ? `No grade: ${s.hold.short}` : `Research estimate ${cap(sd)}`;     /* sports rows name why (owner 2026-11-12) */
-    if (s.line_chance) return `Scout's chance at this line: ${cap(sd)}`;      /* another book's line, read from the saved distribution: no letter */
+    if (s.line_chance) return `Grader's chance at this line: ${cap(sd)}`;      /* another book's line, read from the saved distribution: no letter */
     if (s.grade) return `${s.grade} ${cap(sd)}`;      /* NBA / NFL letters are released (ct-1b, owner 2026-11-08): no research tag */
     return `Lean ${cap(sd)}`;
   }
@@ -357,7 +357,7 @@
     T.legs.forEach((o) => {
       if (o.id === l.id || o.book !== l.book || o.sport !== l.sport) return;
       if (o.player_key === l.player_key) out.push(`${o.player} is on this entry twice. One leg per player.`);
-      else if (o.event_id === l.event_id) out.push(`Same match as ${o.player}: results can move together.${l.book === "prizepicks" && o.team !== l.team ? " PrizePicks keeps its same-match limits in its app; Scout does not offer opposing players here." : ""}`);
+      else if (o.event_id === l.event_id) out.push(`Same match as ${o.player}: results can move together.${l.book === "prizepicks" && o.team !== l.team ? " PrizePicks keeps its same-match limits in its app; Grader does not offer opposing players here." : ""}`);
     });
     return [...new Set(out)];
   }
@@ -412,7 +412,7 @@
           progress?.(`Checking slip ${picked.length + 1} of ${count}…`);
           let c;
           try { c = await api("recheck", { idem: idem(), legs: legs.map(wireLeg), entry_types: { [platform]: entryType } }); }
-          catch (e) { if (!picked.length) throw e; note = e.status === 429 ? "Scout checks a limited number of slips a minute. Generate again in a minute for the rest." : "The server could not finish checking more combinations."; break; }
+          catch (e) { if (!picked.length) throw e; note = e.status === 429 ? "Grader checks a limited number of slips a minute. Generate again in a minute for the rest." : "The server could not finish checking more combinations."; break; }
           const bad = s.legs.filter((l, i) => !c.legs?.[legs[i].id]?.ok);
           if (bad.length || !c.entries?.[platform]?.ok) {
             (bad.length ? bad : s.legs).forEach((l) => exclude.add([l.book, l.row_id, l.side].join("|")));
@@ -584,7 +584,7 @@
       if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
     } catch (err) {
       if (err.status === 409 && err.doc && err.doc.legs) { T.check = err.doc; T.checkSig = sig(); say("The check at Track found a change. Nothing was tracked."); }
-      else if (err.status === 503) say("Scout is busy. Your slip is still here: press Track again.");
+      else if (err.status === 503) say("Grader is busy. Your slip is still here: press Track again.");
       else say("Track did not finish. Your slip is still here.");
     }
     T.trackBusy[key] = false;
@@ -653,7 +653,7 @@
     text('No stake, combined win chance or return is implied.',canvas.height-32,17,'#aebed1');
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
     if(!blob)return say('The share image could not be created. Try again.');
-    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='1Time-Scout-lineup.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='1Time-Grader-lineup.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     say('Share card downloaded. Nothing was posted or placed.');
   }
 
@@ -671,7 +671,7 @@
   function statusLine(phase) {
     if (phase === "empty") return "";
     if (phase === "running") return "<b>Checking</b>";
-    if (phase === "down") return T.checkErr === "limit" ? "<b>Too many checks this minute.</b> Scout will check again shortly." : "<b>The check did not answer.</b> Track and Copy stay off.";
+    if (phase === "down") return T.checkErr === "limit" ? "<b>Too many checks this minute.</b> Grader will check again shortly." : "<b>The check did not answer.</b> Track and Copy stay off.";
     const vals = Object.values(T.check.entries), ready = vals.filter((e) => e.ok).length;
     return `<b>${ready} of ${vals.length} ${vals.length === 1 ? "entry" : "entries"} ready.</b> <span style="white-space:nowrap">Checked ${clock(T.check.checked_at)}.</span>`;   /* UI 2026-11-09: the time no longer splits "7:30 / AM." in the slip column */
   }
@@ -692,7 +692,7 @@
     if (!t.rated) return `<div class="u-head2" data-entry="${esc(t.entry)}">${t.payout != null ? `<div class="u-slip-metrics u-slip-head">${metric(esc(t.payout) + "×", "Payout")}</div>` : ""}${need}<p class="u-cant">${esc(t.reason || "Can't rate this entry.")}</p></div>`;
     const values = metric(esc(t.payout) + "×", "Payout") + metric(pct(t.win), "Chance all hit")
       + metric(signed(t.ev), "Average return", t.ev > 0 ? "u-pos" : t.ev < 0 ? "u-neg" : "");
-    return `<div class="u-head2" data-entry="${esc(t.entry)}"><div class="u-slip-metrics u-slip-head">${values}</div>${need}<p class="u-dim">From the chances Scout shows on each pick. Average return is per entry, not a win chance.</p></div>`;
+    return `<div class="u-head2" data-entry="${esc(t.entry)}"><div class="u-slip-metrics u-slip-head">${values}</div>${need}<p class="u-dim">From the chances Grader shows on each pick. Average return is per entry, not a win chance.</p></div>`;
   }
   /* audit 2026-11-05: the read a leg shows comes from its current row (a letter that is held now reads as held). With no current row
      the saved letter is not repeated, since it may since have been held; the side and the saved chance stay. Lean stays Lean. */
@@ -706,7 +706,7 @@
     const evText = leg2 ? "" : legEv && c && c.ok && legEv.index === position - 1 && Number(legEv.line) === Number(l.line) ? ` · <span class="u-leg-ev">Pick EV ${pct(legEv.ev)}</span>` : "";
     const below = leg2 && leg2.below, need2 = below ? `<p class="u-below">Below the ${pct(leg2.need)} each leg needs</p>` : "";
     const problems = c && !c.ok ? `<div class="u-problems">${c.problems.map((p) => `<p>${esc(p.text)}${p.swap ? ` <button class="u-btn" type="button" data-u="swap" data-id="${esc(l.id)}">Use current offer</button>` : ""}${p.retry ? ` <button class="u-btn" type="button" data-u="check">Check again</button>` : ""}</p>`).join("")}</div>` : "";
-    const label = legLabel(l), against = label.startsWith("Scout side"), read = against ? esc(label) : `${esc(label)} ${pct(l.shown_p)}`;
+    const label = legLabel(l), against = /^(?:Grader|Scout) side/.test(label), read = against ? esc(label) : `${esc(label)} ${pct(l.shown_p)}`;
     const notes = legNotes(l), adv = T.advice && T.advice.sig === sig() ? T.advice.legs[l.id] : null, rep = adv && adv.replacement;
     const noteHtml = notes.length ? `<div class="u-leg-notes">${notes.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : "";
     const advHtml = adv && (adv.band || rep) ? `<p class="u-leg-advice">${adv.band ? esc(adv.band) + "." : ""}${rep ? ` ${adv.in_pool ? "Ranks higher here" : "Best replacement"}: ${esc(rep.player)} ${cap(rep.side)} ${esc(rep.line)} ${esc(rep.stat_label)}, ${esc(rep.period_label)} · ${pct(rep.p)}<button class="u-btn" type="button" data-u="replace" data-id="${esc(l.id)}">Swap in</button>` : ""}</p>` : "";
@@ -782,14 +782,14 @@
   function receiptHtml(r) {
     const st = r.status, open = T.openPick === r.id, scoutSide = cap(r.scout_side || ""), against = r.scout_side && r.side !== r.scout_side;
     const read = `${r.grade || r.hold || (r.research ? "Research estimate" : "Lean")} ${scoutSide}`.trim();
-    const kv = [["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Scout read", read], ...(against ? [["Your side", `${cap(r.side)}, against Scout`]] : []),
+    const kv = [["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Grader read", read], ...(against ? [["Your side", `${cap(r.side)}, against Grader`]] : []),
       ["Projection", r.projection == null ? "--" : tenth(r.projection)], ["Book", r.platform_label], ["Tracked", when(r.tracked_at)], ["Receipt", r.id]];
     const body = open ? `<div class="u-pick-body"><dl class="u-kv">${kv.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl><ol class="u-time">${(r.timeline || []).map((t) => `<li><time>${esc(when(t.at))}</time>${esc(t.text)}</li>`).join("")}</ol></div>` : "";
     return `<article class="u-pick${FACE_LG[r.sport] ? " u-pick-face" : ""}"><button type="button" aria-expanded="${open}" data-u="pick" data-id="${esc(r.id)}">${faceHtml(r.sport, { key: r.nick, name: r.player, team: r.team, size: 32 })}<span><b>${esc(r.player)} ${cap(r.side)} ${esc(r.line)}</b><small>${esc(SPORTS[r.sport] || "")} · ${esc(r.stat_label)} · ${esc(r.period_label)}${r.platform === "prizepicks" ? " · " + lineKind(r.platform, r.line_type) : ""} · ${esc(r.matchup)}</small>${r.line_move ? `<small class="u-move">${moveHtml(r.line_move)}</small>` : ""}</span><span class="u-st ${esc(st)}">${esc(STATUS[st] || st)}${r.final != null ? ` ${esc(r.final)}` : ""}</span></button>${body}</article>`;
   }
   function picksTab() {
     const d = T.mine;
-    if (!d) return T.mineState === "unavailable" ? '<p class="u-empty">Your receipts are saved. Scout could not read them just now.</p>' : '<p class="u-empty">Loading receipts</p>';
+    if (!d) return T.mineState === "unavailable" ? '<p class="u-empty">Your receipts are saved. Grader could not read them just now.</p>' : '<p class="u-empty">Loading receipts</p>';
     if (!d.receipts.length) return '<p class="u-empty">No tracked picks yet.</p>';
     return d.slips.map((t) => {
       const legs = d.receipts.filter((r) => r.slip_id === t.slip_id);
@@ -920,7 +920,7 @@
   function forecastHtml(rec, side) {
     const s = rec.scout, p = chanceOf(rec, side), val = s.validation || {}, off = s.side && side !== s.side && p == null;
     const stake = !s.hold && s.units > 0 ? ` · Stake ${esc(s.units)}U` : '';
-    return `<div class="u-forecast"><div class="u-fc-num">${off ? "--" : pct(p)}</div><div><p>${off ? `Scout saved a chance for ${cap(s.side)} only` : `Forecast chance of ${cap(side)} ${esc(rec.offer.line)}`}</p><p><b>${esc(verdictText(rec, side))}</b>${stake}</p></div></div>${s.range80 ? `<p class="u-dim">80% range ${esc(s.range80[0])} to ${esc(s.range80[1])}</p>` : ""}${val.detail || s.stake_reason ? `<details class="u-det"><summary>Grade methodology</summary><p>${esc(val.detail || s.stake_reason)}</p></details>` : ""}`;
+    return `<div class="u-forecast"><div class="u-fc-num">${off ? "--" : pct(p)}</div><div><p>${off ? `Grader saved a chance for ${cap(s.side)} only` : `Forecast chance of ${cap(side)} ${esc(rec.offer.line)}`}</p><p><b>${esc(verdictText(rec, side))}</b>${stake}</p></div></div>${s.range80 ? `<p class="u-dim">80% range ${esc(s.range80[0])} to ${esc(s.range80[1])}</p>` : ""}${val.detail || s.stake_reason ? `<details class="u-det"><summary>Grade methodology</summary><p>${esc(val.detail || s.stake_reason)}</p></details>` : ""}`;
   }
   function sidesHtml(rec, side) {
     const b = (sd) => {
@@ -935,7 +935,7 @@
       return o.length < 2 ? null : o.reduce((a, b) => (decimalOf(b, sd) > decimalOf(a, sd) ? b : a));
     };
     const cell = (o, sd) => { const t = priceText(o, sd) || (o.offer[sd].offered ? lineLabel(o) : "Not offered"), top = best(sd) === o; return `<td${top ? ' class="best"' : ""}>${esc(t)}</td>`; };
-    return `<table class="u-tbl"><thead><tr><th scope="col">Book</th><th scope="col">Line</th><th scope="col">Over</th><th scope="col">Under</th><th scope="col">Scout</th><th scope="col">Seen</th></tr></thead><tbody>${list.map((o) => {
+    return `<table class="u-tbl"><thead><tr><th scope="col">Book</th><th scope="col">Line</th><th scope="col">Over</th><th scope="col">Under</th><th scope="col">Grader</th><th scope="col">Seen</th></tr></thead><tbody>${list.map((o) => {
       const here = o === cur, sp = o.scout.p_side;
       return `<tr${here ? ' class="on"' : ""}><td><button class="u-link" type="button" data-u="pline" data-id="${esc(offerKey(o.offer.platform, o.offer.offer_id))}">${esc(o.offer.platform_label)}</button></td><td>${esc(o.offer.line)}${o.market.line_type !== "standard" ? ` <small>${esc(cap(o.market.line_type))}</small>` : ""}</td>${cell(o, "over")}${cell(o, "under")}<td>${esc(verdictText(o))}${sp == null ? "" : ` ${pct(sp)}`}</td><td>${o.offer.seen_at ? esc(when(o.offer.seen_at)) : "--"}</td></tr>`;
     }).join("")}</tbody></table>`;
@@ -970,7 +970,7 @@
     // SCOUT_\u{1F9DE}_PERSONA (features.genie_persona): a light genie voice in the intro and the answer opener; the checked sentences are unchanged
     const persona = R.me?.features?.genie_persona === true;
     const out = G.busy ? '<div class="u-skel"></div>' : G.err ? `<p>${esc(G.err)}</p>` : G.ans ? (persona && G.intro ? `<p class="u-genie-intro">${esc(G.intro)}</p>` : "") + G.ans.map((x) => `<p>${esc(x)}</p>`).join("") : "";
-    return `<form class="u-ask" id="u-ask" novalidate>${persona ? `<p class="u-genie-intro">\u{1F9DE} Ask the Genie. I grant answers from this line's saved Scout data only, never a made-up stat.</p>` : ""}<label for="u-ask-q">${persona ? "Make a wish about this line" : "Ask about this line"}</label><div class="u-ask-row"><input id="u-ask-q" name="q" type="text" maxlength="300" autocomplete="off" value="${esc(G.q)}"><button class="u-btn u-gold" type="submit" data-u="genie-ask"${G.busy ? ' aria-disabled="true"' : ""}>Ask</button></div>
+    return `<form class="u-ask" id="u-ask" novalidate>${persona ? `<p class="u-genie-intro">\u{1F9DE} Ask the Genie. I grant answers from this line's saved Grader data only, never a made-up stat.</p>` : ""}<label for="u-ask-q">${persona ? "Make a wish about this line" : "Ask about this line"}</label><div class="u-ask-row"><input id="u-ask-q" name="q" type="text" maxlength="300" autocomplete="off" value="${esc(G.q)}"><button class="u-btn u-gold" type="submit" data-u="genie-ask"${G.busy ? ' aria-disabled="true"' : ""}>Ask</button></div>
       <div class="u-ask-sugg" role="group" aria-label="Suggested questions">${sugg.map((x) => `<button class="u-btn" type="button" data-u="genie-ask" data-id="${esc(x)}">${esc(x)}</button>`).join("")}</div>
       <div class="u-ask-out" id="u-ask-out" role="status" aria-live="polite">${out}</div>${left}</form>`;
   }
@@ -995,11 +995,11 @@
   }
   function genieHtml(rec) {
     const doc=P.doc, s=rec.scout, side=P.side, t=tallyOf(rec,10), list=siblings(rec), other=list.filter(r=>r.offer.platform!==rec.offer.platform);
-    return `${R.me?.features?.genie ? askHtml(rec) : ""}<div class="u-genie"><span class="u-tag">Scout evidence guide</span><h3>What would you like to check?</h3><p class="u-dim">Answers use this offer's saved forecast and research data. No invented stats, web guesses or new predictions.</p>
+    return `${R.me?.features?.genie ? askHtml(rec) : ""}<div class="u-genie"><span class="u-tag">Grader evidence guide</span><h3>What would you like to check?</h3><p class="u-dim">Answers use this offer's saved forecast and research data. No invented stats, web guesses or new predictions.</p>
       <details class="u-det" open><summary>What supports this pick?</summary><p>${esc(rec.player.name)} has a saved projection of ${s.projection==null?'unavailable':esc(tenth(s.projection))} for ${esc(rec.market.period_label)} ${esc(rec.market.stat_label)}. ${chanceOf(rec,side)==null?'No probability was saved for the selected side.':`The saved chance for ${cap(side)} ${esc(rec.offer.line)} is ${pct(chanceOf(rec,side))}.`} ${s.hold?'This is a research estimate; the validation gate has not released official grades.':''}</p>${doc&&doc.forecast?`<p class="u-dim">Forecast ${esc(doc.forecast.id||'ID unavailable')} · model ${esc(doc.forecast.model_version||s.model_version||'unavailable')}</p>`:''}</details>
       <details class="u-det"><summary>How often did this line hit?</summary><p>${t?`${side==='under'?t.under:t.over} of the last ${t.n} comparable results hit ${cap(side)} at today's line of ${esc(rec.offer.line)}; ${t.push||0} pushed. This is historical frequency, not a forecast.`:'Comparable past-game results are not available for this line.'}</p><button class="u-link" data-u="ptab" data-id="history">Inspect each result</button></details>
       <details class="u-det"><summary>Is there a better line elsewhere?</summary><p>${other.length?other.slice(0,8).map(r=>`${esc(r.offer.platform_label)} lists ${esc(r.offer.line)} (${esc(r.market.line_type)}), seen ${esc(when(r.offer.seen_at))}.`).join(' '):'No other platform offer is available for this exact event, player, stat and period.'}</p><p class="u-dim">Different lines and payout types are not interchangeable. Compare the actual offer before adding it.</p><button class="u-link" data-u="ptab" data-id="books">Compare sources</button></details>
-      <details class="u-det"><summary>What should I verify before tracking?</summary><p>Confirm ${esc(rec.market.period_label)}, the ${esc(rec.offer.platform_label)} line and offered side, the start time, and any player context. Scout rechecks the exact revision when you track. ${esc(s.stake_reason||'Saved probabilities can be wrong; the performance record shows their measured accuracy.')}</p><button class="u-link" data-u="ptab" data-id="context">View saved context</button></details></div>`;
+      <details class="u-det"><summary>What should I verify before tracking?</summary><p>Confirm ${esc(rec.market.period_label)}, the ${esc(rec.offer.platform_label)} line and offered side, the start time, and any player context. Grader rechecks the exact revision when you track. ${esc(s.stake_reason||'Saved probabilities can be wrong; the performance record shows their measured accuracy.')}</p><button class="u-link" data-u="ptab" data-id="context">View saved context</button></details></div>`;
   }
   function paintDrawer() {
     const box = $("u-drawer"), rec = P.rec;

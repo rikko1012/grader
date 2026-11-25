@@ -1,5 +1,5 @@
-/* 1time Scout design tokens (v3 "precision instrument"). Source of truth for every page: player, board, slip, landing.
-   Scout repo copy: the sport accent attribute is html[data-sc-sport] (not data-sport, which page scripts already query: web/record.js,
+/* Prop Grader design tokens (v3 "precision instrument"). Source of truth for every page: player, board, slip, landing.
+   Grader repo copy: the sport accent attribute is html[data-sc-sport] (not data-sport, which page scripts already query: web/record.js,
    web/sports/expansion.js). Otherwise byte-identical to cs2_scout_ops/logs/design_1119/v3/system/tokens.css.
    Dark is the default; light via html[data-theme="light"] (or the OS, when no data-theme is set).
    Sport accent via html[data-sc-sport="cs2|nba|nfl|soccer|tennis|lol"]. One accent per surface; value colours only on numbers. */

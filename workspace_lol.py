@@ -207,13 +207,13 @@ ONE_SIDED = ("Over only", "Under only")
 
 
 def one_sided_reason(label):
-    return f"{label}: Scout grades lines that offer both sides."
+    return f"{label}: Grader grades lines that offer both sides."
 
 
 def record_of(x, raw, values):
     """One display record from one member row. Chances, grade and the 0U stake are the member row's own.
     os-1 (owner 2026-11-06, as sports cap-2): a line the book offers on one side only (server.lol_one_sided_label) keeps its
-    line, price and Goblin / Demon tag and reads "Over only" / "Under only": no Scout chance, side, letter, stake or slip."""
+    line, price and Goblin / Demon tag and reads "Over only" / "Under only": no Grader chance, side, letter, stake or slip."""
     one = x.get("one_sided") if x.get("one_sided") in ONE_SIDED else None
     scope = x.get("scope")
     period, period_label, _ = PERIOD.get(scope, (_norm(scope) or "other", scope or "Other", ()))
@@ -368,7 +368,7 @@ def forecast_problem(srv, x, leg, pr, gap):
     now_p, shown = (x["po"] if leg["side"] == "over" else x["pu"]), leg.get("shown_p")
     if leg.get("read_rev") != x["read_rev"] or shown is None or now_p is None or abs(shown - now_p) > gap:
         word = "Over" if leg["side"] == "over" else "Under"
-        return bad("display_mismatch", f"Scout's read changed: now {word} {(now_p or 0) * 100:.1f}%.", swap=True)
+        return bad("display_mismatch", f"Grader's read changed: now {word} {(now_p or 0) * 100:.1f}%.", swap=True)
     return None
 
 
@@ -377,7 +377,7 @@ def check_leg(srv, leg, now):
     snap = snapshot(srv)
     book, side = leg["book"], leg["side"]
     if snap is None:
-        return {"ok": False, "problems": [_pr(1, "retry", "Scout could not check this line just now.", retry=True)], "current": None}
+        return {"ok": False, "problems": [_pr(1, "retry", "Grader could not check this line just now.", retry=True)], "current": None}
     x = snap["index"].get((book, leg["row_id"]))
     label = LABEL.get(book, book)
     if x is None:
@@ -572,7 +572,7 @@ def context_of(member_row):
     add("Recent per game", member_row.get("recent_per_game"))
     add("Median projection", member_row.get("median"))
     tw = member_row.get("team_win") or {}
-    add("Team win chance, Scout", None if tw.get("elo") is None else f"{tw['elo'] * 100:.1f}%")
+    add("Team win chance, Grader", None if tw.get("elo") is None else f"{tw['elo'] * 100:.1f}%")
     mk = tw.get("market") or {}
     if mk.get("found") and mk.get("p") is not None:
         add("Team win chance, market", f"{mk['p'] * 100:.1f}%")
@@ -645,7 +645,7 @@ def results(srv):
     role = [_group(k[5:], v) for k, v in sorted(metrics.items()) if k.startswith("role ") and k[5:] not in ("None", "")]
     return {"sport": "lol", "label": "LoL forecast record", "as_of": doc.get("at"), 'calendar':doc.get('calendar'),
             "population": "Saved pre-match LoL forecasts on lines that offered both sides, each scored on official game stats. Over only and Under only lines are not graded and are not counted. Letters carry 0 units.",
-            "rule": "One result per platform, market and line. Hit rate is results for Scout's side over graded results. Pushes stay apart, voids and lines with no settled rule stay out.",
+            "rule": "One result per platform, market and line. Hit rate is results for Grader's side over graded results. Pushes stay apart, voids and lines with no settled rule stay out.",
             "totals": {"picks": main.get("n") or 0, "wins": main.get("side_wins"), "losses": None if main.get("side_wins") is None else (main.get("n") or 0) - main["side_wins"], "pushes": st.get("push", 0) if cohort else None, "observed": main.get("side_hit_rate"),
                        "ci": [ci["lo95"], ci["hi95"]] if ci.get("lo95") is not None else None, "printed": main.get("mean_displayed_p_side"), "matches": main.get("series"), "void": (st.get("void") or 0) + (st.get("dnp") or 0) if cohort else None, "match_word": "series"},
             "groups": {"chance": grade, "stat": stat, "role": role}, "gate": None, "market": None}

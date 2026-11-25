@@ -1,4 +1,4 @@
-/* 1time Scout v3 shell (SHARED). First file of every v3 script bundle (web/UI_V3.md); page-group files follow it in the same bundle.
+/* Prop Grader v3 shell (SHARED). First file of every v3 script bundle (web/UI_V3.md); page-group files follow it in the same bundle.
    Runs only on a page the server marked <html data-ui-v3> (SCOUT_UI_V3=1, or the owner's /preview/v3 cookie). Display only: it reads
    no API, changes no grade, and every control it adds presses the page's own existing control (the research hub's buttons), so
    behaviour stays the page's. Without a hub (classic view, public pages) the nav is plain links to the hub's own routes.
@@ -72,7 +72,7 @@
      built from the hub's own More list and sidebar instead, so it holds every item the hub has (flags included). */
   var MORE_LINKS = [['Edge', [['moneyline', 'Moneylines', '/?view=classic#moneylines', 1]]],
     ['Research', [['games', 'By game', '#/games', 0], ['tools', 'All tools', '#/tools', 0], ['alerts', 'Alerts', '#/alerts', 0], ['grader', 'Single prop grader', '/?view=classic#one', 1],
-      ['board', 'Match research', '/?view=classic#matches', 1]]], ['Scout', [['classic', 'Classic board', '/?view=classic', 1]]]];
+      ['board', 'Match research', '/?view=classic#matches', 1]]], ['Grader', [['classic', 'Classic board', '/?view=classic', 1]]]];
   var ART = ['dust2', 'mirage', 'inferno', 'nuke', 'ancient', 'anubis', 'train', 'overpass', 'cache', 'nba', 'nba-home', 'nfl', 'soccer',
     'tennis-hard', 'tennis-clay', 'tennis-grass', 'tennis-indoor', 'rift-blue', 'rift-red'];
   var HUE = {dust2: 30, mirage: 18, inferno: 10, nuke: 212, ancient: 150, anubis: 182, train: 214, overpass: 176, cache: 80};
@@ -159,7 +159,7 @@
   var bar = document.createElement('div');                  /* not <header>/<nav>: the pages style those tags globally */
   bar.className = 'sc-appbar sc-v3-bar sc-app';
   bar.setAttribute('role', 'banner');
-  bar.innerHTML = '<a class="sc-brand" href="' + B + '#/board" data-v3-nav="board" aria-label="1time Scout home"><span class="sc-brand__mark" aria-hidden="true">1T</span>Scout</a>' +
+  bar.innerHTML = '<a class="sc-brand" href="' + B + '#/board" data-v3-nav="board" aria-label="Prop Grader home"><span class="sc-brand__mark" aria-hidden="true">1T</span>Prop Grader</a>' +
     '<div class="sc-nav" role="navigation" aria-label="Research hub">' + nav + '</div>' +
     '<div class="sc-appbar__end"><button class="sc-iconbtn" type="button" data-v3="search" aria-label="Search players, teams and games">' + ICON.search + '</button>' +
     '<a class="sc-slip" href="' + B + '#/slips" data-v3-nav="slips">' + ICON.slip + 'Slip <b class="sc-num" data-v3-count="slip">0</b></a>' +
@@ -191,7 +191,7 @@
   var sheet = null, scrim = null, moreItems = [];
   /* Every hub destination gets one kind from its own attributes (data-hub / data-id / href / the views' data-v3x-* marks), never
      from its label, so a renamed or newly added hub item still lands in the right group; an item of no known kind lands in the
-     Scout group, so nothing the hub adds ever disappears. -> [group, key] */
+     Grader group, so nothing the hub adds ever disappears. -> [group, key] */
   var EDGE_IDS = {ev: 1, arb: 1, books: 1};
   function label(el) { return (el.textContent || '').replace(/[↗→]/g, '').replace(/\s+/g, ' ').trim(); }
   function kindOf(el) {
@@ -273,9 +273,9 @@
     }
     return '';
   }
-  /* the More groups: Edge · Slips · Research · Scout. A destination already in this surface's bar is left out (desktop: the header
+  /* the More groups: Edge · Slips · Research · Grader. A destination already in this surface's bar is left out (desktop: the header
      nav; phone: the bottom bar), so nothing is listed twice on one screen. */
-  var GROUPS = [['edge', 'Edge'], ['slips', 'Slips'], ['research', 'Research'], ['scout', 'Scout']];
+  var GROUPS = [['edge', 'Edge'], ['slips', 'Slips'], ['research', 'Research'], ['scout', 'Grader']];
   var MORE_ICON = {ev: 'ev', arb: 'arb', books: 'books', moneylines: 'moneyline', moves: 'moves', differ: 'differ', tools: 'tools', alerts: 'alerts', 'view-games': 'games',
     'studio-build': 'slip', 'studio-tracked': 'picks', grader: 'grader', matches: 'board', record: 'record', classic: 'classic'};
   var MORE_TEXT = {tools: 'All tools'};
@@ -450,7 +450,7 @@
       var k = a.getAttribute('data-v3-nav');
       if (OPTIONAL[k]) a.hidden = !(h && hubBtn(NAV.filter(function (n) { return n[0] === k; })[0][2]));
     });
-    /* phone: Edge takes Record's place once the hub has an edge tool (Record is then in More's Scout group) */
+    /* phone: Edge takes Record's place once the hub has an edge tool (Record is then in More's Grader group) */
     var edge = !!(h && hubBtn('ev') || h && hubBtn('arb') || h && hubBtn('books')), et = tabs.querySelector('[data-v3-nav="edge"]'), rt = tabs.querySelector('[data-v3-nav="record"]');
     if (et.hidden === edge) et.hidden = !edge;
     if (rt.hidden !== edge) rt.hidden = edge;

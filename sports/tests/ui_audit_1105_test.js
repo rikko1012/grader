@@ -29,8 +29,8 @@ ok(vis.proj && vis.over && !vis.under, "an Over-only line shows no Under % " + J
 ok(SH.underShown({offered: [1, 1]}) && !SH.underShown({offered: [1, 0]}), "underShown follows the offered sides");
 
 // ---------------------------------------------------------------- combos without a projection say so
-ok(SH.noChanceText({combo: true}) === "No Scout projection for combined stats yet", "combo text");
-ok(SH.noChanceText({}) === "No Scout chance at this line", "single stat text");
+ok(SH.noChanceText({combo: true}) === "No Grader projection for combined stats yet", "combo text");
+ok(SH.noChanceText({}) === "No Grader chance at this line", "single stat text");
 ok(SH.noChanceText({scout: {po: 0.5}}) === "No lean", "with a chance and no lean");
 
 // ---------------------------------------------------------------- Underdog one-sided line is never "Standard"
@@ -58,5 +58,5 @@ const L = {gate: {settled_props: 400, required: 300, under_review: true}, grades
            head_to_head: {rows: []}, recent: []};
 const h = RP.summaryHtml("nba", L, {});
 ok(h.indexOf("rx-cmp") >= 0 && h.indexOf("rx-cmp") < h.indexOf("rx-sum"), "comparison first");
-ok(h.indexOf("One pick per player, stat and game: the app line closest to Scout") > 0, "counting rule stated in plain words");
+ok(h.indexOf("One pick per player, stat and game: the app line closest to Grader") > 0, "counting rule stated in plain words");
 console.log("ok");

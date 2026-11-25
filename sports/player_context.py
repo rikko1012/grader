@@ -4,7 +4,7 @@ the WORKER inside the snapshot build (sports/snapshots.build) - never in the web
 One LeagueData load per board (the engine's own rule), one factors.compute per (player, stat) on the board. The engine
 owns the point-in-time rules (a game's result only once it ENDED before as_of, snapshots / lines only if observed
 before it, EPA only with an expected-points table trained on earlier games). Values only - no weights. These values are
-descriptive context: the Scout model does not use them (its own inputs are the forecast's saved input row), so every
+descriptive context: the Grader model does not use them (its own inputs are the forecast's saved input row), so every
 value is labelled CONTEXT_LABEL until a registered factor test promotes a factor into a model version.
 
 NFL snap share: the engine's game store has no snap counts, but nflverse snap counts (free, CC-BY) are in the model's
@@ -23,7 +23,7 @@ from datetime import timedelta
 from . import config
 from .contracts import parse_utc
 
-CONTEXT_LABEL = "Context - not yet in the Scout model"
+CONTEXT_LABEL = "Context - not yet in the Grader model"
 ENGINE_VERSION = "player-context-1"
 # owner factor-list items no source we hold has - one-word reason each (everything else comes from the engine)
 NOT_HELD = {

@@ -102,7 +102,7 @@ def parse_summary(body):
 
 
 def recent_matchup(history, event, seen_at, league):
-    """Recent results that Scout had in hand by this quote. Each final game counts once."""
+    """Recent results that Grader had in hand by this quote. Each final game counts once."""
     ids = event.get("winner_team_ids") or []
     if len(ids) != 2 or ids[0] == ids[1]:
         return {}

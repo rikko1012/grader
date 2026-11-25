@@ -297,8 +297,8 @@ h3{font-size:28px;line-height:1.16;letter-spacing:-.035em}
 
 .demo-workspace[data-feature-index="0"][data-tour-step="0"] .demo-panel:first-child,.demo-workspace[data-feature-index="0"][data-tour-step="1"] .demo-stats,.demo-workspace[data-feature-index="0"][data-tour-step="2"] .demo-panel:nth-child(2),.demo-workspace[data-feature-index="2"][data-tour-step="0"] .studio-grid,.demo-workspace[data-feature-index="2"][data-tour-step="1"] .studio-check,.demo-workspace[data-feature-index="2"][data-tour-step="2"] .studio-build{outline:1px solid #68baff;outline-offset:5px;border-radius:6px;transition:outline-color .4s}
 
-/* 1time Scout design tokens (v3 "precision instrument"). Source of truth for every page: player, board, slip, landing.
-   Scout repo copy: the sport accent attribute is html[data-sc-sport] (not data-sport, which page scripts already query: web/record.js,
+/* Prop Grader design tokens (v3 "precision instrument"). Source of truth for every page: player, board, slip, landing.
+   Grader repo copy: the sport accent attribute is html[data-sc-sport] (not data-sport, which page scripts already query: web/record.js,
    web/sports/expansion.js). Otherwise byte-identical to cs2_scout_ops/logs/design_1119/v3/system/tokens.css.
    Dark is the default; light via html[data-theme="light"] (or the OS, when no data-theme is set).
    Sport accent via html[data-sc-sport="cs2|nba|nfl|soccer|tennis|lol"]. One accent per surface; value colours only on numbers. */
@@ -385,7 +385,7 @@ h3{font-size:28px;line-height:1.16;letter-spacing:-.035em}
   }
 }
 
-/* Actual Scout v3 tokens are loaded unchanged in grader-tokens.css.
+/* Actual Grader v3 tokens are loaded unchanged in grader-tokens.css.
    Component treatments follow web/v3/{board,player,slips,components}.css.
    Device frames and editorial layout are landing-only. */
 :root{--sans:var(--sc-font);--mono:'DM Mono',monospace;--gut:40px}

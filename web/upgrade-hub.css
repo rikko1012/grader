@@ -1247,7 +1247,7 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
  #u-hub #hub-table .h-strip-cell:before{font-size:10px;margin-bottom:2px}
 }
 /* owner 2026-11-06 "on phone the L5/10/20 h2h look clumped together": on the phone / tablet card the hit windows get their own full-width
-   line under the line, Scout and projection, one labelled box per window (label above value), fixed equal widths and an 8px gap, so
+   line under the line, Grader and projection, one labelled box per window (label above value), fixed equal widths and an 8px gap, so
    "12/20" never squeezes or wraps. Same rows on every sport and book filter; the desktop one-line row is unchanged. Layout only. */
 @media(max-width:1100px){
  #u-hub #hub-table>tbody>tr[data-record],#u-hub.h-cols #hub-table>tbody>tr[data-record]{grid-template-areas:"player player market watch" "line scout scout add" "proj scout scout compare" "hits hits hits hits"}
@@ -1264,7 +1264,7 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
  #u-hub #hub-table td.h-c-hits .h-strip .h-hit.h-hit-wait{height:26px}
 }
 
-/* card-why (owner 2026-11-06): "Why Scout leans Over / Under" first on the card: the facts as a list, the side's risks under them.
+/* card-why (owner 2026-11-06): "Why Grader leans Over / Under" first on the card: the facts as a list, the side's risks under them.
    Filled dot = used in the grade, hollow dot = context only (weight 0). A green / red edge marks a fact for / against the side. */
 #u-hub .h-card-body>.h-why{margin:0 0 16px;padding:12px 14px 10px;border:1px solid #2f4562;border-radius:8px;background:#141c27}
 #u-hub .h-why .h-sec-head{margin-bottom:6px}
@@ -1354,7 +1354,7 @@ html[data-ui-tokens] #u-hub.h-board-mode .h-top{position:static;width:auto;heigh
  #u-hub #hub-table .h-compare-best{padding-inline:6px}
  #u-hub #hub-table .h-compare-best small.h-best{font:500 10px/13px Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 }
-/* wide desktop (1281px+): one Edge column with both numbers, each labelled - Scout's edge as before, then "Books" with the side's arrow -
+/* wide desktop (1281px+): one Edge column with both numbers, each labelled - Grader's edge as before, then "Books" with the side's arrow -
    so the player's name keeps its width; the separate Market edge column shows where the Edge column steps aside (1101-1280px), on the
    phone card (its own line) and whenever the board has no Edge column */
 #u-hub #hub-table .h-edge-books{display:none}

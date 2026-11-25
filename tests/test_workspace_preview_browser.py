@@ -224,7 +224,7 @@ def test_full_cs2_flow_from_research_through_settlement(ctx, env):
     go(p, "#/results")
     p.wait_for_function("document.getElementById('view-results').textContent.includes('Your tracked picks')")
     res = p.inner_text("#view-results")
-    assert "Scout board record" in res and "Your tracked picks" in res and "Sample sports" not in res and "1-1-0" in res
+    assert "Grader board record" in res and "Your tracked picks" in res and "Sample sports" not in res and "1-1-0" in res
     assert p.errors == []
 
 
@@ -445,7 +445,7 @@ def test_busy_track_keeps_the_slip_and_the_retry_is_the_same_press(ctx, env):
             route.continue_()
     ctx.route("**/preview/workspace/api/track", busy)
     p.click('#rail-body [data-act="track"][data-id="underdog"]')
-    p.wait_for_function("document.getElementById('toast').textContent.includes('Scout is busy')")
+    p.wait_for_function("document.getElementById('toast').textContent.includes('Grader is busy')")
     assert p.locator("#rail-body .leg").count() == 2
     p.click('#rail-body [data-act="track"][data-id="underdog"]')
     p.wait_for_selector("#rail-body .tracked")
@@ -630,9 +630,9 @@ def test_off_side_has_no_invented_chance(ctx, env):
     panel(p, "vargo")
     p.click('[data-act="p-side"][data-id="under"]')
     body = p.inner_text("#panel")
-    assert "38.8" not in body and "Scout saved a chance for Over only" in body
+    assert "38.8" not in body and "Grader saved a chance for Over only" in body
     p.click('[data-act="p-add"]')
-    assert "Scout side is Over" in p.inner_text("#rail-body .leg-meta")
+    assert "Grader side is Over" in p.inner_text("#rail-body .leg-meta")
 
 
 def test_bars_stay_off_when_the_tally_does_not_match(ctx, env, monkeypatch):
@@ -728,7 +728,7 @@ def test_no_market_column_of_dashes_and_a_fifty_tick(ctx, env):
 def test_results_outage_is_stated(ctx, env):
     ctx.route("**/preview/workspace/api/results", lambda r: r.abort())
     p = open_page(ctx, env, path="#/results")
-    p.wait_for_function("document.getElementById('view-results').textContent.includes('Scout board record unavailable')")
+    p.wait_for_function("document.getElementById('view-results').textContent.includes('Grader board record unavailable')")
 
 
 # ---- saved data is another writer's output
@@ -1251,10 +1251,10 @@ def test_a_side_flip_reaches_the_slip_and_the_member_takes_it_knowingly(ctx, env
     env.flip(env.by("vargo"))
     fresh()
     p.click('#rail-body [data-act="check-now"]')
-    p.wait_for_function("document.getElementById('rail-body').textContent.includes(\"Scout's read changed: now Under 58.0%\")")
+    p.wait_for_function("document.getElementById('rail-body').textContent.includes(\"Grader's read changed: now Under 58.0%\")")
     assert p.is_disabled('#rail-body [data-act="track"][data-id="underdog"]') and p.is_disabled('#rail-body [data-act="copy"][data-id="underdog"]')
     p.click('#rail-body [data-act="swap-leg"]')
-    p.wait_for_function("document.getElementById('rail-body').textContent.includes('Scout side is Under')")
+    p.wait_for_function("document.getElementById('rail-body').textContent.includes('Grader side is Under')")
     ready(p)
     assert "61.2%" not in p.inner_text("#rail-body .leg")
     p.click('#rail-body [data-act="track"][data-id="underdog"]')
@@ -1275,7 +1275,7 @@ def test_a_receipt_against_scout_names_scouts_side(ctx, env):
     p.wait_for_selector("#view-picks .pick-row")
     p.locator(".pick-row .pick-head", has_text="vargo").click()
     body = p.inner_text("#view-picks .pick-body")
-    assert "B Over" in body and "0.5U on Over" in body and "Under, against Scout" in body and "None saved for this side" in body
+    assert "B Over" in body and "0.5U on Over" in body and "Under, against Grader" in body and "None saved for this side" in body
 
 
 def test_a_leg_the_sports_check_refuses_is_never_ready_and_never_copied(octx, env):
@@ -1448,7 +1448,7 @@ def test_the_board_record_label_claims_only_what_it_counts(ctx, env):
     p = open_page(ctx, env, path="#/results")
     p.wait_for_function("document.getElementById('view-results').textContent.includes('Hit rate, settled picks')")
     text = p.inner_text("#view-results")
-    assert "Every saved Scout forecast" not in text and "Saved Scout forecasts that meet the rule and definition below" in text
+    assert "Every saved Grader forecast" not in text and "Saved Grader forecasts that meet the rule and definition below" in text
 
 
 def test_older_picks_load_on_request(ctx, env):

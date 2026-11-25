@@ -1,4 +1,4 @@
-"""HTTP handlers for the Scout Sports research assistant (route contract: sports/web.py ROUTES, one line each).
+"""HTTP handlers for the Prop Grader Sports research assistant (route contract: sports/web.py ROUTES, one line each).
 
   GET  /api/sports/assistant/status        MEMBER  available?, today's quota, limits
   POST /api/sports/assistant/ask           MEMBER  {"question", "league": "nba"|"nfl", "page_context"?} -> run id

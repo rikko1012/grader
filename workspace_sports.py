@@ -354,7 +354,7 @@ def _market_kind(model):
 
 
 def scout_at(q, fc):
-    """The Scout view at this quote's line (web/sports/table.js scoutAt): its own forecast, else the line read; the calibrated
+    """The Grader view at this quote's line (web/sports/table.js scoutAt): its own forecast, else the line read; the calibrated
     chance on the quote wins. The forecast id is only set for a forecast made for this offer."""
     f = fc.get(q.get("f") or "")
     sc = None
@@ -496,23 +496,23 @@ HOLD_SHORT = {"cap": "Priced far from even", "gate": "Letters switched off", "ra
               "certain": "Forecast out of range", "thin": "Fewer than 3 games", "stale": "No game in the last year",
               "small_low": "Projection far below line", "av_out": "Ruled out", "av_injured_reserve": "Injured reserve",
               "av_suspended": "Suspended", "av_inactive": "Inactive",
-              # os-2 (grade_rules.side_hold): PrizePicks does not list Scout's side on this line (sweep 2026-11-23: was a bare "No grade")
+              # os-2 (grade_rules.side_hold): PrizePicks does not list Grader's side on this line (sweep 2026-11-23: was a bare "No grade")
               "side": "Side not offered"}
 
 
 def no_forecast(nf, stat_label):
-    """(reason, short) for a line with no Scout forecast, from the sports pipeline's own reason (quote nf, snapshots
+    """(reason, short) for a line with no Grader forecast, from the sports pipeline's own reason (quote nf, snapshots
     no_forecast_reason). Model coverage and a line newer than the last forecast run are told apart; nothing is guessed."""
     nf = str(nf or "")
     if nf.startswith("Market not supported"):
-        return f"Scout's model does not cover {stat_label}.", "Stat not graded"
+        return f"Grader's model does not cover {stat_label}.", "Stat not graded"
     if nf.startswith("Line not modelled"):
-        return "Scout does not grade this kind of line.", "Line not graded"
-    if nf.startswith("No Scout forecast:"):
-        return "Scout has no forecast for this player and stat: " + nf.split(":", 1)[1].strip(), "No forecast"
+        return "Grader does not grade this kind of line.", "Line not graded"
+    if nf.startswith(("No Grader forecast:", "No Scout forecast:")):     # rows written before the rename
+        return "Grader has no forecast for this player and stat: " + nf.split(":", 1)[1].strip(), "No forecast"
     if "after the last forecast run" in nf:
-        return "This line appeared after Scout's last forecast run (forecasts run every 30 minutes).", "New line"
-    return "Scout has no forecast for this line.", "No forecast"
+        return "This line appeared after Grader's last forecast run (forecasts run every 30 minutes).", "New line"
+    return "Grader has no forecast for this line.", "No forecast"
 
 
 def record_of(lg, doc, m, q, view):
@@ -544,7 +544,7 @@ def record_of(lg, doc, m, q, view):
         grade = None
     short = None
     if one:
-        reason = f"{one}: Scout grades lines that offer both sides."
+        reason = f"{one}: Grader grades lines that offer both sides."
     elif held is not None:
         reason = held
         short = "Letters switched off" if not signal.get("b") or m.get("nv") else HOLD_SHORT.get(signal.get("b"), "No grade")
@@ -574,8 +574,8 @@ def record_of(lg, doc, m, q, view):
            "scout": {"side": lean, "read_rev": read_rev(lean, sc, held, grade), "p_side": side_p, "p_over": sc["po"] if sc else None, "p_under": sc["pu"] if sc else None, "p_push": sc["pp"] if sc else None,
                      "projection": sc.get("mu") if sc else None, "range80": sc.get("iv") if sc else None, "grade": grade, "units": 0 if grade else None, "stake_reason": "Stakes remain 0." if grade else None,
                      "hold": hold, "model_version": sc.get("model") if sc else None, "forecast_at": sc.get("at") if sc else None,
-                     "validation": {"kind": "research", "label": "Scout grade" if grade else (one or HOLD_LABEL),
-                                    "detail": "Scout grade. Stakes remain 0." if grade else reason}},
+                     "validation": {"kind": "research", "label": "Grader grade" if grade else (one or HOLD_LABEL),
+                                    "detail": "Grader grade. Stakes remain 0." if grade else reason}},
            "history": {"l5": _tally(a[4:8] if a else None), "l10": _tally(a[:4] if a else None), "l20": _tally((v.get("lines20") or {}).get(line_key(line))) if line is not None else None, "avg": None, "recent": None,
                        **(_board_columns(v, line, opp) if workspace_h2h.board_enabled() else {})},
            "market_chance": {"p_over": mkc["po"], "p_under": mkc["pu"], "sources": mkc.get("n")} if mkc else None,
@@ -685,7 +685,7 @@ def _pack(s, name, doc, at):
 # Site audit N7 (Filters > Line moved showed 0 of 5,641 NBA lines): the sports board carries no opening line, so this server
 # notes the first standard line it saw per platform / event / player / stat / period and the time it last changed. A line that
 # differs from that first sighting carries moved_from (that line) and moved_at, as the CS2 board does from its own open_line.
-# Only moves Scout itself observed (a restart starts again from the lines then on the board); display only, never a grade
+# Only moves Grader itself observed (a restart starts again from the lines then on the board); display only, never a grade
 # input. Bounded: markets whose start is more than MOVES_KEEP_S past leave, and at most MOVES_MAX per league are held.
 MOVES_KEEP_S = 6 * 3600
 MOVES_MAX = 4 * 6000
@@ -800,7 +800,7 @@ def snapshot(srv, lg):
 # ---------------------------------------------------------------------------------------------------------------- checks
 
 REFUSAL = {"gone": (1, "gone", "This line is no longer on the board."), "changed": (1, "moved", "This offer changed."), "not_open": (1, "side", None), "side_not_offered": (1, "side", None),
-           "not_gradable": (1, "not_gradable", "Scout cannot settle this line."), "started": (0, "locked", "Game started."), "start_unknown": (0, "start_unknown", "No start time on the feed for this line."),
+           "not_gradable": (1, "not_gradable", "Grader cannot settle this line."), "started": (0, "locked", "Game started."), "start_unknown": (0, "start_unknown", "No start time on the feed for this line."),
            "stale": (1, "stale", "This line has not been re-read recently."), "forecast_mismatch": (2, "forecast_mismatch", "The saved forecast does not match this line."),
            "display_mismatch": (2, "display_mismatch", "The chance on your slip is out of date."), "not_pickem": (1, "gone", "This line is not on a pick'em board.")}
 
@@ -831,7 +831,7 @@ def check_leg(srv, leg, lg, now):
     snap = snapshot(srv, lg)
     book, side = leg["book"], leg["side"]
     if snap is None:
-        return {"ok": False, "problems": [_pr(1, "retry", "Scout could not check this line just now.", retry=True)], "current": None}
+        return {"ok": False, "problems": [_pr(1, "retry", "Grader could not check this line just now.", retry=True)], "current": None}
     x = snap["index"].get((book, leg["row_id"]))
     label = LABEL.get(book, book)
     if x is None:
@@ -840,7 +840,7 @@ def check_leg(srv, leg, lg, now):
         return {"ok": False, "problems": [_pr(1, "gone", f"{book_label(book)} is shown for comparison. Slips cover PrizePicks and Underdog.")], "current": None}
     problems = []
     if (snap["feeds"].get(book) or {}).get("state") != "ok" or now.timestamp() - snap["at"] > 120:
-        problems.append(_pr(1, "board_failed", f"Scout could not read the {lg.upper()} board just now.", retry=True))
+        problems.append(_pr(1, "board_failed", f"Grader could not read the {lg.upper()} board just now.", retry=True))
     lock = _ts(x["start"])
     if lock is None:
         problems.append(_pr(0, "start_unknown", "No start time on the feed for this line."))
@@ -852,19 +852,19 @@ def check_leg(srv, leg, lg, now):
     if not (x["o"] or [0, 0])[0 if side == "over" else 1]:
         problems.append(_pr(1, "side", f"{SIDE_WORD[side]} is not offered on {label}."))
     if x.get("variant") == "one_sided":          # owner 2026-11-06: shown, never on a slip or tracked
-        problems.append(_pr(1, "not_gradable", f"{one_sided_label({'v': 'one_sided', 'o': x['o']})}: Scout grades lines that offer both sides."))
+        problems.append(_pr(1, "not_gradable", f"{one_sided_label({'v': 'one_sided', 'o': x['o']})}: Grader grades lines that offer both sides."))
     elif not x["g"]:
-        problems.append(_pr(1, "not_gradable", "Scout cannot settle this line."))
+        problems.append(_pr(1, "not_gradable", "Grader cannot settle this line."))
     if not x["fid"]:
         problems.append(_pr(2, "no_forecast", "No saved forecast for this line, so it cannot be tracked."))
     else:
         shown_p, now_p = leg.get("shown_p"), x["po"] if side == "over" else x["pu"]
         if leg.get("read_rev") != x["read_rev"] or shown_p is None or abs(shown_p - now_p) > DISPLAY_MAX_GAP:
-            problems.append(_pr(2, "display_mismatch", f"Scout's read changed: now {SIDE_WORD[side]} {now_p * 100:.1f}%.", swap=True))
+            problems.append(_pr(2, "display_mismatch", f"Grader's read changed: now {SIDE_WORD[side]} {now_p * 100:.1f}%.", swap=True))
     if not problems:
         res = live_check(srv, lg, x, side)
         if res.get("state") == "retry":
-            problems.append(_pr(1, "retry", "Scout could not check this line just now.", retry=True))
+            problems.append(_pr(1, "retry", "Grader could not check this line just now.", retry=True))
         elif not res.get("ok"):
             chk, code, text = REFUSAL.get(res.get("code"), (1, "gone", None))
             problems.append(_pr(chk, code, text or res.get("text") or "This line cannot be tracked.", **({"swap": True} if code in ("moved", "display_mismatch", "forecast_mismatch") else {}),
@@ -1094,7 +1094,7 @@ def card_h2h(hist, stat, opponent, oid, line):
     return workspace_h2h.h2h(rows, opponent, line)
 
 
-ENGINE_GROUP = "Matchup numbers (not part of Scout's forecast)"
+ENGINE_GROUP = "Matchup numbers (not part of Grader's forecast)"
 
 
 def context_of(x, player, lg):
@@ -1128,7 +1128,7 @@ def context_of(x, player, lg):
         for w in s.get("windows") or []:
             if w.get("window") and w.get("mean") is not None:
                 add(f"{s.get('label')}, {w['window']}", w["mean"], "Averages")
-    # the factor engine's rows are context (sports/player_context.py: weight 0, the Scout model does not use them): their heading
+    # the factor engine's rows are context (sports/player_context.py: weight 0, the Grader model does not use them): their heading
     # says so, never "Model inputs" (grading-factor rule, card-and-chips 2026-11-06)
     for r in ((player or {}).get("engine") or {}).get("rows") or []:
         if r.get("label") and r.get("value") is not None:
@@ -1250,7 +1250,7 @@ def results(srv, lg):
     by_stat = [_line(k, v.get("leans") or {}, None, v.get("games")) for k, v in sorted((d.get("stats") or {}).items()) if (v.get("leans") or {}).get("n")]
     hh = next((h for h in (d.get("head_to_head") or {}).get("rows") or [] if h.get("stat") == "all"), None)
     return {"sport": lg, "label": f"{lg.upper()} research record", "as_of": doc.get("as_of"), 'calendar':d.get('calendar'),
-            "population": "Saved forward Scout forecasts with a lean, each scored at its own line from the final box score." + ("" if _letters(d) else " These are research estimates, with grades held."),
+            "population": "Saved forward Grader forecasts with a lean, each scored at its own line from the final box score." + ("" if _letters(d) else " These are research estimates, with grades held."),
             "rule": "Over when its chance of Over is above 50% and its projection is above the line, Under mirrored. Hit rate is wins over wins plus losses. Pushes stay apart, voids and unresolved props stay out.",
             "totals": {"picks": leans.get("n") or 0, "wins": leans.get("wins"), "losses": leans.get("losses"), "pushes": leans.get("pushes"), "observed": leans.get("hit_rate"), "ci": leans.get("hit_rate_ci95"),
                        "printed": stated, "matches": d.get("games"), "void": d.get("void"), "match_word": "games"},

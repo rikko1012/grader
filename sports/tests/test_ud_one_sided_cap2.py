@@ -2,7 +2,7 @@
 only' (or 'Under only') but do not grade or stake them."
 
 A stored one-sided Underdog line (adapters.ud_offers: variant one_sided = Underdog LISTS one side) stays on the board
-row with its line and price, labelled by its side, and gets no forecast, Scout chance, grade, letter, stake, slip leg,
+row with its line and price, labelled by its side, and gets no forecast, Grader chance, grade, letter, stake, slip leg,
 tracked pick or record entry. A two-sided line whose other side is suspended right now is NOT one-sided (its stored
 type decides) and keeps its grading. Every name, line and probability is a TEST FIXTURE."""
 import json
@@ -60,7 +60,7 @@ def test_adapter_fixture_full_game_one_sided_lines_are_refused():
 
 def test_pick_refusal_is_plain_words():
     t = picks.plain_gate_reason([capabilities.ONE_SIDED_REASON])
-    assert t == "Scout doesn't grade or track this pick: the line offers one side only."
+    assert t == "Grader doesn't grade or track this pick: the line offers one side only."
     assert "one_sided" not in t and "variant" not in t and "No bet" not in t
 
 

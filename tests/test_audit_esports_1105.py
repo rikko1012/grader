@@ -1,10 +1,10 @@
 """Audit 2026-11-05, esports data group.
 
 B1  Underdog CS2 lines read "UD · 32h" while the feed was a minute old: a row's seen_at was Underdog's own updated_at (when the line
-    last CHANGED). Now seen_at is Scout's read time; a failed read keeps the last good rows with their own (ageing) seen_at; a feed
+    last CHANGED). Now seen_at is Grader's read time; a failed read keeps the last good rows with their own (ageing) seen_at; a feed
     with no good read for 2 h is not graded as current (its lines keep their last grade).
 A2/B4  Sleeper / Dabble rows: L5 / L10 / L20 (H2H / Season) from the game log at the line shown, the board player's full research doc
-    (history, stats, H2H, Ask) at that line, and Scout's chance at a different line read from the SAME saved distribution
+    (history, stats, H2H, Ask) at that line, and Grader's chance at a different line read from the SAME saved distribution
     (CS2 grader dist / LoL saved NB) - no new model, no shrink, no letter, no stake.
 No network: every feed is a fake."""
 import json
@@ -69,7 +69,7 @@ def test_underdog_row_seen_at_is_scouts_read_time_not_the_line_change_time(ud_st
     seen = datetime.fromisoformat(r["seen_at"]).timestamp()
     assert abs(seen - t0) < 5                                                     # the read time
     rec = workspace_api.record_of(dict(r, book="underdog", side="More", p=0.6, graded_model="M"))
-    assert rec["offer"]["seen_at"] == r["seen_at"]                                # the row chip / Lines tab age = time since Scout's read
+    assert rec["offer"]["seen_at"] == r["seen_at"]                                # the row chip / Lines tab age = time since Grader's read
 
 
 def test_underdog_failed_read_keeps_last_rows_and_their_age(ud_state, monkeypatch):
@@ -403,7 +403,7 @@ def test_extra_lines_never_change_the_board_or_go_on_a_slip(books):
     assert "if(r.extra)return openCard(id,'overview')" in js                    # Info opens the research card (it only toasted)
     assert "'detail-add'(){const r=rec(H.detail);if(!r||r.extra)return;" in js   # never on a slip
     assert "const eligible=!r.extra&&" in js and "extraDetail(" not in js
-    assert "Scout\\u2019s chance at this line" in js and ">Chance at this line</span>" in js   # short on the row, full on the card
+    assert "Grader\\u2019s chance at this line" in js and ">Chance at this line</span>" in js   # short on the row, full on the card
 
 
 # ------------------------------------------------------------------------------------------------------------- LoL

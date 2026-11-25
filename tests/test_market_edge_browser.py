@@ -1,8 +1,8 @@
 """Owner site audit 2026-11-06 in a real browser (real Handler, fixture upstreams, the production flags server.DEFAULT_ON):
 - B: the sport tabs All, CS2, LoL, NBA and NFL are all visible at 320 / 360 / 390 / 414 / 768 / 1440 - equal widths, 44px targets, no
   sideways strip, no page scroll sideways; the count badges never move a tab;
-- A: the Market edge column on every sport (NBA / NFL: the books' chance minus the 2-pick break-even, with or without a Scout side, green
-  only when positive; CS2 / LoL: "—" with the plain reason); the Scout Edge column stays;
+- A: the Market edge column on every sport (NBA / NFL: the books' chance minus the 2-pick break-even, with or without a Grader side, green
+  only when positive; CS2 / LoL: "—" with the plain reason); the Grader Edge column stays;
 - C: the best Over and Under across books in each row and on the card's Lines tab; the discrepancy chip where books differ by 1+.
 MARKET_SHOTS=<folder> keeps a screenshot of every sport at every width."""
 import os
@@ -29,7 +29,7 @@ def bk(p, line, over, under, mins=1):
 
 
 def boards():
-    """The fixture NBA / NFL boards with fresh sportsbook rows: an Avdija-like row (no Scout side, two books), a two-book Karl Anders
+    """The fixture NBA / NFL boards with fresh sportsbook rows: an Avdija-like row (no Grader side, two books), a two-book Karl Anders
     row, and an NFL row whose third book lists a line 2 yards higher (a discrepancy)."""
     doc, view = nba_board()
     towns = doc["markets"][0]
@@ -114,9 +114,9 @@ def test_sport_tabs_market_edge_and_best_lines_at_every_width(browser, live, wid
             no_h_scroll(p)
             assert [round(x['l']) for x in p.evaluate(TABS)['tabs']] == before   # a count changing never moves a tab
             assert p.locator('#hub-table thead th.h-c-medge').count() == 1
-            assert p.locator('#hub-table thead th.h-c-edge').count() == 1      # Scout's Edge column stays
+            assert p.locator('#hub-table thead th.h-c-edge').count() == 1      # Grader's Edge column stays
             shot(p, f"board-{s}")
-        # NBA: the Avdija-like row has no Scout side and still gets a market edge on the side the books favour
+        # NBA: the Avdija-like row has no Grader side and still gets a market edge on the side the books favour
         pick(p, 'nba')
         p.locator('#hub-q').fill('Deni Avdija')
         p.wait_for_function("[...document.querySelectorAll('#hub-rows tr[data-record] .h-player b')].some(b => b.innerText === 'Deni Avdija')")
@@ -125,15 +125,15 @@ def test_sport_tabs_market_edge_and_best_lines_at_every_width(browser, live, wid
         p.wait_for_selector('#hub-rows tr[data-record^="nba|underdog|"]')
         row = p.locator('#hub-rows tr[data-record^="nba|underdog|"]', has_text='Deni Avdija').first
         cell = row.locator('td.h-c-medge')
-        assert row.locator('.h-direction').count() == 0                       # no Scout side on this line
+        assert row.locator('.h-direction').count() == 0                       # no Grader side on this line
         assert cell.locator('.h-medge b').inner_text().startswith(('+', '−', '±'))
         assert cell.locator('.h-medge-side').first.inner_text() in ('Over', 'Under')
         title = cell.locator('.h-medge-wrap').get_attribute('title')
-        assert 'an Underdog standard 2-pick needs 53.5%' in title and "not Scout’s grade" in title and 'BetRivers, FanDuel' in title
+        assert 'an Underdog standard 2-pick needs 53.5%' in title and "not Grader’s grade" in title and 'BetRivers, FanDuel' in title
         if width >= 1281:      # wide desktop: both numbers in the Edge column, each labelled; the Market edge column steps aside
             books = row.locator('td.h-c-edge .h-edge-books')
             assert books.is_visible() and books.inner_text().startswith('BOOKS') and not cell.is_visible()
-            assert row.locator('td.h-c-edge .h-edge').is_visible()                 # Scout's own edge stays first
+            assert row.locator('td.h-c-edge .h-edge').is_visible()                 # Grader's own edge stays first
         else:                  # 1101-1280: its own column; phone / tablet: its own labelled line on the card
             assert cell.is_visible() and not row.locator('td.h-c-edge .h-edge-books').is_visible()
         green = cell.locator('.h-medge').evaluate("e => e.classList.contains('positive')")
@@ -165,7 +165,7 @@ def test_sport_tabs_market_edge_and_best_lines_at_every_width(browser, live, wid
         p.locator('#hub-rows tr[data-record^="nba|underdog|"] .h-compare').first.click()
         p.wait_for_selector('#hub-detail .h-best-lines', timeout=20000)
         txt = p.locator('#hub-detail .h-best-lines').inner_text()
-        assert 'Best line per side' in txt and 'Market edge' in txt and "The books’ number, not Scout’s grade." in txt
+        assert 'Best line per side' in txt and 'Market edge' in txt and "The books’ number, not Grader’s grade." in txt
         assert p.locator('#hub-detail .h-best-lines tbody tr').count() == 2 and p.locator('#hub-detail .h-best-lines .h-gap').count() == 1
         no_h_scroll(p)
         shot(p, 'card-lines-nba')

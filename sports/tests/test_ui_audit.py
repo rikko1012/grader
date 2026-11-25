@@ -17,7 +17,7 @@ def test_no_hedge_or_disclaimer_sentences_in_member_copy():
     for f in ("app.js", "compare.js", "sheets.js"):
         js = (WEB / f).read_text(encoding="utf-8")
         for bad in ("not validated recommendations", "not recommendations", "Not validated yet:", "capture-only)",
-                    "still in forward validation", "no grades or stakes", "Not in Scout data:", "Research only: grades"):
+                    "still in forward validation", "no grades or stakes", "Not in Grader data:", "Research only: grades"):
             assert bad not in js, (f, bad)
 
 

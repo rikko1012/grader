@@ -29,7 +29,7 @@ def test_one_sided_record_is_labelled_and_never_graded():
     sc = rec["scout"]
     assert rec["market"]["line_type"] == "over only"
     assert sc["grade"] is None and sc["units"] is None and sc["side"] is None and sc["p_over"] is None
-    assert sc["hold"] == {"label": "Over only", "reason": "Over only: Scout grades lines that offer both sides.", "short": "Over only"}
+    assert sc["hold"] == {"label": "Over only", "reason": "Over only: Grader grades lines that offer both sides.", "short": "Over only"}
     assert sc["validation"]["label"] == "Over only" and "No bet" not in str(rec)
     assert rec["offer"]["line"] == 20.5 and rec["offer"]["over"] == {"offered": True, "payout": 0.86, "price": None}
     assert rec["market_chance"] == {"p_over": 0.55, "p_under": 0.45, "sources": 2}      # plain chance, as on ungraded rows
@@ -59,7 +59,7 @@ def test_slip_check_refuses_a_one_sided_leg(monkeypatch):
     leg = {"book": "underdog", "side": "over", "row_id": x["rid"], "rev": x["rev"], "line": 20.5}
     out = ws.check_leg(_Srv(), leg, "nba", datetime.now(timezone.utc))
     codes = {p["code"]: p["text"] for p in out["problems"]}
-    assert out["ok"] is False and codes.get("not_gradable") == "Over only: Scout grades lines that offer both sides."
+    assert out["ok"] is False and codes.get("not_gradable") == "Over only: Grader grades lines that offer both sides."
     assert not called                                                  # never sent on to be tracked
 
 

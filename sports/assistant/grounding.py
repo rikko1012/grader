@@ -10,7 +10,7 @@ check(text) then reads an answer piece and
   - keeps a citation [ref:<id>] only if <id> is in the results (a forged / unknown id is removed and flagged)
   - appends a citation to a sentence whose numbers came from records it does not already cite
 Identifiers (L10, Q1, record ids, fc-..., 3-pointers) are not numbers. Grounding cannot judge whether a true number is
-used sensibly - that is the prompt's job; it guarantees no number appears that Scout's data does not contain.
+used sensibly - that is the prompt's job; it guarantees no number appears that Grader's data does not contain.
 """
 from __future__ import annotations
 

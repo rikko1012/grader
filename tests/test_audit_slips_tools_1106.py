@@ -291,8 +291,8 @@ def test_t5_nba_leg_with_no_book_price_shows_no_return_figure(ctx, env, ev_on):
     p.wait_for_selector("#hub-ev-body .ev-list-model .ev-row")
     row = p.locator("#hub-ev-body .ev-list-model .ev-row", has_text="LeBron James").first
     assert row.count() == 1
-    assert row.locator('[data-label="Average return on Scout\'s chance"]').count() == 0
-    assert "%" in row.locator(".ev-hit").inner_text()                                    # Scout's chance itself stays
+    assert row.locator('[data-label="Average return on Prop Grader\'s chance"]').count() == 0
+    assert "%" in row.locator(".ev-hit").inner_text()                                    # Grader's chance itself stays
     low = p.locator("#hub-ev-body").inner_text().lower()
     assert "unvalidated" not in low and "estimate" not in low and "beta" not in low
     assert not p.errors

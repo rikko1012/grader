@@ -1,12 +1,12 @@
-"""THE one definition of a "Scout chance" (owner audit 2026-10-24 bug 5: the slate card said 75, the game page 49).
+"""THE one definition of a "Grader chance" (owner audit 2026-10-24 bug 5: the slate card said 75, the game page 49).
 
-A Scout chance is a displayed sm-1 / mi-1 forecast attached to an ORDINARY pick'em / book quote (not Kalshi, not an
+A Grader chance is a displayed sm-1 / mi-1 forecast attached to an ORDINARY pick'em / book quote (not Kalshi, not an
 alternate / promotional line) that is offered (at least one side), on the offer's CURRENT revision line (the board
 only attaches a forecast to the current revision, or to an earlier revision at the identical line / stat / scope /
 sides), of a game that has NOT started. A line read (the same saved distribution read at another line) is not a
 forecast and is counted separately.
 
-Counts are of MARKETS (one player x stat x scope of one game) with at least one Scout chance - the unit the board and
+Counts are of MARKETS (one player x stat x scope of one game) with at least one Grader chance - the unit the board and
 the game page list - plus the number of quotes, so every surface can show the same number.
 
 Hidden markets: a market row on the board with no ordinary quote is not listed by default; hidden_reason() names
@@ -22,7 +22,7 @@ def models():
     """MODELS, plus nba8-1 only while NBA_STATS8 is on (default off -> MODELS exactly)."""
     from . import capabilities
     return capabilities.nba8_models(MODELS)
-TEXT = ("A Scout chance is a sm-1 / mi-1 forecast on an offered, current line of a game that has not started "
+TEXT = ("A Grader chance is a sm-1 / mi-1 forecast on an offered, current line of a game that has not started "
         "(ordinary pick'em / book lines; Kalshi rungs, alternate and promotional lines excluded).")
 
 
@@ -39,7 +39,7 @@ def is_scout_chance(q, forecasts, started):
 
 
 def row_count(row, forecasts, started):
-    """-> number of Scout-chance quotes in one market row (row['quotes'] = its ordinary quotes)."""
+    """-> number of Prop Grader-chance quotes in one market row (row['quotes'] = its ordinary quotes)."""
     return sum(1 for q in row.get("quotes") or () if is_scout_chance(q, forecasts, started))
 
 

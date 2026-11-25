@@ -26,7 +26,7 @@ def test_market_rejection_explains_price_instead_of_league_gate():
 
 
 def test_missing_forecast_is_not_a_containment_claim():
-    assert record(forecast=False)['hold']['reason'] == 'Scout has no forecast for this line.'
+    assert record(forecast=False)['hold']['reason'] == 'Grader has no forecast for this line.'
 
 
 def test_sg2_degenerate_projection_is_a_research_estimate_with_its_reason():
@@ -77,10 +77,10 @@ def test_no_forecast_reason_comes_from_the_pipeline_not_a_guess():
         q={'p':'prizepicks','r':'offer:prizepicks:2','l':30.5,'o':[1,1],'f':None,'nf':nf}
         m={'k':'event|player|pra|full_game','e':'event','pid':'player','n':'Player','st':st,'mk':None}
         return ws.record_of('nba',{'fc':{},'stats':{'pra':'Pts+Rebs+Asts'}},m,q,{})[0]['scout']['hold']
-    h=why('Market not supported by the Scout model: combo')
-    assert h['short']=='Stat not graded' and h['reason']=="Scout's model does not cover Pts+Rebs+Asts."
+    h=why('Market not supported by the Grader model: combo')
+    assert h['short']=='Stat not graded' and h['reason']=="Grader's model does not cover Pts+Rebs+Asts."
     assert why('Line appeared after the last forecast run')['short']=='New line'
-    assert why('No Scout forecast: no games in the data')['reason'].endswith('no games in the data')
+    assert why('No Grader forecast: no games in the data')['reason'].endswith('no games in the data')
     assert why('Line not modelled: promotional')['short']=='Line not graded'
     assert why(None)['short']=='No forecast'
 
@@ -89,7 +89,7 @@ def test_every_hold_has_a_short_plain_reason():
     assert record()['hold']['short']=='No clear side'
     assert record(market={'l':10.5,'c':{'n':2,'po':.65,'pu':.35}})['hold']['short']=='No edge over books'
     assert record({'b':'av_out','t':'Ruled out (ESPN injury report)','v':'av-1'})['hold']['short']=='Ruled out'
-    assert record({'b':'cap','t':'Scout grades lines priced near even.','v':'cap-3'})['hold']['short']=='Priced far from even'
+    assert record({'b':'cap','t':'Grader grades lines priced near even.','v':'cap-3'})['hold']['short']=='Priced far from even'
     assert record({'b':'gate'})['hold']['short']=='Letters switched off'
     for code in ('l10_contra','ratio_low','thin','av_inactive'):
         assert record({'b':code,'t':'x'})['hold']['short']==ws.HOLD_SHORT[code]
@@ -109,9 +109,9 @@ def test_exchange_rows_carry_their_own_price_per_side():
 
 
 def test_pp_side_hold_names_its_reason_on_the_row():
-    """sweep 2026-11-23 (nbanfl-2): an os-2 side hold (PrizePicks does not list Scout's side) says so in plain words on the
+    """sweep 2026-11-23 (nbanfl-2): an os-2 side hold (PrizePicks does not list Grader's side) says so in plain words on the
     row instead of a bare "No grade"; side, letter and stake stay removed exactly as before."""
-    text="Scout's side is not offered on this line"            # sports/grade_rules.HOLD_TEXT (CS2 tests never import sports)
+    text="Grader's side is not offered on this line"            # sports/grade_rules.HOLD_TEXT (CS2 tests never import sports)
     s=record({'b':'side','t':text,'v':'os-2'})
     assert s['hold']['short']=='Side not offered' and s['hold']['reason']==text
     assert s['side'] is None and s['grade'] is None and s['units'] is None

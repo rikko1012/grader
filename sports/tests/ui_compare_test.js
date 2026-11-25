@@ -9,7 +9,7 @@ function ok(c, m) { if (!c) { console.error("FAIL " + m); process.exit(1); } }
 const T = new Date(Date.now() - 60000).toISOString();
 const NOW = Date.now();
 const EV1 = {start_utc: "2099-01-01T00:00:00Z", status: "scheduled"}, EV2 = {start_utc: "2099-01-02T00:00:00Z", status: "scheduled"};
-// x = server row signal cf-2 (sports/board_view.quote_x): ln lean, pl Scout chance of the lean side, e edge, c confidence
+// x = server row signal cf-2 (sports/board_view.quote_x): ln lean, pl Grader chance of the lean side, e edge, c confidence
 function q(r, p, l, f, x, o) { return {r: "offer:" + p + ":" + r + ":r1:ab", p, l, o: o || [1, 1], t: T, f, x, g: 1}; }
 function mkt(k, ev, e, quotes, at) { return {k, pid: "nba:player:espn:" + k, n: "Player " + k, st: "points", e, ev, matchup: e === "g1" ? "NY @ BOS" : "LAL @ GSW", kn: [], q: quotes, mk: {at}}; }
 const fc = {
@@ -33,19 +33,19 @@ const Fn = mkt("f", EV2, "g2", [q("f1x", "prizepicks", 20.5, "f5", null)], {"off
 const Board = {markets: [A, B_, Cm, Dh, En, Fn], fc, view: {}, stats: {points: "Points"}};
 const items = [A, B_, Cm, Dh, En, Fn].map((m) => C.itemFromBoard(m, m.q[0]));
 
-// ranking: edge first, ties -> higher Scout chance -> higher confidence
+// ranking: edge first, ties -> higher Grader chance -> higher confidence
 let built = C.buildRows(Board, items, NOW);
 ok(built.rows.length === 6 && built.changed.length === 0, "all resolve");
 let res = C.rank(built.rows);
-ok(res.ranked.map((r) => r.key).join(",") === "a,b,c", "order by edge, then Scout chance: " + res.ranked.map((r) => r.key + ":" + r.edge + ":" + r.pLean));
+ok(res.ranked.map((r) => r.key).join(",") === "a,b,c", "order by edge, then Grader chance: " + res.ranked.map((r) => r.key + ":" + r.edge + ":" + r.pLean));
 ok(res.best.key === "a" && res.best.rank === 1, "best");
 // ineligible rows: held, NFL not validated, no lean -> No pick with the reason
 const why = Object.fromEntries(res.noPick.map((x) => [x.row.key, x.why]));
 ok(/Held/.test(why.d), "held reason " + why.d);
 ok(/NFL model not validated/.test(why.e), "nv reason " + why.e);
-ok(/Scout favours Over but the market prices it higher/.test(why.f), "no lean reason " + why.f);
+ok(/Grader favours Over but the market prices it higher/.test(why.f), "no lean reason " + why.f);
 ok(res.noPick.every((x) => x.row.rank === null), "no-pick rows unranked");
-// tie on edge AND Scout chance -> higher confidence wins
+// tie on edge AND Grader chance -> higher confidence wins
 const tie = [Object.assign({}, built.rows[0], {edge: 5, pLean: 0.6, conf: {score: 2}, key: "t1", player: "Z"}),
              Object.assign({}, built.rows[0], {edge: 5, pLean: 0.6, conf: {score: 4}, key: "t2", player: "Y"})];
 ok(C.rank(tie).ranked[0].key === "t2", "confidence tie-break");
@@ -67,8 +67,8 @@ ok(C.SAME_GAME === "Same game - results are related", "warning text");
 const bl = C.bookLines(A, {fc, view: {}, now: NOW});
 ok(bl.books === 2 && bl.best.over.line === 20.5 && bl.best.over.book === "prizepicks", "best Over = lowest line");
 ok(bl.best.under.line === 21.5 && bl.best.under.book === "underdog", "best Under = highest line");
-ok(bl.best.over.po === 0.62 && bl.lines[1].po === 0.58, "Scout chance at each line from the record");
-// a side not offered by a book is skipped; equal lines -> higher Scout chance
+ok(bl.best.over.po === 0.62 && bl.lines[1].po === 0.58, "Grader chance at each line from the record");
+// a side not offered by a book is skipped; equal lines -> higher Grader chance
 const A2 = mkt("a", EV1, "g1", [q("x1", "prizepicks", 19.5, "f1", null, [0, 1]), q("x2", "underdog", 20.5, "f1", null), Object.assign(q("x3", "betr", 20.5, "f3", null), {d: [1.9, 1.9]})], {});
 const bl2 = C.bookLines(A2, {fc, view: {}, now: NOW});
 ok(bl2.best.over.line === 20.5 && bl2.best.over.book === "underdog", "skip unoffered Over, tie -> higher chance: " + JSON.stringify(bl2.best.over && bl2.best.over.book));

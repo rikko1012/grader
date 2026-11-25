@@ -538,7 +538,7 @@ def test_genie_flag_off_keeps_the_evidence_guide_alone(ctx, env, monkeypatch):
     monkeypatch.delenv("SCOUT_GENIE", raising=False)
     p = cs2_board(ctx, env)
     open_genie(p)
-    assert p.locator("#u-ask").count() == 0 and "Scout evidence guide" in p.locator("#u-drawer").inner_text()
+    assert p.locator("#u-ask").count() == 0 and "Grader evidence guide" in p.locator("#u-drawer").inner_text()
     assert not p.errors
 
 

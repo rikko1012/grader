@@ -91,8 +91,8 @@ const sm = P.summary(ps);
 assert.deepStrictEqual([sm.win, sm.loss, sm.push, sm.void, sm.open, sm.decided], [2, 1, 1, 1, 2, 3]);
 assert.strictEqual(sm.hit, 2 / 3);                                                    // pushes / voids not in the rate
 assert.strictEqual(P.summary([pk(null)]).hit, null);
-assert.deepStrictEqual(P.chanceText(pk(null)), {chance: "61.2%", source: "Scout forecast · sharp-2 · fc-1"});
-assert.strictEqual(P.chanceText(pk(null, {p_side: null, forecast_id: null})).chance, "No Scout chance shown");
+assert.deepStrictEqual(P.chanceText(pk(null)), {chance: "61.2%", source: "Grader forecast · sharp-2 · fc-1"});
+assert.strictEqual(P.chanceText(pk(null, {p_side: null, forecast_id: null})).chance, "No Grader chance shown");
 assert.deepStrictEqual(P.resultText(pk("win")), {status: "Won", detail: "Final 22 vs Over 20.5"});
 assert.strictEqual(P.resultText(pk("void")).status, "Void");
 assert.strictEqual(P.resultText(pk(null)).status, "Not settled yet");

@@ -1159,7 +1159,7 @@ def test_a_scout_side_flip_at_the_same_line_is_refused_until_the_member_takes_th
     assert track(env, legs)[0] == 409
     assert get(env, "mine")[1]["record"]["picks"] == 0
     r = records(env)
-    took = [leg_of(r[("vargo", "underdog")], side="over"), legs[1]]             # the member keeps Over, knowing Scout moved
+    took = [leg_of(r[("vargo", "underdog")], side="over"), legs[1]]             # the member keeps Over, knowing Grader moved
     assert track(env, took)[0] == 200
     v = status_of(env, "vargo")
     assert v["side"] == "over" and v["scout_side"] == "under" and v["on_side"] is False and v["displayed_p"] is None

@@ -134,10 +134,10 @@ def test_landing_content_and_wording(srv):
     for sec in ('id="features"', 'id="how"', 'id="signin-error"'):
         assert sec in s
     text = _text(page)
-    for need in ("1time Scout", "CS2", "League of Legends", "NBA", "NFL", "Every player prop. One board.", "Slips built for you", "Get your slips",
+    for need in ("Prop Grader", "CS2", "League of Legends", "NBA", "NFL", "Every player prop. One board.", "Slips built for you", "Get your slips",
                  "Sign in with Whop", "Join on Whop", "Four sports, one board", "letter grade",
                  "PrizePicks", "Underdog", "Sleeper", "Dabble", "FanDuel", "BetRivers", "Kalshi", "Polymarket",
-                 "L5, L10, L20, head-to-head and season", "Why Scout leans Over or Under", "HLTV map chances",
+                 "L5, L10, L20, head-to-head and season", "Why Grader leans Over or Under", "HLTV map chances",
                  "Line history", "Price gap board", "Slip Studio", "break even", "Slips save to your account", "Ask the Genie",
                  "The record is public", "How it works", "One membership"):
         assert need in text, need

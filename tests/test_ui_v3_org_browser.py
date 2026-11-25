@@ -66,7 +66,7 @@ def test_every_destination_is_reachable_once_per_surface(browser, env, monkeypat
         p.wait_for_selector(".sc-v3-more:not([hidden])")
         keys = p.evaluate("[...document.querySelectorAll('.sc-v3-more [data-v3-more-key]')].map(e=>e.getAttribute('data-v3-more-key'))")
         heads = p.evaluate("[...document.querySelectorAll('.sc-v3-more .sc-more__h')].map(e=>e.textContent.trim())")
-        assert heads == ["Edge", "Slips", "Research", "Scout"], heads
+        assert heads == ["Edge", "Slips", "Research", "Grader"], heads
         offered = s["bar"] + keys
         assert len(offered) == len(set(offered)), ("listed twice", s["bar"], keys)
         missing = [d for d in s["dest"] if d not in offered]

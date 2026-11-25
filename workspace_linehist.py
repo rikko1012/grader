@@ -2,7 +2,7 @@
 
 Spec 4.6 (competitor teardown): one line per app over time under the existing chart, closing-line markers on the past-results
 bars, "L10 vs closing" and the average closing line. Borrowed from Upside / Outlier (line chart, closing markers); improved by
-reading only what Scout itself stored (no new data source), keeping every move and close with its time, and showing the
+reading only what Grader itself stored (no new data source), keeping every move and close with its time, and showing the
 member's own time zone in the browser.
 
 Stores it READS (never writes, never creates):
@@ -254,7 +254,7 @@ def app_series(x, now=None):
         if open_line is not None and open_line != _num(x.get("line")) and moved is not None:
             pts.append({"at": moved, "line": _num(x.get("line")), "kind": "move"})
     cur = _num(x.get("line"))
-    # Underdog's updated_at is when Underdog last changed the line (its seen_at is Scout's read time since 2026-11-05): kept as before
+    # Underdog's updated_at is when Underdog last changed the line (its seen_at is Grader's read time since 2026-11-05): kept as before
     ud = (x.get("book") or "underdog") == "underdog"
     seen = _ts((x.get("updated_at") if ud else None) or x.get("seen_at") or x.get("updated_at")) or now
     last = next((p for p in reversed(pts) if p["line"] is not None), None)

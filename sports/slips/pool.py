@@ -17,9 +17,9 @@ substituted:
     tags each such leg. A non-research forecast for the same offer is preferred when one exists.
   - the leg's team is known (the platforms' two-team rule must be checkable)
   - N4 (owner re-audit 2026-10-24, the board's lean rule): when the board snapshot has a market chance AT THIS
-    offer's line (market_at, same rule as SportsRows.marketAt), Scout's chance of the chosen side must be ABOVE the
+    offer's line (market_at, same rule as SportsRows.marketAt), Grader's chance of the chosen side must be ABOVE the
     market's chance of that side - a side the market prices higher is no lean and never a slip leg
-  - N1/N2 guards (sports/board_view.py, member policy): a Scout (sm-1 / mi-1) forecast on a market whose model failed
+  - N1/N2 guards (sports/board_view.py, member policy): a Grader (sm-1 / mi-1) forecast on a market whose model failed
     its registered gate (vg-1: NFL) is projection-only and never a leg - unless the owner released the league
     (ct-1b, sports/containment.py OWNER_RELEASE: NBA + NFL since 2026-11-08); a forecast held by the sg-1 sanity guard
     (projection under 25% / over 4x the line, or the last-10 results contradicting its side - the board's
@@ -405,7 +405,7 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
         return "zero chance", None
     mk = (market_at or {}).get(rid)
     if mk is not None and p_win - (mk[0] if side == "over" else mk[1]) <= 1e-9:
-        return "market prices Scout's side higher", None
+        return "market prices Grader's side higher", None
     leg = {"leg_id": f"{platform}|{o.offer_id}|{side}", "platform": platform, "league": o.league,
            "offer_id": o.offer_id, "record_id": rid, "forecast_id": f.forecast_id, "model_version": f.model_version,
            "grade_policy_version": f.grade_policy_version, "research_only": f.research_only,

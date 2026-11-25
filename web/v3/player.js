@@ -48,7 +48,7 @@
   }
   /* ---------------------------------------------------------------- HLTV only on the CS2 card (owner 2026-11-20, emphatic: "no BO3.gg
      data anywhere on member-page stats - HLTV only"). The CS2 line doc is rewritten before the hub reads it, so every tab the hub
-     paints (Overview / Why, Behind the grade, the Stats tab's factor table and panels, Ask) prints HLTV numbers or Scout's own
+     paints (Overview / Why, Behind the grade, the Stats tab's factor table and panels, Ask) prints HLTV numbers or Grader's own
      outputs (projection, chance, grade, stake, the model's own inputs) and leaves a BO3.gg-derived row out. The same rules, server
      side, for the Genie's answers on a v3 request: v3_hltv.py (keep the two in step). Display only: no grade, chance, stake or
      projection is read or changed here. The classic card (v3 off) never runs this file.
@@ -304,7 +304,7 @@
     var pressed = dec.querySelector('.h-side-toggle [aria-pressed="true"]');
     var ch = dec.querySelector('.h-dec-chance > b'), pick = dec.querySelector('.h-dec-pick'), stake = dec.querySelector('.h-dec-stake');
     var proj = dec.querySelector('.h-dec-proj b'), below = dec.querySelector('.h-below');
-    /* the side's word from the button's own id (its text also carries the v3 line + Scout dot) */
+    /* the side's word from the button's own id (its text also carries the v3 line + Grader dot) */
     var sid = pressed ? (pressed.getAttribute('data-id') || '') : '';
     return {side: sid === 'over' ? 'Over' : sid === 'under' ? 'Under' : pressed ? pressed.textContent.trim() : '', chance: ch ? ch.textContent.trim() : '', pick: pick ? pick.innerHTML : '',
       stake: stake ? stake.textContent.trim() : '', proj: proj ? proj.textContent.trim() : '', below: below ? below.outerHTML : ''};
@@ -361,7 +361,7 @@
       + (comp || tw ? '<span class="sc-muted">' + esc(comp) + (comp && tw ? ', ' : '') + esc(tw) + '</span>' : '')
       + (when ? '<b>' + esc(when) + '</b>' : '') + '</p>';
   }
-  /* qa 1120: the delta's arrow follows its sign, its colour follows good / poor for Scout's side (an Under pick's −0.1 is good: green,
+  /* qa 1120: the delta's arrow follows its sign, its colour follows good / poor for Grader's side (an Under pick's −0.1 is good: green,
      pointing down; it was a green up arrow beside a minus) */
   var dir = function (d) { var c = String(d || '').charAt(0); return c === MINUS ? 'v3p-dn' : c === '+' ? 'v3p-up' : ''; };
   function statRow(label, value, d, t) {
@@ -424,7 +424,7 @@
     var n = all.filter(function (g) { return hit(g.value); }).length;
     return '<span class="v3p-spark"><span class="sc-spark" aria-hidden="true" style="--ln:' + Math.round((1 - line / hi) * 100) + '%">' + bars + '</span><span class="sc-muted"><b>' + n + '/' + all.length + '</b> ' + (side === 'over' ? 'Over' : 'Under') + '</span></span>';
   }
-  /* a sports line with Scout's side but no published letter ("No grade yet"): the sub-threshold rule of the other sports, Lean Over /
+  /* a sports line with Grader's side but no published letter ("No grade yet"): the sub-threshold rule of the other sports, Lean Over /
      Lean Under with Stake 0U, in place of the hold chip (the board row reads the same) */
   /* qa 1120: the sports grade "Lean" (sub-threshold, Stake 0U) is drawn by the hub as a bare "Lean" chip; the owner's wording is
      "Lean Over" / "Lean Under", so the side word is added on screen (the letter itself is the record's, unchanged) */
@@ -444,12 +444,12 @@
     if (scout && leanOnly(r)) st = Object.assign({}, st, {pick: '<span class="h-grade-text">Lean ' + (side === 'over' ? 'Over' : 'Under') + '</span>', stake: 'Stake 0U'});
     else if (scout && bareLean(r)) st = Object.assign({}, st, {pick: st.pick.replace(/>\s*Lean\s*</, '>Lean ' + (side === 'over' ? 'Over' : 'Under') + '<')});
     var pct = parseFloat(st.chance), hasChance = isFinite(pct);
-    /* polish2: no Scout chance (player research only) = no side headline and no status chip: the prop itself leads */
+    /* polish2: no Grader chance (player research only) = no side headline and no status chip: the prop itself leads */
     var noRead = !hasChance && !(r.scout && r.scout.side);
     if (noRead) { scout = false; st = Object.assign({}, st, {pick: /Player research/.test(st.pick || '') ? '' : st.pick}); }
     var book = esc(bookAge(r.offer));
     return '<div class="sc-pick v3p-pick" aria-label="Pick summary">'
-      + '<div class="sc-pick__side">' + (scout ? '<span class="sc-scout-tag">Scout</span>' : '') + '<b>' + esc((!noRead ? st.side : (r.market.stat_label || '')) + (r.offer.line != null ? ' ' + r.offer.line : '')) + '</b><small>' + esc((r.market.stat_label || '') + ' · ' + (r.market.period_label || '')) + '</small></div>'
+      + '<div class="sc-pick__side">' + (scout ? '<span class="sc-scout-tag">Grader</span>' : '') + '<b>' + esc((!noRead ? st.side : (r.market.stat_label || '')) + (r.offer.line != null ? ' ' + r.offer.line : '')) + '</b><small>' + esc((r.market.stat_label || '') + ' · ' + (r.market.period_label || '')) + '</small></div>'
       + '<div class="sc-pick__chance"><b>' + esc(st.chance || '—') + '</b>' + (hasChance ? '<span class="sc-meter"><i style="width:' + Math.max(0, Math.min(100, pct)) + '%"></i></span><small>Model estimate</small>' : (st.proj && st.proj !== '—' ? '<small>Projection ' + esc(st.proj) + ' · Model estimate</small>' : '')) + '</div>'
       + '<div class="sc-pick__stake">' + (st.pick ? '<span class="v3p-pickchip">' + st.pick + '</span>' : '') + (st.stake ? '<small>' + esc(st.stake.replace(/^Stake\s*/, 'Stake ')).replace(/Stake (\S+)/, 'Stake <b>$1</b>') + '</small>' : '') + (st.below || '') + '</div>'
       + '<div class="sc-pick__foot">' + (sparkHtml(r, doc, side) || '<span></span>') + (book ? '<span class="sc-book">' + book + '</span>' : '') + '</div></div>';
@@ -476,7 +476,7 @@
       var t = per[k] || null;
       return {key: k, name: name(k), t: t, n: t ? t.maps : 0, chance: chance[k], conf: conf[k], inP: inP ? inP(k) : null, inPer: inPeriod(conf[k], r)};
     });
-    /* polish2: ONE measure on every card. With Scout's simulated veto for the prop's maps, every card reads In Maps 1-2 (a map the veto
+    /* polish2: ONE measure on every card. With Grader's simulated veto for the prop's maps, every card reads In Maps 1-2 (a map the veto
        cannot put a figure on reads In Maps 1-2 — and ranks after those with one; HLTV's map chance is not mixed into this rank); without
        a veto, every card reads HLTV's Map chance. Order: confirmed for these maps, then the measure, then maps on file. */
     var veto = !!inP;
@@ -502,7 +502,7 @@
     if (!k) return true;
     return m ? +m[1] <= k : /decider/i.test(c.slot || '') ? k >= 3 : false;
   }
-  /* "In Maps 1-2": Scout's simulated veto (veto-1, doc.veto), the chance the map is played in one of the prop's map slots = the sum of
+  /* "In Maps 1-2": Grader's simulated veto (veto-1, doc.veto), the chance the map is played in one of the prop's map slots = the sum of
      its per-slot chances (a map is played at most once). A confirmed slot counts 100% for its map. Exact only: a map missing from an
      unconfirmed slot's shortlist (that slot has an "other" share) gets no figure. null = no veto for these slots. */
   function periodChance(doc, k) {
@@ -602,7 +602,7 @@
     }).join('');
     var src = ['HLTV, last 12 months, every map he played; deltas vs his all maps: Kills/map ' + fx(R.kpm(base), 1) + ', KPR ' + fx(R.kpr(base), 2)
       + ', HS% ' + pctText(R.hs(base)) + ', K/D ' + fx(R.kd(base), 2)];
-    if (pool.veto) src.push('In ' + per + ': Scout’s simulated veto, the share that puts the map in ' + per
+    if (pool.veto) src.push('In ' + per + ': Grader’s simulated veto, the share that puts the map in ' + per
       + (pool.list.some(function (m) { return m.inP == null && !m.inPer; }) ? ' (— = outside the veto’s shortlist for an open slot)' : ''));
     else if (pool.list.some(function (m) { return m.chance != null; })) src.push('map chance: HLTV simulated vetoes');
     var miss = (pool.missing || []).length ? '<p class="v3p-miss">' + esc(pool.missing.join(', ') + (pool.missing.length === 1 ? ' is confirmed for ' : ' are confirmed for ') + per + (pool.missing.length === 1 ? ' and has' : ' and have') + ' no HLTV maps of his in the last 12 months, so no combined number includes it.') + '</p>' : '';
@@ -652,7 +652,7 @@
   /* ---------------------------------------------------------------- the line panel (approved mocks 05 / 10), added inside the hub's
      own decision strip beside its nodes (nothing of the hub's is moved or removed; the hub rewrites the strip and paint() adds these
      again): the market and the big line figure before the line select, the book's freshness and line type after it, Projection /
-     Gap to line / Market chance before the Add button, and L5 / L10 / L20 on Scout's side at the end. Every number is the record's. */
+     Gap to line / Market chance before the Add button, and L5 / L10 / L20 on Grader's side at the end. Every number is the record's. */
   var LINE_TYPE = {standard: 'Standard line', goblin: 'Goblin line', demon: 'Demon line'};
   function lineHeadHtml(r) {
     if (r.offer.line == null) return '';
@@ -756,7 +756,7 @@
       bt.__v3p = want;
       bt.querySelectorAll('[data-v3p-block]').forEach(function (x) { x.remove(); });
       if (r.offer.line != null) { var ln = document.createElement('span'); ln.setAttribute('data-v3p-block', ''); ln.setAttribute('aria-hidden', 'true'); ln.className = 'v3p-sl'; ln.textContent = ' ' + r.offer.line; bt.appendChild(ln); }
-      if (r.scout && r.scout.side === sd) { var sc = document.createElement('span'); sc.setAttribute('data-v3p-block', ''); sc.className = 'v3p-scoutdot'; sc.setAttribute('aria-hidden', 'true'); sc.textContent = 'Scout'; bt.appendChild(sc); }
+      if (r.scout && r.scout.side === sd) { var sc = document.createElement('span'); sc.setAttribute('data-v3p-block', ''); sc.className = 'v3p-scoutdot'; sc.setAttribute('aria-hidden', 'true'); sc.textContent = 'Grader'; bt.appendChild(sc); }
     });
   }
 
@@ -836,7 +836,7 @@
   }
 
   /* polish2: the Overview's "Likely maps" line (the hub's, HLTV's map chance, written as "62%") says which measure it is, with one
-     decimal, and when Scout's veto covers the prop's maps it leads with the same In Maps 1-2 figures the map cards show, so the
+     decimal, and when Grader's veto covers the prop's maps it leads with the same In Maps 1-2 figures the map cards show, so the
      Overview and the cards agree. Only the wording of that one line changes; the hub's "His kills a map there" part is kept. */
   function likelyMaps(box, r, doc) {
     var body = box.querySelector('#hub-card-body');
@@ -856,7 +856,7 @@
     if (pool && pool.veto) {
       var top = pool.list.filter(function (m) { return m.inPer || m.inP != null; }).slice(0, 3)
         .map(function (m) { return esc(m.name) + ' <b>' + esc(fx(m.inPer && m.inP == null ? 100 : m.inP, 1)) + '%</b>'; });
-      if (top.length) lead = 'Likely in ' + esc(per) + ' (Scout’s simulated veto): ' + top.join(' · ') + '. ';
+      if (top.length) lead = 'Likely in ' + esc(per) + ' (Grader’s simulated veto): ' + top.join(' · ') + '. ';
     }
     var html = lead + (lead ? 'HLTV map chance for the series: ' : 'Likely maps (HLTV map chance): ') + hltv + tail;
     if (host.getAttribute('data-v3p-lm') === host.innerHTML && host.__v3pHtml === html) return;

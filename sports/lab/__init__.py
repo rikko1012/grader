@@ -1,4 +1,4 @@
-"""Scout Sports model lab (owner brief 11) - ADMIN ONLY.
+"""Prop Grader Sports model lab (owner brief 11) - ADMIN ONLY.
 
   features.py   feature registry: definition, availability time, missingness, hypothesis, training treatment,
                 validation state (no feature has a validated effect until a registered test says so)

@@ -19,10 +19,10 @@ WAGER = re.compile(r"\b(place|put|make|submit|enter|lock in|book|fire|execute|bu
                    r"for me\b|\bauto[- ]?bet\b", re.I)
 EV_ARB = re.compile(r"(?<![\w])(\+?ev|expected value|arbitrage|arb|arbs|sure bet|surebet|risk[- ]free|middle the line|"
                     r"kelly)(?![\w])", re.I)
-REFUSAL_WAGER = ("Scout's research assistant is read-only: it can't place, submit or enter bets, slips or trades. It can "
-                 "show history, current quotes and Scout forecasts for a prop.")
+REFUSAL_WAGER = ("Grader's research assistant is read-only: it can't place, submit or enter bets, slips or trades. It can "
+                 "show history, current quotes and Grader forecasts for a prop.")
 REFUSAL_EV = ("This release doesn't offer expected-value or arbitrage advice. The assistant can show history, current "
-              "quotes and Scout's stored probabilities, each with its source.")
+              "quotes and Grader's stored probabilities, each with its source.")
 _SECRET = re.compile(r"sk-ant-[A-Za-z0-9_\-]{6,}|(?i:bearer)\s+[A-Za-z0-9._\-]{12,}|(?i:x-api-key)\s*[:=]\s*\S+")
 
 

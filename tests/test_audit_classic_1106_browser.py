@@ -1,5 +1,5 @@
 """Audit 2026-11-06 (5:40-6:05 PM CST), classic group, in a real browser against a local server.Handler with fixture data (no
-network, no production writes). C1: on the classic Sports Prop board the Scout chance (mean + Over + Under, about 160 px on
+network, no production writes). C1: on the classic Sports Prop board the Grader chance (mean + Over + Under, about 160 px on
 one line) never runs out of its column into Market, and no other cell of the row runs into the next, from 390 px to wide
 desktops. AUDIT_SHOTS=<folder> keeps a screenshot of the board's first rows at every width tested."""
 import os
@@ -47,7 +47,7 @@ def test_sports_scout_chance_never_overlaps_the_market_column(browser, env, widt
         p.wait_for_selector("tr.sw-tb-row .u-add", timeout=30000)
         p.wait_for_selector(".u-books .u-bk b", timeout=20000)
         p.wait_for_timeout(400)
-        assert p.locator("tr.sw-tb-row .sw-tb-scout .sw-p.over").count() >= 1      # the fixture has Scout chances to measure
+        assert p.locator("tr.sw-tb-row .sw-tb-scout .sw-p.over").count() >= 1      # the fixture has Grader chances to measure
         if SHOTS:
             SHOTS.mkdir(parents=True, exist_ok=True)
             p.locator("tr.sw-tb-row").first.scroll_into_view_if_needed()

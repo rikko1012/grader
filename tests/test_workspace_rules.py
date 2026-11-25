@@ -89,20 +89,20 @@ def test_every_rule_row_has_a_source_or_says_why():
             r = v[p]
             assert r["read_at"] == R.READ_AT and r["status"] in ("published", "not_published", "scout") and r["text"]
             if r["status"] == "not_published":
-                assert "Scout does not offer" in r["text"], k
+                assert "Grader does not offer" in r["text"], k
             if r["status"] == "published":
                 assert r["source"], (k, p)                  # "published" means a page says so, and the row names the page
             if r["status"] == "scout":
-                assert r["source"] is None and "Scout" in r["text"], (k, p)
+                assert r["source"] is None and "Grader" in r["text"], (k, p)
 
 
 def test_rows_say_no_more_than_their_page():
-    """The PrizePicks page: "unless Stacks are available", and "for the most part" on combinations. Scout's own reading is a note."""
+    """The PrizePicks page: "unless Stacks are available", and "for the most part" on combinations. Grader's own reading is a note."""
     same = R.TABLE["same_player"]["prizepicks"]
     assert "unless Stacks are available" in same["text"] and "carry no Stacks" in same["note"]
     assert "for the most part" in R.TABLE["mixed_sports"]["prizepicks"]["text"].lower()
     assert R.TABLE["goblins_demons"]["underdog"]["status"] == "scout" and R.TABLE["two_platforms"]["prizepicks"]["status"] == "scout"
-    gob = R.TABLE["goblins_demons"]["prizepicks"]                  # the PrizePicks fact stays; Scout's own builder rule is a note
+    gob = R.TABLE["goblins_demons"]["prizepicks"]                  # the PrizePicks fact stays; Grader's own builder rule is a note
     assert gob["text"] == "Allowed in any number" and "leaves goblins out unless you allow them" in gob["note"]
 
 

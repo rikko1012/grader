@@ -201,7 +201,7 @@ def _idx(seeded):
 def test_numbers_not_in_tool_results_are_removed(seeded):
     idx = _idx(seeded)
     fc = next(i for i in idx.ids if i.startswith("fc-"))
-    text = (f"Scout gives the Over 61.3% [ref:{fc}] with a projection of 22.4 points. He averaged 21.67 over 6 games "
+    text = (f"Grader gives the Over 61.3% [ref:{fc}] with a projection of 22.4 points. He averaged 21.67 over 6 games "
             f"in his last 10 days and scored 41 once. The line moved 3.5 points. L10 and 3-pointers are words.")
     out, flags, used = grounding.check(text, idx)
     assert "61.3%" in out and "22.4" in out and "21.67" in out and " 6 games" in out and "last 10 days" in out

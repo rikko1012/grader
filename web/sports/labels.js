@@ -1,4 +1,4 @@
-/* Scout Sports - member wording for raw codes (uifix). One place maps every status / reason enum the snapshots and the
+/* Prop Grader Sports - member wording for raw codes (uifix). One place maps every status / reason enum the snapshots and the
    slip pool send to bettor language, so no page shows "game in_progress" or "not gradable: scope ...".
    Also: injury text ("Out · Shoulder"), season labels ("2026-27"), league search placeholders.
    Pure functions; node-tested (sports/tests/ui_uifix_test.js). Loaded by /sports and Slip Studio before their apps. */
@@ -13,20 +13,20 @@
   // Slip pool exclusions (sports/slips/pool.py _evaluate; counted by the text before ":")
   var SLIP_REASON = {
     "not a pick'em platform": "Not a pick'em app",
-    "not gradable": "Scout can't settle this prop (combo, alternate or unsupported line)",
+    "not gradable": "Grader can't settle this prop (combo, alternate or unsupported line)",
     "start unknown": "Start time not published",
     "started / locked": "Game started - locked",
     "price not fresh": "Line not re-confirmed in the last 25 min",
     "research forecast only": "Research estimate only",
-    "no forecast for this exact line": "No Scout projection for this exact line yet",
+    "no forecast for this exact line": "No Grader projection for this exact line yet",
     "forecast is for another line": "Line moved since the projection",
-    "no side chosen": "No side from the Scout projection",
-    "chosen side not offered": "Scout's side isn't offered on this line",
+    "no side chosen": "No side from the Grader projection",
+    "chosen side not offered": "Grader's side isn't offered on this line",
     "no grade": "No grade yet",
     "held stake (0U)": "Held: stake 0 under the grade rules",
     "team unknown": "Team not confirmed (two-team rule can't be checked)",
-    "zero chance": "Scout gives this side no chance",
-    "market prices Scout's side higher": "No lean: the market prices Scout's side higher"
+    "zero chance": "Grader gives this side no chance",
+    "market prices Grader's side higher": "No lean: the market prices Grader's side higher"
   };
   // stat labels: the canonical market keys (= sports/markets.py MARKETS labels, test_ui_uifix checks they match) plus
   // the books' raw stat names that reach member pages (Underdog "three_points_made", ...). Never show a raw key.
@@ -206,7 +206,7 @@
     });
     return out;
   }
-  // the side Scout favoured and its chance: {side: "over"|"under", label: "Over", p}
+  // the side Grader favoured and its chance: {side: "over"|"under", label: "Over", p}
   function scoutSide(r) {
     if (!r || r.p_over === null || r.p_over === undefined || r.p_under === null || r.p_under === undefined) return null;
     var over = r.p_over >= r.p_under;
@@ -235,8 +235,8 @@
 
   // rg-1 research grade (owner 2026-10-25): the letter is computed server-side (sports/board_view.research_grade, the
   // sports-gp-1 band of the unrounded lean-side chance); pages only render it. "Lean" keeps the "Lean Over/Under" words.
-  var GRADE_TAG = "Scout grade";                 // ct-1b (owner 2026-11-08): released letters carry no research / not validated text
-  var GRADE_BANDS = "A: Scout chance 60% or more · B: 55.59% or more · C: 53.45% or more · Lean: above 50%";
+  var GRADE_TAG = "Grader grade";                 // ct-1b (owner 2026-11-08): released letters carry no research / not validated text
+  var GRADE_BANDS = "A: Grader chance 60% or more · B: 55.59% or more · C: 53.45% or more · Lean: above 50%";
   function gradeWords(g, side) {
     if (!g) return "";
     var s = side === "over" ? "Over" : side === "under" ? "Under" : "";

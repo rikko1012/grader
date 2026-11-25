@@ -149,7 +149,7 @@ def _evaluate(rid, o, platform, events, seen, fby, now, now_s, policy, market_at
         return "zero chance", None
     mk = (market_at or {}).get(rid)
     if mk is not None and p_win - (mk[0] if side == "over" else mk[1]) <= 1e-9:
-        return "market prices Scout's side higher", None
+        return "market prices Grader's side higher", None
     leg = {"leg_id": f"{platform}|{o.offer_id}|{side}", "platform": platform, "league": o.league,
            "offer_id": o.offer_id, "record_id": rid, "forecast_id": f.forecast_id, "model_version": f.model_version,
            "grade_policy_version": f.grade_policy_version, "research_only": f.research_only,

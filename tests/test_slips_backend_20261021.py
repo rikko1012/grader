@@ -90,7 +90,7 @@ def test_copy_text_uses_the_1time_name_and_no_internal_ids():
     t = sb.copy_text(res["slips"][2][0])
     head = t.splitlines()[0]
     assert head == "Underdog - 2-pick entry - standard lines - 1Time grader"
-    assert "CS2 Scout" not in t and "studio-" not in t and "preview/s" not in t and "slip " not in head
+    assert "Prop Grader" not in t and "studio-" not in t and "preview/s" not in t and "slip " not in head
 
 
 # ------------------------------------------------------------------ U7: build around pinned picks (builder)

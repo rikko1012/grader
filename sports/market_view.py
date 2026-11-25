@@ -4,7 +4,7 @@ consensus by the mc-1 RULE - built in the WORKER (sports/snapshots.py), never in
 Owner decision 2026-10-23: every book we hold is a PRIMARY market source. The board's headline "Market (N books)" is
 therefore the mc-1 combination rule (sports/model/market.py, frozen 2026-10-23) applied to every VERIFIED source on the
 row: Kalshi, Polymarket, each Odds API book (oddsapi:<book>) and the books' own feeds (fanduel, betrivers).
-  - DISPLAY FRESHNESS = OBSERVED AGE: a quote counts when Scout re-read it and found it unchanged within 15 min,
+  - DISPLAY FRESHNESS = OBSERVED AGE: a quote counts when Grader re-read it and found it unchanged within 15 min,
     whatever the book's own last-change time (BetRivers' changedDate on a steady price can be hours old). This is the
     only difference from the registered mc-1 forecasts, which keep the source-time age; source time still orders
     revisions and detects late answers (LINE_CORRECTNESS.md).
@@ -61,7 +61,7 @@ def source_status(platform):
     if not meta["verified"]:
         return False, "capture-only: prop format not verified"
     if meta.get("display_only"):
-        return False, "AU reference prices; excluded from Scout's consensus"
+        return False, "AU reference prices; excluded from Grader's consensus"
     return True, None
 
 

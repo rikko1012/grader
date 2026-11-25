@@ -1,4 +1,4 @@
-"""Owner audit 2026-10-24 bugs 5 / 7 / 9 + slate game lines: one Scout-chance definition on every surface, hidden
+"""Owner audit 2026-10-24 bugs 5 / 7 / 9 + slate game lines: one Grader-chance definition on every surface, hidden
 markets with reasons, started / locked games, freshness from our own observation time, spread / total / moneyline."""
 import json
 from datetime import datetime, timezone
@@ -38,7 +38,7 @@ def test_one_scout_chance_definition_on_slate_board_and_game_page(tmp_path):
     sc = ev["coverage"]["scout_chances"]
     rows = [m for m in board["markets"] + more["markets"] if m["e"] == "nba:espn:1"]
     assert sc["markets"] == sum(1 for m in rows if m["sc"]) == 1                  # the game page counts the same rows
-    assert sc["quotes"] == sum(1 for m in rows for q in m["q"] if q.get("sc")) == 1   # sharp-2 is not a Scout chance
+    assert sc["quotes"] == sum(1 for m in rows for q in m["q"] if q.get("sc")) == 1   # sharp-2 is not a Grader chance
     assert ev["coverage"]["forecasts"] == 2                                       # (the old count, kept for history)
     assert man["scout_chance"]["markets"] == 1 and man["scout_chance"]["definition"] == scout_chance.DEFINITION
     assert sc["hidden"] == {"total": 2, "reasons": {"alternate lines only": 1, "Kalshi prices only": 1}}

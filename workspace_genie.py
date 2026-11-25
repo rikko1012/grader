@@ -159,22 +159,22 @@ def _verdict(rec, side):
     if not sd:
         return "No lean"
     if s.get("side") and sd != s.get("side"):
-        return f"Scout side is {_cap(s['side'])}"
+        return f"Grader side is {_cap(s['side'])}"
     if s.get("hold"):
         return f"Research estimate {_cap(sd)}"
     if s.get("line_chance"):                     # another book's line, read from the saved distribution: no letter
-        return f"Scout's chance at this line: {_cap(sd)}"
+        return f"Grader's chance at this line: {_cap(sd)}"
     if s.get("grade"):
         return f"{s['grade']} {_cap(sd)}" + (" · Research grade" if rec.get("sport") in ("nba", "nfl") else "")
     return f"Lean {_cap(sd)}"
 
 
 def _read(rec, side, where=""):
-    """One sentence naming Scout's read. Asked about the other side: Scout's own side, said plainly."""
+    """One sentence naming Grader's read. Asked about the other side: Grader's own side, said plainly."""
     s = rec.get("scout") or {}
     if s.get("side") and side and side != s.get("side"):
-        return f"Scout's side{where} is {_cap(s['side'])}, not {_cap(side)}."
-    return f"Scout's read{where} is {_verdict(rec, side)}."
+        return f"Grader's side{where} is {_cap(s['side'])}, not {_cap(side)}."
+    return f"Grader's read{where} is {_verdict(rec, side)}."
 
 
 def _chance(rec, side):
@@ -316,10 +316,10 @@ def _say(topic, doc, side, q):
 
 # SCOUT_GENIE_PERSONA (default off): a light genie voice around the same checked sentences. Persona lines carry no numbers, so
 # the number check, the payload-only rule and the daily cap are exactly as before; the answer sentences are unchanged.
-PERSONA_INTRO = "🧞 Ask the Genie. I grant answers from this line's saved Scout data only, never a made-up stat."
+PERSONA_INTRO = "🧞 Ask the Genie. I grant answers from this line's saved Grader data only, never a made-up stat."
 PERSONA_HELP = ("🧞 That wish is outside my lamp. I answer from this line's saved data only: the projection, the saved chance, "
                 "the grade, recent results, head-to-head, other books, market prices, a line move, saved stats or the start time.")
-PERSONA_OPEN = {"pick": "🧞 Your wish: Scout's read on this line.", "projection": "🧞 The lamp shows the saved projection.",
+PERSONA_OPEN = {"pick": "🧞 Your wish: Grader's read on this line.", "projection": "🧞 The lamp shows the saved projection.",
                 "chance": "🧞 Here is the saved chance, straight from the record.", "grade": "🧞 The grade, and why it was set.",
                 "history": "🧞 I looked back through the saved results.", "h2h": "🧞 The head-to-head, from the saved meetings.",
                 "books": "🧞 I checked the other books for you.", "market": "🧞 The market prices on file.",

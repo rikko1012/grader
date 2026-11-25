@@ -1,4 +1,4 @@
-/* Scout presentation system. Deliberately independent of forecasts and policy. */
+/* Grader presentation system. Deliberately independent of forecasts and policy. */
 :root,body.sw{
  --bg:#080808;--panel:#101010;--panel-2:#171717;--panel-3:#202020;
  --line:#292929;--line-2:#454545;--text:#f2f1eb;--muted:#b4b3aa;--faint:#96968e;

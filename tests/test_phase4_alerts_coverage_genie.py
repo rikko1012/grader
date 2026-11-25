@@ -86,7 +86,7 @@ def test_preview_is_read_only_and_matches_what_tick_sends(tmp_path, monkeypatch)
 def test_preview_without_a_database_or_flag_still_shows_an_example(tmp_path, monkeypatch):
     monkeypatch.delenv('SCOUT_BACKGROUND_ALERTS', raising=False)
     p = a.preview(tmp_path, lambda m: {}, [row('1')], base='https://scout.test')
-    assert p['configured'] is False and p['subscribers'] == 0 and p['example']['title'].startswith('Scout · ')
+    assert p['configured'] is False and p['subscribers'] == 0 and p['example']['title'].startswith('Prop Grader · ')
     assert not (tmp_path / 'workspace_alerts.db').exists()
 
 

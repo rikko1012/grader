@@ -160,7 +160,7 @@ def test_draftkings_in_main_board_selector(browser, env, monkeypatch, width):
         p.locator('tr[data-record]').first.wait_for()
         assert 'Karl Anders' in p.locator('tr[data-record]').first.inner_text()
         assert '-117 / +105' in p.locator('tr[data-record]').first.inner_text()
-        # owner 2026-11-13: Scout's saved read at the exact same line sits in the shared Scout cell (here both chances: no side at this
+        # owner 2026-11-13: Grader's saved read at the exact same line sits in the shared Grader cell (here both chances: no side at this
         # line); the reported prices stay in the Line cell. A line with no saved read keeps the "side not supplied" small caps.
         first = p.locator('tr[data-record]').first
         assert 'side not supplied' in first.text_content().lower() or ('Over' in first.locator('.h-c-scout').inner_text() and 'Under' in first.locator('.h-c-scout').inner_text())

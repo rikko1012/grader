@@ -105,7 +105,7 @@ def test_v3_nav_presses_the_hubs_own_buttons_and_mirrors_its_state(browser, env,
         assert p.url.split("#", 1)[1] in ("/picks", "scout/picks")                   # the hub's own route, as its own nav sets it
         if p.locator(f"{bar} [data-v3-nav=record]").is_visible():
             p.locator(f"{bar} [data-v3-nav=record]").click()
-        else:                                                      # phone with an edge tool: Record sits in More's Scout group
+        else:                                                      # phone with an edge tool: Record sits in More's Grader group
             p.locator(".sc-v3-tabs [data-v3=more]").click()
             p.locator(".sc-v3-more [data-v3-more-key=record]").click()
         p.wait_for_selector("#hub-record-section:not([hidden])")

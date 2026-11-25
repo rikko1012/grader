@@ -397,7 +397,7 @@ def open_patched(browser, env, monkeypatch, size, theme="dark", patch=None):
 def test_qa_card_rows_give_the_market_the_room_and_hits_stay_whole(browser, env, monkeypatch, size):
     c, p = open_board(browser, env, monkeypatch, "/#all-sports", size, "dark")
     try:
-        # line 2: Scout's letter + stake take only the right-hand tracks; the market is not squeezed beside an empty 1fr track
+        # line 2: Grader's letter + stake take only the right-hand tracks; the market is not squeezed beside an empty 1fr track
         areas = p.evaluate("getComputedStyle(document.querySelector('#hub-rows>tr[data-record]')).gridTemplateAreas")
         assert '"ln mk pj pj pj gr gr gr"' in areas, areas
         gaps = p.evaluate("""[...document.querySelectorAll('#hub-rows>tr[data-record]')].slice(0, 10).map(tr => {

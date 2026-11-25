@@ -8,12 +8,12 @@ consensus and out of the member view. All math is gradecore.market_tools / grade
 
 +EV feed. EV = p_cal x decimal_odds - 1, push-adjusted (gradecore.market_tools.ev_push_adjusted); never a probability gap.
   p_cal, in this order:
-    1. Scout's chance, only where gradecore containment's state FILE releases that sport and stat (calibration checked).
+    1. Grader's chance, only where gradecore containment's state FILE releases that sport and stat (calibration checked).
        An owner env switch is not a calibration check and does not count;
     2. otherwise the no-vig consensus of the OTHER sportsbooks at the identical line: each book's worst case over the four
        devig methods (gradecore.devig.worst_case), averaged over at least two books whose own two-sided market is fresh and
        not wide. The priced book never prices itself; prediction markets and pick'em multipliers never enter the consensus.
-  A whole-number line needs a push chance: priced only with a released Scout chance (which carries p_push), otherwise left out.
+  A whole-number line needs a push chance: priced only with a released Grader chance (which carries p_push), otherwise left out.
   Market-width check: every row carries its own book's overround and width in cents; a wide market is flagged.
 Arbitrage sheet. Best Over and best Under from two different books at the identical line.
   stake share A = impA / (impA + impB); margin % = (1 / (impA + impB) - 1) x 100 (gradecore.market_tools.arb_two_way).
@@ -21,7 +21,7 @@ Arbitrage sheet. Best Over and best Under from two different books at the identi
   pick'em pick (not a standalone bet) is flagged and the pair is left out of the sheet; flagged pairs are listed with reasons.
 
 Member view (owner 2026-11-05, "Price check"): every row also carries plain context the page shows as is - the chance the price
-needs to break even ((1 - push chance) / odds, so a whole-number line priced with Scout's chance never reads "fair below needed"
+needs to break even ((1 - push chance) / odds, so a whole-number line priced with Grader's chance never reads "fair below needed"
 next to a positive result), the American price, the average result per $100, each leg's stake per $100 and the either-way return
 per $100. Members see sportsbook and prediction-market (Kalshi, Polymarket) price rows, as before; pick'em multiplier rows,
 flagged pairs (stale / prediction-market / pick'em legs), exclusion counts and the formulas stay in the owner's view. Exclusions are also counted per line (excluded_lines), so they never exceed
@@ -221,7 +221,7 @@ def _row_base(g, sport):
 
 
 def _released_p(g, sport, side):
-    """Scout's saved unconditional chance and push chance at this exact line, when containment's file releases it."""
+    """Grader's saved unconditional chance and push chance at this exact line, when containment's file releases it."""
     for r in g["recs"]:
         if r["offer"].get("line") != g["line"]:
             continue
@@ -351,8 +351,8 @@ def sheet(srv, sport, now):
                 if rel:
                     possible["ev"] = True
                     p, pp, mv = rel
-                    p_source, books, cwidth = f"Scout calibrated chance ({mv})", [], None
-                    chance_from = "Scout"
+                    p_source, books, cwidth = f"Grader calibrated chance ({mv})", [], None
+                    chance_from = "Grader"
                 else:
                     if whole:
                         ex("Whole-number line: push chance not priced"); continue
@@ -460,7 +460,7 @@ PAIR_RULES = "Both sides under 100% but the two books settle a sit-out different
 PAIR_ONE_FEED = "Both sides under 100% but both prices come from one feed: not a pair"
 
 METHOD = {"ev": "EV = p_cal x decimal odds - 1, push-adjusted (a push returns the stake)",
-          "p_cal": "Scout's chance only where calibration has released the sport and stat; otherwise the no-vig consensus of at least "
+          "p_cal": "Grader's chance only where calibration has released the sport and stat; otherwise the no-vig consensus of at least "
                    "two other independent sportsbooks (two sites on one feed count once) at the same line that settle the prop the "
                    "same way (worst case of four devig methods). The priced book never prices itself.",
           "arbitrage": "stake share A = impA / (impA + impB); margin % = (1 / (impA + impB) - 1) x 100",

@@ -114,7 +114,7 @@ def test_ev_board(browser, env, ev_on, size):
         assert '6 plays hidden: 4 with fewer independent books than the minimum, 2 with only old prices.' in txt
         assert 'Underdog Standard 2-pick pays 3.5x, read from its help center on 2026-10-23.' in txt
         assert p.evaluate("document.querySelector('#ev-entry').value").startswith('standard-')
-        # Underdog standard 2: Reaves Over beats the entry against the market (shown beside Scout's chance); the toggle hides the rest
+        # Underdog standard 2: Reaves Over beats the entry against the market (shown beside Grader's chance); the toggle hides the rest
         rows = p.locator('#hub-ev-body .ev-list:not(.ev-list-model) .ev-row')
         assert rows.count() >= 1 and 'Austin Reaves' in rows.first.inner_text()
         assert not any(w in txt.lower() for w in ('research estimate', 'provisional', 'not validated', 'lock of'))

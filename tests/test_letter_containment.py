@@ -1,4 +1,4 @@
-"""lc-1: CS2 / LoL letter containment (owner, Scout upgrade prompt v2 Phase 0 item 4; absolute rule "Never force letters on").
+"""lc-1: CS2 / LoL letter containment (owner, Grader upgrade prompt v2 Phase 0 item 4; absolute rule "Never force letters on").
 
 Display only: a held market shows the chance and "Lean Over / Lean Under", no letter, 0U, one banner per sport. Every surface
 is tested with SCOUT_LETTER_CONTAINMENT on and off. The flag ships OFF until the owner confirms (coordinator 2026-11-05)."""
@@ -344,7 +344,7 @@ def test_every_member_route_applies_the_mask():
 
 
 def test_hub_scout_cell_and_card_render_a_held_row_as_lean_0u():
-    """The hub's one Scout cell and the one player card both draw the letter through gradeChip: a held row reads Lean Over /
+    """The hub's one Grader cell and the one player card both draw the letter through gradeChip: a held row reads Lean Over /
     Lean Under with 0U (no letter); the board shows one banner per held sport."""
     from pathlib import Path
     js = (Path(__file__).resolve().parent.parent / "web" / "upgrade-hub.js").read_text(encoding="utf-8")

@@ -1,5 +1,5 @@
 """card-why (owner 2026-11-06) in a real browser at 1440 and 390, real Handler + fixture data (no network):
-- every sport's player card opens with "Why Scout leans Over / Under" (or "The numbers for ..." without a side): Scout's own number
+- every sport's player card opens with "Why Grader leans Over / Under" (or "The numbers for ..." without a side): Grader's own number
   first, then the facts for the side, "What could go wrong" (definite facts only) and "Also good to know"; the rest of the card
   (hit tiles, chart, H2H, Lines, Stats, Ask) is still there, after it. Dots (used / not used in the grade) only where a grade exists.
   The phone strip layout is phone-hit-chips' (tests/test_phone_hit_chips_browser.py); card-and-chips 2026-11-06 dropped the second one.
@@ -66,16 +66,16 @@ def test_every_sport_card_opens_with_why_scout_leans(ctx, env, sp, size):
     open_first_card(p)
     w = why(p)
     assert w['first'], w['after']                                    # the reason comes first on the card
-    assert w['title'].startswith(('Why Scout leans Over', 'Why Scout leans Under', 'The numbers for')), w['title']
+    assert w['title'].startswith(('Why Grader leans Over', 'Why Grader leans Under', 'The numbers for')), w['title']
     assert 1 <= len(w['why']) <= 9 and len(w['risk']) <= 4 and len(w['also']) <= 4, w
-    assert 'Scout projects' in w['why'][0]['text'] or 'Scout gives' in w['why'][0]['text'], w['why'][0]
+    assert 'Grader projects' in w['why'][0]['text'] or 'Grader gives' in w['why'][0]['text'], w['why'][0]
     facts = w['why'] + w['risk'] + w['also']
     if w['key']:                                                     # a grade exists: every fact says whether it feeds it
         assert all(x['dot'] for x in facts) and w['why'][0]['used']
         assert 'Used in the grade' in w['key'] and 'Not used in the grade' in w['key']
     else:                                                            # no grade (NBA / NFL held letters): no "used in the grade" dot at all
         assert not any(x['dot'] for x in facts), facts
-    assert all(not x['used'] for x in facts if not x['text'].startswith(('Scout projects', 'Scout gives', 'His base rate', 'Likely maps')) and 'kills a game than' not in x['text'] and 'win chance moves' not in x['text'])
+    assert all(not x['used'] for x in facts if not x['text'].startswith(('Grader projects', 'Grader gives', 'His base rate', 'Likely maps')) and 'kills a game than' not in x['text'] and 'win chance moves' not in x['text'])
     text = ' '.join(x['text'] for x in facts).lower()
     for word in ('unconfirmed', 'uncertain', 'questionable', 'day_to_day', 'nan', 'undefined', 'null'):
         assert word not in text.split() and word not in text.replace('.', ' ').split(), (word, text)

@@ -2,7 +2,7 @@
 
     SPORTS_UI_BROWSER_URL=http://localhost:8040 python -m pytest sports/tests/test_ui_table_browser.py -q
 
-Sort (headers + phone select, nulls last), lean never contradicts the shown Scout chances / projection, edge = Scout
+Sort (headers + phone select, nulls last), lean never contradicts the shown Grader chances / projection, edge = Grader
 minus market of the lean side, L10 counts = the player's history API, one group per player with expandable stats,
 details toggle, the Cards toggle saved per device, 360 px without page overflow."""
 import json

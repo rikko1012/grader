@@ -79,10 +79,10 @@ def test_book_toggle_flag_on_shows_view_only_sleeper_lines(browser, env, sleeper
         assert 'view only' in p.locator('#hub-health').inner_text().lower()
         b.locator('.h-player').click()
         p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
-        # card-and-chips 2026-11-06 (no status labels): no saved chance = an empty Scout cell and no "Scout's read" row, no sentence
+        # card-and-chips 2026-11-06 (no status labels): no saved chance = an empty Grader cell and no "Grader's read" row, no sentence
         assert b.locator('td.h-c-scout').inner_text().strip() == '' and 'saved chance' not in b.inner_text()
         detail = p.locator('#hub-detail').inner_text()
-        assert '1.80x pick multiplier' in detail and 'No saved chance' not in detail and "Scout's read" not in p.locator('#hub-detail .h-extra-detail').inner_text()
+        assert '1.80x pick multiplier' in detail and 'No saved chance' not in detail and "Grader's read" not in p.locator('#hub-detail .h-extra-detail').inner_text()
         no_h_scroll(p)
         shot(p, 'board_sleeper', size)
         p.locator('#hub-detail [data-hub="card-close"]').click()
@@ -234,7 +234,7 @@ def test_book_toggle_shows_dabble_beside_sleeper_with_its_price(ctx, env, sleepe
     p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-extra-detail')
     detail = p.locator('#hub-detail').inner_text()
     assert 'Dabble price 2.05' in detail and 'not what an entry pays' in detail and '2.05 decimal' not in detail
-    assert 'No saved chance' not in detail and "Scout's read" not in p.locator('#hub-detail .h-extra-detail').inner_text()
+    assert 'No saved chance' not in detail and "Grader's read" not in p.locator('#hub-detail .h-extra-detail').inner_text()
     no_h_scroll(p)
     assert not p.errors
 

@@ -19,7 +19,7 @@
   async function api(path) {
     if (!token) {
       const r = await fetch('/api/sports/token', {credentials: 'same-origin', signal: AbortSignal.timeout(15000)});
-      if (!r.ok) throw new Error(r.status === 401 ? 'Sign in to Scout to view these boards.' : 'Sports access is unavailable.');
+      if (!r.ok) throw new Error(r.status === 401 ? 'Sign in to Prop Grader to view these boards.' : 'Sports access is unavailable.');
       const a = await r.json(); token = a.token; base = a.api_base || '';
     }
     const r = await fetch(base + path, {headers: {Authorization: `Bearer ${token}`}, signal: AbortSignal.timeout(15000)});
@@ -143,7 +143,7 @@
             el('strong',`${o.american>0?'+':''}${o.american}`));detail.append(row);
         }
         detail.append(el('p',`${names[m.platform]} · checked ${Math.max(0,Math.floor((Date.now()-Date.parse(m.observed_at))/60000))} min ago`,'meta'),
-          el('p','Book prices, not Scout predictions. Book-specific settlement rules apply.','meta'));
+          el('p','Book prices, not Grader predictions. Book-specific settlement rules apply.','meta'));
       }
       select.addEventListener('change',show);show();quote.append(select,detail);article.append(intro,quote);box.append(article);
     }

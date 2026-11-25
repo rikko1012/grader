@@ -8,7 +8,7 @@ Provider (subclass):
     events(lg)           -> FetchResult(events=[Event], requests, credits...)  upcoming games, pre-game only
     props(lg, event)     -> FetchResult(offers=[offer dict], requests, credits...)  one game's player props
 A provider never writes storage and never decides schedules; the worker does both. Replacing a provider = a new
-subclass registered in PROVIDERS; Scout reads storage and does not change.
+subclass registered in PROVIDERS; Grader reads storage and does not change.
 
 Offer (one priced side of one market at one line - never a two-sided pair):
     provider, book, jurisdiction, league, provider_event_id, event_name, home, away, start,

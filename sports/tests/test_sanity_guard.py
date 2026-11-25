@@ -1,4 +1,4 @@
-"""Owner re-audit 2026-10-24 N1/N2 containment: vg-1 gate (a market whose Scout model failed its registered gate is
+"""Owner re-audit 2026-10-24 N1/N2 containment: vg-1 gate (a market whose Grader model failed its registered gate is
 projection-only) + sg-1 sanity guard (projection vs line ratio, L10 contradiction), applied on the board snapshot, the
 sheets, the slip pool and in the shared row (web/sports/table.js propRow)."""
 import json
@@ -73,7 +73,7 @@ def test_guard_row_gate_and_sanity_and_log(monkeypatch):
     monkeypatch.setattr(board_view, "VG_CONTAIN_LEAN", True)       # the contained path (one flag turns it back on)
     fcs = {"f1": _fc("f1", 0.0, 1.0, 0.1), "f2": _fc("f2", 0.3, 0.7, 20.0, line=24.5),
            "m1": _fc("m1", 0.4, 0.6, None, model="mc-1")}
-    # NFL: every Scout view is gate-held, nothing is sanity-logged; a market-only forecast is untouched
+    # NFL: every Grader view is gate-held, nothing is sanity-logged; a market-only forecast is untouched
     row = _row("rec_yds", "nfl:espn:9", [{"platform": "underdog", "record_id": "r1", "line": 11.5, "forecast_id": "f1"},
                                          {"platform": "fanduel", "record_id": "r2", "line": 11.5, "forecast_id": "m1"}])
     assert snapshots.guard_row("nfl", row, fcs, None, "T") == []
@@ -179,7 +179,7 @@ def test_cf2_single_source_and_large_gap_caps_and_sort_penalty():
 
 
 def test_n4_lean_only_with_a_positive_edge_for_that_side():
-    # Barnes 3PM 0.5: Scout Over 56% but the market prices Over at 66% -> no lean (was 'lean Over, edge -10.3')
+    # Barnes 3PM 0.5: Grader Over 56% but the market prices Over at 66% -> no lean (was 'lean Over, edge -10.3')
     x = board_view.signal(0.56, 0.44, 0.9, 0.5, {"po": 0.663, "pu": 0.337, "n": 3}, L10)
     assert x["ln"] is None and x["c"] == 1 and "e" not in x
     assert board_view.signal(0.56, 0.44, 0.9, 0.5, None, L10)["ln"] == "over"     # no market: chance + mean rule
@@ -236,7 +236,7 @@ def test_same_line_books_share_the_market_forecast():
                       {"platform": "draftkings", "line": 4.5, "forecast_id": None}]}
     assert snapshots.same_line_forecasts(row, fcs) == 1
     fd = row["quotes"][2]
-    assert fd["forecast_id"] == "ud" and fd["fc_via"] == "same_line"          # newest Scout forecast at 3.5
+    assert fd["forecast_id"] == "ud" and fd["fc_via"] == "same_line"          # newest Grader forecast at 3.5
     assert row["quotes"][4]["forecast_id"] is None                            # a market-only forecast is not shared
 
 
@@ -298,8 +298,8 @@ const h = R.h2hHtml({method: "m", rows: [{scout: "sm-1", market: "mc-1", stat: "
   scout_brier: 0.262, market_brier: 0.251, scout_log_loss: 0.71, market_log_loss: 0.69, scout_hit_rate: 0.5,
   market_hit_rate: 0.55, diff: {brier: 0.011, brier_ci95: [-0.01, 0.03], log_loss: 0.02, log_loss_ci95: null,
   hit_rate: -0.05, hit_rate_ci95: [-0.2, 0.1]}}]});
-for (const t of ["Scout vs market on the same props", "Market consensus (mc-1)", "All stats", "0.262", "+0.011",
-                 "(95%: −0.010 to +0.030)", "−5.0%", "Brier score: Scout"]) if (h.indexOf(t) < 0) throw new Error("missing " + t);
+for (const t of ["Grader vs market on the same props", "Market consensus (mc-1)", "All stats", "0.262", "+0.011",
+                 "(95%: −0.010 to +0.030)", "−5.0%", "Brier score: Grader"]) if (h.indexOf(t) < 0) throw new Error("missing " + t);
 if (R.h2hHtml({rows: []}).indexOf("No prop has settled") < 0) throw new Error("empty state");
 if (R.modelName("mkt-oddsapi:fanduel") !== "FanDuel market") throw new Error("model name");
 console.log("ok");

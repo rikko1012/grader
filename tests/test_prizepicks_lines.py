@@ -85,7 +85,7 @@ def test_feed_states(monkeypatch):
     _feed(monkeypatch, up, {"ok": False, "checked_at": now - 60, "last_ok": now - 1800, "error": "403"})
     assert pp.board(now)["state"] == "failed"                                                 # the scraper's read failed
     _feed(monkeypatch, up, {"ok": True, "checked_at": now - 60, "last_ok": now - 60}, error="OperationalError: down")
-    assert pp.board(now)["state"] == "failed"                                                 # Scout's read failed
+    assert pp.board(now)["state"] == "failed"                                                 # Grader's read failed
     _feed(monkeypatch, [], {"ok": True, "checked_at": now - 60, "last_ok": now - 60, "lines": 0})
     assert pp.board(now)["state"] == "empty"                                                  # empty is not failed
     pp._S.update(at=0.0, tried=0.0, rows=[], status={}, error=None, busy=False)

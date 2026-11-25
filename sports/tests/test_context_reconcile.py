@@ -1,6 +1,6 @@
 """SPORTS_CONTEXT_RECONCILE (remaining brief 13): same-game injury report reconciliation with source and forecast
 timestamps. Flag off = the snapshot files of before (no new key anywhere); flag on = player files and slate games carry
-`context_check`, which compares the injury report Scout held at each forecast's forecast_at with the report it holds
+`context_check`, which compares the injury report Grader held at each forecast's forecast_at with the report it holds
 now. Display only: forecasts, chances and the store are untouched. Every name in the fixtures is a TEST FIXTURE."""
 import json
 import shutil

@@ -1,20 +1,20 @@
-/* Scout Sports - Prop board table (board agent). Classes "sw-tb-*" under body.sw (CSS: web/sports/table.css).
-   SHARED ROW SEMANTICS (pr-1): SportsRows.propRow(m, q, ctx) is the ONE definition of a board row - lean, Scout chance,
+/* Prop Grader Sports - Prop board table (board agent). Classes "sw-tb-*" under body.sw (CSS: web/sports/table.css).
+   SHARED ROW SEMANTICS (pr-1): SportsRows.propRow(m, q, ctx) is the ONE definition of a board row - lean, Grader chance,
    market chance, edge, gap flag, L10 / L5 hit rate and confidence. Every other sheet (PrizePicks / Underdog /
    consistency sheets) calls it instead of re-implementing it. Rules (sports/UI.md "Prop board table"):
-   - Scout chance = the unconditional Over / Under / Push of a Scout-model distribution AT THIS LINE: the offer's own
+   - Grader chance = the unconditional Over / Under / Push of a Grader-model distribution AT THIS LINE: the offer's own
      forecast (kind scout / informed) or the same saved distribution read at this line (q.lr). Market-only records
-     (mc-1, sharp-*, mkt-*) are not Scout's own view: no lean, no edge.
-   - Lean = Over when Scout's P(Over) > 50% AND the projected mean is above the line (Under mirrored); otherwise
+     (mc-1, sharp-*, mkt-*) are not Grader's own view: no lean, no edge.
+   - Lean = Over when Grader's P(Over) > 50% AND the projected mean is above the line (Under mirrored); otherwise
      "No lean". Never a side the distribution or the projection does not support.
    - N4 (owner re-audit 2026-10-24): when a market chance exists at this line, the lean also needs a POSITIVE edge for
-     that side (Scout chance of the side > market chance of the side). Edge <= 0 -> "No lean" (r.noLean names the
+     that side (Grader chance of the side > market chance of the side). Edge <= 0 -> "No lean" (r.noLean names the
      side and edge it would have had); the row then has no edge, no lean confidence and sorts after the leans.
      No market chance at the line -> the distribution rule alone (edge unknown, shown "—").
    - Market chance = the market estimate (mc-1 view rule) computed AT THIS LINE for this offer (mk.at[record]) or the
      headline when it is at the same line; never a different line's number.
-   - Edge (pts) = 100 x (Scout chance of the lean side - market chance of that side at that line). A probability-point
-     gap, not expected value or return. Gap flag "Model vs market gap" when |Scout Over - market Over| >= 10 pts.
+   - Edge (pts) = 100 x (Grader chance of the lean side - market chance of that side at that line). A probability-point
+     gap, not expected value or return. Gap flag "Model vs market gap" when |Grader Over - market Over| >= 10 pts.
    - Hit rate = sports/board_view.py bv-1 (strict Over / Under, pushes separate, last 10 / 5 played games).
    - Confidence cf-1 = confidence(r) below (documented deterministic thresholds; always labelled Research).
    Pure part exported for node (sports/tests/ui_table_test.js); DOM part = window.SportsTable. */
@@ -26,8 +26,8 @@
   function nn(x) { return x !== null && x !== undefined && isFinite(x); }
   function lineKey(x) { return S.line(x); }                         // = board_view.line_key
 
-  // Scout chance at this offer's line, or null (market-only records are not Scout's view). cal-mi-1 (REGISTER A8):
-  // when the server sent the quote's calibrated chance q.ca, THAT is the Scout chance shown everywhere (raw in .raw)
+  // Grader chance at this offer's line, or null (market-only records are not Grader's view). cal-mi-1 (REGISTER A8):
+  // when the server sent the quote's calibrated chance q.ca, THAT is the Grader chance shown everywhere (raw in .raw)
   function scoutAt(q, fcmap) {
     var sc = scoutRaw(q, fcmap), ca = q && q.ca;
     if (sc && ca && nn(ca.po) && nn(ca.pu)) {
@@ -70,7 +70,7 @@
   }
   var STALE_FC_S = 24 * 3600, WIDE_REL = 1.5, THIN_N = 10;
   /* cf-1 confidence (1-5, Research until forward validation passes). Deterministic, no weights:
-     no Scout chance -> null; no lean -> 1; else 1 + one step for each threshold met:
+     no Grader chance -> null; no lean -> 1; else 1 + one step for each threshold met:
        P(lean) >= 55%, P(lean) >= 60%, edge >= +3 pts, edge >= +6 pts (edge steps need a market chance);
      then caps (lowest applies): edge < 0 -> 2; thin history (< 10 played games in L10) -> 2; stale inputs (forecast
      older than 24 h, or the line not re-confirmed within 15 min) -> 2; wide distribution (80% range wider than 1.5x
@@ -80,8 +80,8 @@
     var why = [];
     if (!r.lean) return {score: 1, why: ["No lean"], version: CONF_VERSION};
     var s = 1;
-    if (r.pLean >= 0.55) { s++; why.push("Scout chance >= 55%"); }
-    if (r.pLean >= 0.60) { s++; why.push("Scout chance >= 60%"); }
+    if (r.pLean >= 0.55) { s++; why.push("Grader chance >= 55%"); }
+    if (r.pLean >= 0.60) { s++; why.push("Grader chance >= 60%"); }
     if (nn(r.edge) && r.edge >= 3) { s++; why.push("edge >= 3 pts"); }
     if (nn(r.edge) && r.edge >= 6) { s++; why.push("edge >= 6 pts"); }
     if (!nn(r.edge)) why.push("no market chance at this line");
@@ -158,7 +158,7 @@
     r.conf = held || r.notValidated || r.oneSided ? null : X ? serverConf(X, r, now) : confidence(r, now);
     return r;
   }
-  // the one lean rule for a Scout chance + market chance pair (surfaces without a board row: slips, sheets)
+  // the one lean rule for a Grader chance + market chance pair (surfaces without a board row: slips, sheets)
   function leanWithMarket(sc, line, mkc) {
     var l = leanOf(sc, line);
     if (!l || !mkc || !nn(mkc.po) || !nn(mkc.pu)) return l;
@@ -190,7 +190,7 @@
   var SORTS = {
     // cf-2 sort key when the server sent one (single-source / > 15-pt-gap rows never above multi-source rows)
     edge: {label: "Edge", dir: -1, val: function (r) { return r.held ? null : nn(r.sortKey) ? r.sortKey : nn(r.edge) ? r.edge : null; }},
-    scout: {label: "Scout chance", dir: -1, val: function (r) { return nn(r.pLean) ? r.pLean : null; }},
+    scout: {label: "Grader chance", dir: -1, val: function (r) { return nn(r.pLean) ? r.pLean : null; }},
     l10: {label: "L10 hit rate", dir: -1, val: hitRate},
     start: {label: "Start time", dir: 1, val: function (r) { return r.start ? Date.parse(r.start) : null; }},
     player: {label: "Player", dir: 1, val: function (r) { return (r.player || "").toLowerCase(); }}
@@ -294,9 +294,9 @@
   }
   function leanBadge(r) {
     if (r.oneSided) return '<span class="sw-tb-lean none" data-onesided>' + esc(r.oneSided) + "</span>";
-    if (!r.scout) return '<span class="sw-tb-lean none">No Scout chance</span>';
+    if (!r.scout) return '<span class="sw-tb-lean none">No Grader chance</span>';
     if (r.held) return '<span class="sw-tb-lean none sw-tb-held" data-held="' + esc(r.heldCode) + '">' + esc(r.held) + "</span>";
-    if (!r.lean) return '<span class="sw-tb-lean none"' + (r.noLean ? ' data-nolean="' + r.noLean.side + '" title="Scout favours ' + (r.noLean.side === "over" ? "Over" : "Under") + " but the market prices it higher (" + edgeText(r.noLean.edge) + ' pts)"' : "") + ">No lean</span>";
+    if (!r.lean) return '<span class="sw-tb-lean none"' + (r.noLean ? ' data-nolean="' + r.noLean.side + '" title="Grader favours ' + (r.noLean.side === "over" ? "Over" : "Under") + " but the market prices it higher (" + edgeText(r.noLean.edge) + ' pts)"' : "") + ">No lean</span>";
     var Lb = root.SportsLabels;
     if (r.grade && Lb) return '<span class="sw-tb-lean ' + r.lean + '" data-lean="' + r.lean + '">' + Lb.gradeHtml(r.grade, r.lean, r.notValidated, r.gradeWhy) + "</span>" +
       (r.leanOffered === false ? '<span class="sw-tb-note">not offered here</span>' : "");
@@ -312,8 +312,8 @@
       '<td class="sw-tb-line num" data-label="Line"><b>' + S.line(r.line) + '</b> <span class="sw-tb-book">' + esc(opts.bookName(r.book)) + "</span>" +
         (r.ud ? ' <a class="sw-tb-note sw-udopen" href="' + esc(r.ud) + '" target="_blank" rel="noopener noreferrer">Open in Underdog</a>' : "") +
         (r.nBooks > 1 ? '<span class="sw-tb-note">' + r.nBooks + " books</span>" : "") + (!r.fresh ? '<span class="sw-tb-note warn">not re-confirmed</span>' : "") + "</td>" +
-      '<td class="sw-tb-leanc" data-label="Lean">' + leanBadge(r) + (r.gap ? '<span class="sw-tb-gap" title="Scout and the market differ by ' + Math.abs(r.gapPts).toFixed(1) + ' points at this line">Model vs market gap</span>' : "") + "</td>" +
-      '<td class="sw-tb-scout num" data-label="Scout">' + (sc ? '<span class="sw-tb-mu"' + (sc.via === "forecast" ? ' data-fc="' + esc(sc.fid) + '" data-fcside="mean"' : "") + ">" + (sc.mu !== null ? S.num(sc.mu, 1) : "—") + "</span> " +
+      '<td class="sw-tb-leanc" data-label="Lean">' + leanBadge(r) + (r.gap ? '<span class="sw-tb-gap" title="Grader and the market differ by ' + Math.abs(r.gapPts).toFixed(1) + ' points at this line">Model vs market gap</span>' : "") + "</td>" +
+      '<td class="sw-tb-scout num" data-label="Grader">' + (sc ? '<span class="sw-tb-mu"' + (sc.via === "forecast" ? ' data-fc="' + esc(sc.fid) + '" data-fcside="mean"' : "") + ">" + (sc.mu !== null ? S.num(sc.mu, 1) : "—") + "</span> " +
         '<span class="sw-p over">O ' + S.pct0(sc.po) + '</span> <span class="sw-p under">U ' + S.pct0(sc.pu) + "</span>" : "—") + "</td>" +
       '<td class="sw-tb-mkt num" data-label="Market">' + (mk ? '<span title="Market estimate, ' + mk.n + (mk.n === 1 ? " book" : " books") + ' at this line">' + (r.lean ? (r.lean === "over" ? "O " : "U ") + S.pct0(r.mLean) : "O " + S.pct0(mk.po)) + "</span>" :
         r.marketFallback ? '<span class="sw-tb-note warn" data-fallback="' + r.marketFallback.n + '" title="Books fallback (display only): ' + r.marketFallback.n + (r.marketFallback.n === 1 ? " book" : " books") + " priced this line but none passed the 15-minute rule" + (nn(r.marketFallback.age) ? ", oldest " + Math.round(r.marketFallback.age / 60) + " min" : "") + '. Not used for lean or edge.">O ' + S.pct0(r.marketFallback.po) + '<span class="sw-tb-note">older book prices</span></span>' : "—") + "</td>" +
@@ -345,7 +345,7 @@
     return '<div class="sw-tb-wrap">' + (eff !== st.sort ? '<p class="sw-small sw-tb-sortnote" role="status" data-sort-effective="' + eff + '">No edge on this board: sorted by start time, soonest first.</p>' : "") +
       '<table class="sw-tb" aria-label="Prop board"><caption class="sw-sr">Prop board: one row per player, other stats expand. Edge is in probability points, not expected value.</caption><thead><tr>' +
       th("player", "Player", hs, "sw-tb-player-h") + '<th scope="col">Stat</th><th scope="col" class="num">Line · book</th><th scope="col">Lean</th>' +
-      th("scout", "Scout", hs, "num") + '<th scope="col" class="num">Market</th>' + th("edge", "Edge (pts)", hs, "num") + th("l10", "L10", hs, "num") +
+      th("scout", "Grader", hs, "num") + '<th scope="col" class="num">Market</th>' + th("edge", "Edge (pts)", hs, "num") + th("l10", "L10", hs, "num") +
       '<th scope="col" class="num">L5</th><th scope="col" class="num">Conf.</th></tr></thead>' + body + "</table></div>" +
       (groups.length > shown.length ? '<p style="text-align:center"><button type="button" class="sw-btn" id="sw-tb-more">Show ' + Math.min(opts.page || 60, groups.length - shown.length) + " more players (" + (groups.length - shown.length) + " left)</button></p>" : "");
   }

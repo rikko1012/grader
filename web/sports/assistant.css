@@ -1,4 +1,4 @@
-/* Scout Sports research assistant - every rule is scoped under .sa-root (no global selectors). */
+/* Prop Grader Sports research assistant - every rule is scoped under .sa-root (no global selectors). */
 .sa-root {
   --sa-bg: #f7f8fa; --sa-panel: #ffffff; --sa-ink: #14171c; --sa-muted: #5b6370; --sa-line: #dfe3ea;
   --sa-accent: #2456d6; --sa-accent-ink: #ffffff; --sa-warn: #8a5a00; --sa-warn-bg: #fff4dc; --sa-bad: #a1251b;

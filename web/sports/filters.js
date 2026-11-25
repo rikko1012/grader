@@ -1,4 +1,4 @@
-/* Scout Sports - prop board filters (ux agent). Classes "sw-fx-*" under body.sw.
+/* Prop Grader Sports - prop board filters (ux agent). Classes "sw-fx-*" under body.sw.
    Search, quick stat buttons, a game strip, then secondary filters (book, all stats, side offered, more stats) that
    collapse on phones so players appear sooner; active-filter chips with remove + "Clear all". Filter values are the
    app's own state.filters[league] (saved on this device by app.js, key scout.sports.filters.v1); the secondary

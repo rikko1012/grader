@@ -25,11 +25,11 @@
       mark.textContent = '1T';
       link.insertBefore(mark, link.firstChild);
       link.classList.add('v3-brand');
-      /* the same 1T Scout header as every member page: "Scout" beside the mark (the page's own wordmark stays for readers) */
+      /* the same Prop Grader header as every member page: "Grader" beside the mark (the page's own wordmark stays for readers) */
       var word = document.createElement('span');
       word.className = 'v3-brand-word';
       word.setAttribute('aria-hidden', 'true');
-      word.textContent = 'Scout';
+      word.textContent = 'Grader';
       mark.after(word);
     }
     var h1 = document.querySelector('main > h1');

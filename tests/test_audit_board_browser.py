@@ -80,7 +80,7 @@ def test_sort_menu_and_headers_sort_every_sport_and_the_choice_is_remembered(ctx
     p.locator('#hub-sort-dir').click()
     lines = p.evaluate("[...document.querySelectorAll('#hub-rows tr[data-record] td.h-c-line>b')].map(b => parseFloat(b.firstChild.textContent))")
     assert lines == sorted(lines, reverse=True), lines
-    # Scout chance header
+    # Grader chance header
     p.locator('#hub-table [data-hub=sort-col][data-id=chance]').click()
     ch = p.evaluate("""[...document.querySelectorAll('#hub-rows tr[data-record] .h-direction span')].map(e => parseFloat(e.textContent))""")
     assert ch == sorted(ch, reverse=True), ch
@@ -474,7 +474,7 @@ def test_auto_build_legs_and_the_lineup_image_carry_faces(ctx, env):
             p.locator('#hub-studio-section [data-hub=share-card]').click()
     except Exception:
         pytest.fail('no download: ' + p.evaluate("[...document.querySelectorAll('.u-toast')].map(t => t.textContent).join(' | ')"))
-    assert dl.value.suggested_filename == '1Time-Scout-lineup.png'
+    assert dl.value.suggested_filename == '1Time-Grader-lineup.png'
     assert any(re.match(FACE, u) for u in asked) and any(re.match(LOGO, u) for u in asked), asked   # the image asked for each face
     assert not p.errors
 

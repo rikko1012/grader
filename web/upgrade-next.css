@@ -135,7 +135,7 @@ html[data-ui=next] #u-hub .u-lt{font:600 9px/14px var(--n-mono);letter-spacing:.
 html[data-ui=next] #u-hub .u-lt-goblin{border-color:var(--n-over-line);color:var(--n-over-t)}
 html[data-ui=next] #u-hub .u-lt-demon{border-color:var(--n-alt-line);color:var(--n-alt-t)}
 
-/* Scout: side + chance + letter, one line */
+/* Grader: side + chance + letter, one line */
 html[data-ui=next] #u-hub .h-scout{display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:2px}
 html[data-ui=next] #u-hub .h-direction{display:flex;align-items:baseline;gap:6px;padding:0;border:0;background:transparent}
 html[data-ui=next] #u-hub .h-direction b{font:600 12px/1 var(--n-font);letter-spacing:.02em;text-transform:uppercase}
@@ -475,7 +475,7 @@ html[data-ui=next] #u-hub .h-market-filters{gap:8px;padding:8px 0;border:0;backg
 html[data-ui=next] #u-hub #hub-ev-priced{margin-top:16px;border-top:1px solid var(--n-line2);padding-top:8px}
 /* Bug (triage 2026-11-12, F1): with the Edge / H2H columns on (SCOUT_BOARD_H2H, on in production: #u-hub.h-cols, #hub-table.h-has-edge)
    the base sheet's phone grids (five columns, areas "watch / edge / proj / compare") outranked the redesign's phone row grid, so on a
-   phone the line sat on top of Scout's side, names were cut to two letters and the Lines button ran off the row. The redesign's own
+   phone the line sat on top of Grader's side, names were cut to two letters and the Lines button ran off the row. The redesign's own
    grid now wins whatever columns the board carries. Layout only. */
 @media(max-width:1100px){
  html[data-ui=next] #u-hub #hub-table#hub-table>tbody>tr[data-record],html[data-ui=next] #u-hub #hub-table#hub-table>tbody>tr[data-record].h-nohits{grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"player player line" "market scout scout" "hits hits hits" "lines lines add"}
@@ -521,7 +521,7 @@ html[data-ui=next] #u-hub :is(.h-slip,#hub-studio-body) .u-leg.u-leg-below{box-s
 
 /* Bug (triage 2026-11-12, phone hit windows): with the H2H and Season windows on (live flags, #u-hub.h-cols) the row's five windows
    sat on one fixed-gap flex line that ran past the card: at 360px the Season value was cut at the screen edge, and a row with no
-   Scout side (labels "L5 O-U" ... "SZN O-U", Sleeper / Dabble lines) ran to 458px on every phone, so H2H and Season were off screen.
+   Grader side (labels "L5 O-U" ... "SZN O-U", Sleeper / Dabble lines) ran to 458px on every phone, so H2H and Season were off screen.
    The five windows now share the card's width in equal columns, label above value. Layout only. */
 @media(max-width:1100px){
  html[data-ui=next] #u-hub.h-cols #hub-table .h-strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;width:100%}
@@ -541,7 +541,7 @@ html[data-ui=next] #u-hub :is(.h-slip,#hub-studio-body) .u-leg.u-leg-below{box-s
  html[data-ui=next] #u-hub :is([data-hub=receipts],[data-hub=record-retry],[data-gb=retry],#hub-record-sport){min-height:44px}
 }
 /* Bug (triage 2026-11-12, F1): "Below break-even" sits in the Edge cell, and the redesign hides the Edge column on the phone, while a
-   card is open and at 1101-1279px, so a side under its break-even read like any other pick there. The Scout cell carries the same
+   card is open and at 1101-1279px, so a side under its break-even read like any other pick there. The Grader cell carries the same
    chip (.h-below-alt, upgrade-hub.js scoutCell); it shows exactly where the Edge cell is hidden. Display only. */
 html[data-ui=next] #u-hub #hub-table .h-below-alt{display:none}
 html[data-ui=next] #u-hub.h-card-open #hub-table .h-below-alt{display:inline-block}
@@ -549,10 +549,10 @@ html[data-ui=next] #u-hub.h-card-open #hub-table .h-below-alt{display:inline-blo
  html[data-ui=next] #u-hub #hub-table .h-below-alt{display:inline-block}
 }
 
-/* Bug (triage 2026-11-12, F4: market edge port), phone / tablet rows whose Scout cell is long (side + chance + "Research estimate" +
-   "Below break-even", NBA / NFL lines). The Scout cell took its full one-line width and the first column got what was left: By
+/* Bug (triage 2026-11-12, F4: market edge port), phone / tablet rows whose Grader cell is long (side + chance + "Research estimate" +
+   "Below break-even", NBA / NFL lines). The Grader cell took its full one-line width and the first column got what was left: By
    player, the row's "Card" button (the way to that prop's card) was 0-20px wide at 320-390px and at 768px; By prop, the stat name
-   had no column at 320-360px and was printed over the Scout side. The first column keeps 96px and the Scout cell wraps to the
+   had no column at 320-360px and was printed over the Grader side. The first column keeps 96px and the Grader cell wraps to the
    right. Layout only. */
 @media(max-width:1100px){
  html[data-ui=next] #u-hub #hub-table#hub-table>tbody>tr[data-record],html[data-ui=next] #u-hub #hub-table#hub-table>tbody>tr[data-record].h-nohits{grid-template-columns:minmax(96px,1fr) auto auto}
@@ -587,7 +587,7 @@ html[data-ui=next] #u-hub .h-card-body .h-fx>summary{padding:6px 12px}
 /* ---------- phone / tablet rows, final plan (owner iPhone report 2026-11-12: text drawn over text, controls out of their row) ----------
    One full-width row per prop, every piece in its own grid cell, nothing positioned over text; rows grow with their content.
    Row 1: player (name, then team / matchup) | stat + scope (right; chips wrap under it)
-   Row 2: line value (line type on its own small line, then app + age) | Scout side, chance, letter | + Add
+   Row 2: line value (line type on its own small line, then app + age) | Grader side, chance, letter | + Add
    Row 3: L5 / L10 / L20 / H2H / SZN
    Row 4: app name or the "+N lines" control, full width */
 @media(max-width:1100px){
@@ -658,13 +658,13 @@ html[data-ui=next] #u-hub#u-hub #hub-table#hub-table .h-c-line small .h-was{disp
  html[data-ui=next] #u-hub .h-toolbar .h-platform::-webkit-scrollbar{display:none}
  html[data-ui=next] #u-hub .h-toolbar .h-platform>button{flex:1 0 auto;min-width:44px;white-space:nowrap}
 }
-/* #24: Scout's side not offered on this app - the offered side is a secondary action (outline), never the card's main button */
+/* #24: Grader's side not offered on this app - the offered side is a secondary action (outline), never the card's main button */
 html[data-ui=next] #u-hub .h-card .h-dec-unoffered{flex-wrap:wrap;align-items:center}
 html[data-ui=next] #u-hub .h-card .h-dec-unoffered .h-dec-note{flex:1 1 100%;font-size:12px;line-height:1.4}
 html[data-ui=next] #u-hub .h-card .h-dec-alt{min-height:40px;padding:0 12px;background:transparent;border:1px solid var(--n-line3);color:var(--n-t1);font-size:12px;font-weight:500;white-space:normal;text-align:left}
 html[data-ui=next] #u-hub .h-card .h-dec-alt:disabled{color:var(--n-t3);border-color:var(--n-line2)}
 @media(max-width:1100px){html[data-ui=next] #u-hub .h-card .h-dec-alt{min-height:44px;flex:1 1 100%}}
-/* H5: the ladder fits a 300-360px screen (a 390px iPhone at Safari 115-130% text): the Scout cell wraps (side + chance, then the
+/* H5: the ladder fits a 300-360px screen (a 390px iPhone at Safari 115-130% text): the Grader cell wraps (side + chance, then the
    grade under them) instead of pushing "+ Add" past the ladder's edge and running "LEAN UNDER" under it */
 @media(max-width:480px){
  html[data-ui=next] #u-hub .h-ladder-table{table-layout:auto;width:100%}

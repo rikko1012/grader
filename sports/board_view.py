@@ -27,7 +27,7 @@ VERSION = "bv-1"
 WINDOWS = (10, 5)
 
 # ------------------------------------------------------------------------------------------------ vg-1 / sg-1 guards
-# vg-1 (owner re-audit 2026-10-24 N1/N2): a market whose Scout model has NOT passed its registered history gate
+# vg-1 (owner re-audit 2026-10-24 N1/N2): a market whose Grader model has NOT passed its registered history gate
 # (sports/model/artifacts/registry.json, sm-1 "validation" per stat; NFL: all five sm-1 markets failed gate H, see
 # MODEL_CARD_NFL.md) never produces a lean, an edge, a confidence or an edge ranking anywhere. The projection and its
 # distribution are still shown, labelled GATE_TEXT. mi-1 is built on the sm-1 distribution, so it inherits the gate.
@@ -69,10 +69,10 @@ def gate_state(stat):
 # and it is never a slip leg. True = the full vg-1 containment (projection only) everywhere - ONE change turns it back on.
 VG_CONTAIN_LEAN = True                  # owner 2026-10-25: NFL letters off again after real book-line check (A pass_yds 1 of 27)
 NOT_VALIDATED_TEXT = "{LG} model not validated"
-# rg-1 research grade: the letter of sports-gp-1 band() on the UNROUNDED Scout chance of the chosen (lean) side; only for
+# rg-1 research grade: the letter of sports-gp-1 band() on the UNROUNDED Grader chance of the chosen (lean) side; only for
 # a row with a lean (cf-2 / N4), never for a held row (vg-1 when contained, sg-1). Stakes stay 0.
 GRADE_VERSION = "rg-1"
-GRADE_TAG = "Scout grade"               # ct-1b (owner 2026-11-08): no research / "not validated" text beside released letters
+GRADE_TAG = "Grader grade"               # ct-1b (owner 2026-11-08): no research / "not validated" text beside released letters
 
 
 def points_noletter(league, stat):
@@ -102,17 +102,17 @@ def contain_reason(league, stat):
     from . import containment
     if not containment.contained(league, stat):
         return None
-    return GATE_TEXT.format(LG=(league or "").upper() or "Scout")
+    return GATE_TEXT.format(LG=(league or "").upper() or "Grader")
 
 
 def gate_reason(league, stat):
-    """None when the market's Scout model passed its registered gate, else the member text (projection only)."""
+    """None when the market's Grader model passed its registered gate, else the member text (projection only)."""
     if gate_state(stat) in GATE_PASSED:
         return None
-    return GATE_TEXT.format(LG=(league or "").upper() or "Scout")
+    return GATE_TEXT.format(LG=(league or "").upper() or "Grader")
 
 
-# sg-1 hard sanity guard (all markets). For ONE quote with a Scout view (own forecast or line read) at line L with
+# sg-1 hard sanity guard (all markets). For ONE quote with a Grader view (own forecast or line read) at line L with
 # projected mean mu and its lean (lean_of below), the lean / edge / confidence of that row are suppressed when ANY of:
 #   ratio_low   L >= RATIO_MIN_LINE and mu < 0.25 x L    (the projection's opportunity mass collapsed; e.g. 0.1 vs 11.5)
 #   ratio_high  L >= RATIO_MIN_LINE and mu > 4 x L
@@ -345,12 +345,12 @@ class StreamWriter:
 # ------------------------------------------------------------------------------------------- cf-2 row signal (N3/N4)
 # THE board row signal, computed server-side in the snapshot (sports/snapshots.guard_row) so every surface renders the
 # same numbers: web/sports/table.js propRow reads q.x (ln lean, e edge, c / cw confidence, s edge sort key, b hold).
-#   Scout chance  the quote's sm-1 / mi-1 view at its line (own forecast or line read) - snapshots.scout_view
+#   Grader chance  the quote's sm-1 / mi-1 view at its line (own forecast or line read) - snapshots.scout_view
 #   market chance market_view mv-1 at THIS offer (mk.at[record]) or the headline when it is at the same line
 #   lean          lean_of (chance > 50% AND the mean on the same side of the line) AND, when a market chance exists,
 #                 a POSITIVE edge for that side (owner re-audit N4: never a lean the market prices higher); else none
-#   edge          100 x (Scout chance - market chance) of the lean side, probability points (not expected value)
-#   gap           |Scout Over - market Over| in points; flag at >= GAP_PTS
+#   edge          100 x (Grader chance - market chance) of the lean side, probability points (not expected value)
+#   gap           |Grader Over - market Over| in points; flag at >= GAP_PTS
 #   confidence cf-2 = cf-1 (1 + steps: P(lean) >= 55%, >= 60%, edge >= 3, edge >= 6; caps: edge < 0 -> 2, thin L10
 #                 (< 10 games) -> 2, wide 80% range (> 1.5x the line) -> 3, gap >= 10 -> 3) PLUS (N3):
 #                 market estimate from ONE source -> max 2; |gap| > 15 pts -> max 2. The time-dependent stale-input
@@ -400,10 +400,10 @@ def signal(po, pu, mu, line, mkc, l10=None, iv=None):
     s, why = 1, []
     if pl >= 0.55 - 1e-12:
         s += 1
-        why.append("Scout chance >= 55%")
+        why.append("Grader chance >= 55%")
     if pl >= 0.60 - 1e-12:
         s += 1
-        why.append("Scout chance >= 60%")
+        why.append("Grader chance >= 60%")
     if edge is not None and edge >= 3 - 1e-9:
         s += 1
         why.append("edge >= 3 pts")
@@ -437,11 +437,11 @@ def signal(po, pu, mu, line, mkc, l10=None, iv=None):
 
 
 # ---------------------------------------------------------------------------------- cap-3 near-even price rule
-# cap-3 (owner 2026-11-08, hub NBA board sorted by Scout chance full of "Under 98.4% A" rows on Polymarket ladder rungs:
+# cap-3 (owner 2026-11-08, hub NBA board sorted by Grader chance full of "Under 98.4% A" rows on Polymarket ladder rungs:
 # "fix this these are only A's cause they're probbaly -1000 odd props"). On a line whose payout follows the price
 # (every sportsbook - FanDuel, BetRivers, DraftKings, oddsapi:<book> - and every exchange / prediction market -
-# Polymarket, Kalshi) a Scout side and letter are given only when the line is priced near even: the market's no-vig
-# chance of Scout's side must be <= MAX_SIDE_MARKET. A very likely side priced like -1000 is a high Scout chance by
+# Polymarket, Kalshi) a Grader side and letter are given only when the line is priced near even: the market's no-vig
+# chance of Grader's side must be <= MAX_SIDE_MARKET. A very likely side priced like -1000 is a high Grader chance by
 # construction, not an A. Fixed-payout pick'em apps (PICKEM_PLATFORMS) pay the same whatever the side's chance and are
 # never affected. Market chance, in order:
 #   1. the offer's own two prices: a book's two decimal prices de-vigged (1/o) / (1/o + 1/u); an exchange's YES
@@ -454,7 +454,7 @@ def signal(po, pu, mu, line, mkc, l10=None, iv=None):
 # decided here, once, so snapshots, sheets, compare, the slip pool, the classic board and the hub all agree.
 CAP_VERSION = "cap-3"
 MAX_SIDE_MARKET = 0.65
-CAP_TEXT = "Scout grades lines priced near even."
+CAP_TEXT = "Grader grades lines priced near even."
 PICKEM_PLATFORMS = ("prizepicks", "underdog")
 EXCHANGE_MAX_SPREAD = 0.05                             # = sports/model/market.py MAX_SPREAD (test_cap3_long_odds keeps them equal)
 
@@ -501,7 +501,7 @@ def own_chance(q):
 
 
 def side_market_chance(lean, own_po=None, mkc=None):
-    """The market's chance of Scout's side: own prices first, else the quote's market chance, else None."""
+    """The market's chance of Grader's side: own prices first, else the quote's market chance, else None."""
     if _num(own_po):
         return own_po if lean == "over" else 1.0 - own_po
     if mkc and _num(mkc.get("po")) and _num(mkc.get("pu")):
@@ -525,7 +525,7 @@ CAL_MODELS = ("sm-1",)                                 # mi-1 already uses the m
 
 
 def calibrated(league, stat, po, pu, pp, model, mkc):
-    """THE displayed Scout chance at one quote. pc-1 (sports/model/chance_cal.py, owner decision 2026-11-05) first:
+    """THE displayed Grader chance at one quote. pc-1 (sports/model/chance_cal.py, owner decision 2026-11-05) first:
     every NBA / NFL sm-1 view (own forecast or line read) prints its chronologically fitted, held-out-tested calibrated
     chance; it supersedes cal-mi-1 for display while on. SPORTS_CHANCE_CAL=0 (or no valid pc-1 parameters) -> the
     previous rule: cal-mi-1 (sports/model/cal.py adjust) with the mv-1 market chance at that quote, then for NBA

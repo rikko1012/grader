@@ -1,4 +1,4 @@
-/* Scout Sports public Results page (/sports/results) - sheets agent. SPORTS ONLY (esports has no results page by owner
+/* Prop Grader Sports public Results page (/sports/results) - sheets agent. SPORTS ONLY (esports has no results page by owner
    rule). Data: GET <api_base>/api/sports/results/public (sports/results_public.py rp-1). Members read it with their st1
    token; everyone else only while the sports service has SPORTS_RESULTS_PUBLIC=1 (server-side, web.PUBLIC_WHEN).
    Accuracy only: no returns, ROI, P&L or stakes. Pure helpers (ciText, gateText, rateText) exported for node. */
@@ -33,17 +33,17 @@
     var src = m[1].split(":").pop();
     return (BOOKS[src] || src) + " market";
   }
-  /* hh-1 "Scout vs market on the same props" (sports/results_public.py head_to_head). Binary Brier is the headline
+  /* hh-1 "Grader vs market on the same props" (sports/results_public.py head_to_head). Binary Brier is the headline
      (chance of Over given no push vs Over / Under; 0.25 = always 50%), then log loss and hit rate, each with the
-     Scout-minus-market difference and its game-clustered 95% interval. statName(stat) -> label; opts.h heading tag. */
+     Grader-minus-market difference and its game-clustered 95% interval. statName(stat) -> label; opts.h heading tag. */
   function h2hHtml(hh, statName, opts) {
     var rows = (hh && hh.rows) || [], tag = (opts && opts.h) || "h3", id = (opts && opts.id) ? ' id="' + escH(opts.id) + '"' : "";
-    var head = "<" + tag + id + ">Scout vs market on the same props</" + tag + ">" +
-      '<p class="sw-small sw-muted">Scout and one market estimate scored on exactly the same props (same game, player, stat and line, so the same result). ' +
-      "Brier and log loss are scores, lower is better (Brier 0.25 = always 50%); hit rates are percentages. Difference = Scout minus market: below 0 on Brier or log loss means Scout was closer.</p>";
-    if (!rows.length) return head + '<p class="sw-muted">No prop has settled with both a Scout chance and a market chance yet.</p>';
-    var th = ["Scout", "Market", "Stat", "Props", "Games", "Brier score: Scout", "Brier score: market", "Brier score difference",
-              "Log loss score: Scout", "Log loss score: market", "Log loss score difference", "Hit rate: Scout", "Hit rate: market", "Hit rate difference"];
+    var head = "<" + tag + id + ">Grader vs market on the same props</" + tag + ">" +
+      '<p class="sw-small sw-muted">Grader and one market estimate scored on exactly the same props (same game, player, stat and line, so the same result). ' +
+      "Brier and log loss are scores, lower is better (Brier 0.25 = always 50%); hit rates are percentages. Difference = Grader minus market: below 0 on Brier or log loss means Grader was closer.</p>";
+    if (!rows.length) return head + '<p class="sw-muted">No prop has settled with both a Grader chance and a market chance yet.</p>';
+    var th = ["Grader", "Market", "Stat", "Props", "Games", "Brier score: Grader", "Brier score: market", "Brier score difference",
+              "Log loss score: Grader", "Log loss score: market", "Log loss score difference", "Hit rate: Grader", "Hit rate: market", "Hit rate difference"];
     function cell(v, extra) { return '<td class="num">' + v + (extra ? '<span class="sw-faint sw-small">' + escH(extra) + "</span>" : "") + "</td>"; }
     return head + '<div class="sw-scroll"><table class="sw-mini rp-h2h"><thead><tr>' + th.map(function (t, i) {
       return '<th scope="col"' + (i >= 3 ? ' class="num"' : "") + ">" + escH(t) + "</th>"; }).join("") + "</tr></thead><tbody>" +
@@ -59,7 +59,7 @@
   }
   /* ---------------------------------------------------------------------------------------- rx-1 plain layout
      Owner 2026-10-25: "make the results page for sports easier to understand, less crowded". One league at a time:
-     summary (record, research grades, validation status) -> one Scout-vs-market sentence -> 10 newest settled leans
+     summary (record, research grades, validation status) -> one Grader-vs-market sentence -> 10 newest settled leans
      -> everything technical in collapsed Details. Same data as before (results_public.json; the in-app tab adds its
      results.json ledger to Details); these helpers only choose words and layout. Model codes appear in Details only. */
   function wlp(w, l, p) { return int(w || 0) + "-" + int(l || 0) + "-" + int(p || 0); }
@@ -77,7 +77,7 @@
       : "not yet validated (needs " + need + " + passing checks)";
     return int(g.settled_props || 0) + " settled props · " + state;
   }
-  function recordView(L) {                         // Scout's settled leans: W-L-P, hit rate with n and 95% range
+  function recordView(L) {                         // Grader's settled leans: W-L-P, hit rate with n and 95% range
     var s = (L && L.leans) || {}, n = s.n || 0, wl = (s.wins || 0) + (s.losses || 0);
     return {n: n, decided: wl, wins: s.wins || 0, losses: s.losses || 0, pushes: s.pushes || 0, wlp: wlp(s.wins, s.losses, s.pushes),
             rate: s.hit_rate === null || s.hit_rate === undefined ? null : s.hit_rate, rateText: pct(s.hit_rate), range: rangeText(s.hit_rate_ci95)};
@@ -99,7 +99,7 @@
   }
   // led by percentages (owner 2026-10-25 "why are the results not in percentage form"): each side's hit rate on its
   // favoured side over the same props; the verdict word is decided on the game-clustered 95% interval of the hit-rate
-  // gap (Scout minus market). Brier / log loss stay in Details, labelled as scores (lower is better).
+  // gap (Grader minus market). Brier / log loss stay in Details, labelled as scores (lower is better).
   function h2hVerdict(r) {
     if (!r) return null;
     var d = r.diff || {}, ci = d.hit_rate_ci95, who = plainMarket(r.market), v;
@@ -107,11 +107,11 @@
     else if (ci[0] > 0) v = "better";
     else if (ci[1] < 0) v = "worse";
     else v = "even";
-    var word = {better: "Scout was more accurate", worse: "Scout was less accurate", even: "No clear difference",
+    var word = {better: "Grader was more accurate", worse: "Grader was less accurate", even: "No clear difference",
                 unclear: "Too few games to tell yet"}[v];
     return {verdict: v, market: who, word: word, pairs: r.pairs, games: r.games, scout: r.scout_hit_rate, other: r.market_hit_rate,
             diff: d.hit_rate, ci: ci,
-            headline: "Scout hit " + pct(r.scout_hit_rate) + " vs " + pct(r.market_hit_rate) + " for " + who + " on the same " + int(r.pairs) + " props",
+            headline: "Grader hit " + pct(r.scout_hit_rate) + " vs " + pct(r.market_hit_rate) + " for " + who + " on the same " + int(r.pairs) + " props",
             detail: word + (ci ? " (95% range of the gap " + signedPct(ci[0]) + " to " + signedPct(ci[1]) + ")" : "") +
               ". Hit rate = how often each side's favoured pick won, over " + int(r.games) + (r.games === 1 ? " game." : " games.")};
   }
@@ -140,11 +140,11 @@
   var RECENT_STEP = 10;
   function recentHtml(recent, statName, shown, noGrade) {
     var rows = recent || [], k = Math.min(rows.length, shown || RECENT_STEP);
-    if (!rows.length) return '<p class="sw-muted">No settled Scout picks yet. Picks are scored after their games are final, from the box score.</p>';
+    if (!rows.length) return '<p class="sw-muted">No settled Grader picks yet. Picks are scored after their games are final, from the box score.</p>';
     return '<ol class="rx-picks" data-shown="' + k + '">' + rows.slice(0, k).map(function (r) { return recentItem(r, statName, noGrade); }).join("") + "</ol>" +
       (rows.length > k ? '<button type="button" class="sw-btn rx-more" data-rx-more>Show more (' + int(Math.min(RECENT_STEP, rows.length - k)) + ")</button>" : "") +
-      (noGrade ? '<p class="sw-faint sw-small">One row per prop: Scout’s side at the line it was made for.</p>'
-                : '<p class="sw-faint sw-small">Grades are Scout’s letters. One row per prop: Scout’s side at the line it was made for.</p>');
+      (noGrade ? '<p class="sw-faint sw-small">One row per prop: Grader’s side at the line it was made for.</p>'
+                : '<p class="sw-faint sw-small">Grades are Grader’s letters. One row per prop: Grader’s side at the line it was made for.</p>');
   }
   // collapsed technical sections: [{id, title, sub, html}] -> <details> each, closed by default
   function detailsHtml(sections) {
@@ -166,13 +166,13 @@
     var h = '<section class="sw-panel rx-sum" aria-labelledby="rx-sum-h" data-league="' + escH(lg) + '"><h2 id="rx-sum-h" class="sw-sr">' + escH(LG) + " summary</h2>" +
       (nv ? '<p class="rx-nv" data-rx-nv><b>' + escH(nv) + "</b></p>" : "") +
       '<p class="rx-status' + (gate.validated ? " ok" : "") + '" data-rx-status>' + escH(validationLine(gate)) + "</p>" +
-      '<div class="rx-record" data-rx-record><div class="rx-k">Scout’s record</div>';
+      '<div class="rx-record" data-rx-record><div class="rx-k">Grader’s record</div>';
     if (rec.n) {
       h += '<div class="rx-big"><span data-rx-wlp>' + escH(rec.wlp) + '</span> <span class="rx-unit">W-L-P</span></div>' +
         '<div class="rx-line"><b data-rx-rate>' + escH(rec.rateText) + "</b> hit rate on " + escH(int(rec.decided)) + " decided picks" +
         (rec.range ? ' <span class="rx-range" data-rx-range>(95% range ' + escH(rec.range) + ")</span>" : "") + "</div>" +
-        '<div class="rx-line sw-small sw-muted" data-rx-counting>One pick per player, stat and game: the app line closest to Scout’s projection.</div>';
-    } else h += '<div class="rx-line sw-muted">No settled Scout picks yet.</div>';
+        '<div class="rx-line sw-small sw-muted" data-rx-counting>One pick per player, stat and game: the app line closest to Grader’s projection.</div>';
+    } else h += '<div class="rx-line sw-muted">No settled Grader picks yet.</div>';
     h += "</div>";
     if (!contained) h += '<div class="rx-gr"><div class="rx-k">Graded picks</div><div class="rx-tiles">' +
       tiles.map(function (t) {
@@ -182,11 +182,11 @@
       }).join("") + "</div></div>";
     h += "</section>";
     var v = h2hVerdict(pickH2H(opts.hh || (L && L.head_to_head)));
-    // A7 (audit 2026-11-05): the page LEADS with Scout vs the market on the same props, then the record (one pick per
+    // A7 (audit 2026-11-05): the page LEADS with Prop Grader vs the market on the same props, then the record (one pick per
     // game x player x stat, rp-2), then the recent list
-    h = '<section class="sw-panel rx-cmp" aria-labelledby="rx-cmp-h" data-verdict="' + (v ? v.verdict : "none") + '"><h2 id="rx-cmp-h">Scout vs the market on the same props</h2>' +
+    h = '<section class="sw-panel rx-cmp" aria-labelledby="rx-cmp-h" data-verdict="' + (v ? v.verdict : "none") + '"><h2 id="rx-cmp-h">Grader vs the market on the same props</h2>' +
       (v ? '<p class="rx-cmp-head" data-rx-cmp-head><b>' + escH(v.headline) + '</b></p><p class="rx-cmp-word" data-rx-cmp><b>' + escH(v.word) + "</b>" + escH(v.detail.slice(v.word.length)) + "</p>"
-         : '<p class="sw-muted">No prop has settled with both a Scout chance and a market chance yet.</p>') + "</section>" + h;
+         : '<p class="sw-muted">No prop has settled with both a Grader chance and a market chance yet.</p>') + "</section>" + h;
     h += '<section class="sw-panel rx-recent" aria-labelledby="rx-recent-h"><h2 id="rx-recent-h">Recent settled picks</h2><div data-rx-recent>' +
       recentHtml(L && L.recent, opts.statName, 0, contained) + "</div></section>";
     return h;
@@ -255,7 +255,7 @@
                 (L.gate.rule ? '<p class="sw-small">' + esc(L.gate.rule) + "</p>" : "") +
                 '<p class="sw-small sw-muted">' + int(L.settled) + " settled forecasts · " + int(L.games) + " games · " + int(L.unresolved) + " unresolved · " + int(L.void) + " void.</p>"});
     if (!L.settled) return out;
-    out.push({id: "h2h", title: "Scout vs the market: full table", sub: BRIER_SUB + " Log loss score: lower is better. Score difference below 0 = Scout closer; hit-rate difference above 0 = Scout hit more often.",
+    out.push({id: "h2h", title: "Grader vs the market: full table", sub: BRIER_SUB + " Log loss score: lower is better. Score difference below 0 = Grader closer; hit-rate difference above 0 = Grader hit more often.",
               html: h2hHtml(L.head_to_head)});
     out.push({id: "grades", title: "Graded picks in full", sub: "Letters of each settled lean (A 60%+, B 55.59%+, C 53.45%+, else Lean). Stakes 0.",
               html: !isContained(L) && L.grades && L.grades.rows && L.grades.rows.length ? gradeTable(L.grades.rows, "hit_rate_ci95") : ""});
@@ -263,11 +263,11 @@
               html: table(SUMMARY_HEAD, [summaryRow("All", L)].concat(Object.keys(L.models).map(function (m) { return summaryRow(m + (L.models[m].research_only ? " (research)" : ""), L.models[m]); })))});
     out.push({id: "stats", title: "Accuracy by stat", sub: "The same numbers split by stat.",
               html: table(SUMMARY_HEAD, Object.keys(L.stats).map(function (s) { return summaryRow(statName(s), L.stats[s]); }))});
-    out.push({id: "calibration", title: "Calibration: stated chance vs what happened", sub: "When Scout said Over had a given chance, how often Over actually hit (pushes left out). Close numbers = honest chances.",
+    out.push({id: "calibration", title: "Calibration: stated chance vs what happened", sub: "When Grader said Over had a given chance, how often Over actually hit (pushes left out). Close numbers = honest chances.",
               html: table([["Stated Over chance", 0], ["Forecasts", 1], ["Mean stated", 1], ["Observed Over", 1]], L.calibration.map(function (c) {
                 return "<tr><th scope=\"row\">" + esc(c.band) + '</th><td class="num">' + int(c.n) + '</td><td class="num">' + pct(c.stated) + '</td><td class="num">' + pct(c.observed) + '<span class="sw-faint sw-small">' + esc(ciText(c.observed_ci95, true)) + "</span></td></tr>";
               }))});
-    out.push({id: "bands", title: "Leans by chance band", sub: "Settled leans grouped by the chance Scout gave its side (given no push).",
+    out.push({id: "bands", title: "Leans by chance band", sub: "Settled leans grouped by the chance Grader gave its side (given no push).",
               html: table([["Probability band", 0], ["Leans", 1], ["W-L(-P)", 1], ["Mean stated", 1], ["Hit rate", 1]], L.bands.map(function (b) {
                 return "<tr><th scope=\"row\">" + esc(b.band) + '</th><td class="num">' + int(b.n) + '</td><td class="num">' + int(b.wins) + "-" + int(b.losses) + (b.pushes ? "-" + int(b.pushes) : "") + '</td><td class="num">' + pct(b.stated) + '</td><td class="num">' + pct(b.hit_rate) + '<span class="sw-faint sw-small">' + esc(ciText(b.hit_rate_ci95, true)) + "</span></td></tr>";
               }))});
@@ -301,7 +301,7 @@
     var D = got.data, lgs = ["nba", "nfl"].filter(function (x) { return D.leagues && D.leagues[x]; });
     if (lgs.indexOf(lg) < 0) lg = lgs[0] || "nba";
     var L = D.leagues && D.leagues[lg];
-    var h = '<div class="sw-eyebrow">Scout Sports · Results</div><h1 class="sw-h1">Results</h1>' +
+    var h = '<div class="sw-eyebrow">Prop Grader Sports · Results</div><h1 class="sw-h1">Results</h1>' +
       '<p class="sw-sub">Every settled forecast, scored against the final box score. Accuracy only - no returns, profit or ROI.</p>' +
       '<div class="rx-lg" role="group" aria-label="League">' + lgs.map(function (x) {
         return '<button type="button" class="sw-btn rx-lg-b" data-rx-lg="' + x + '" aria-pressed="' + (x === lg) + '">' + x.toUpperCase() + "</button>"; }).join("") + "</div>";
@@ -329,7 +329,7 @@
   load().then(function (got) { draw(got, leagueFromUrl()); }, function (e) {
     if (e && e.kind === "members") { Sh.member().then(function (info) { Sh.showMember(info); Sh.gate(main, info); }); return; }
     var msg = e && e.kind === "notready" ? "Results are being prepared - try again in a few minutes." :
-      e && e.kind === "off" ? "Scout Sports is not open yet." : "Results could not be loaded. Esports pages are unaffected.";
+      e && e.kind === "off" ? "Prop Grader Sports is not open yet." : "Results could not be loaded. Esports pages are unaffected.";
     main.innerHTML = '<h1 class="sw-h1">Results</h1><div class="sw-state"><p class="sw-muted">' + esc(msg) + "</p></div>";
   });
   Sh.member().then(Sh.showMember);

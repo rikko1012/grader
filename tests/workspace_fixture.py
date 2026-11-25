@@ -146,7 +146,7 @@ class Fixture:
         con.close()
 
     def flip(self, r, p=0.58):
-        """Scout changes side at the same line: a new forecast row, the old one kept. The caller clears the 5 s board copies."""
+        """Grader changes side at the same line: a new forecast row, the old one kept. The caller clears the 5 s board copies."""
         import picklog
         r.update(side="Less" if r["side"] == "More" else "More", p=p, graded_at=iso(datetime.now(timezone.utc)))
         con = sqlite3.connect(picklog.DB, timeout=10)

@@ -1,4 +1,4 @@
-/* Scout Sports research assistant page. Talks to the sports service with a short-lived member token
+/* Prop Grader Sports research assistant page. Talks to the sports service with a short-lived member token
    (GET /api/sports/token on this origin -> {token, exp, api_base}); answers arrive as numbered events that are polled
    with ?after=<last seq>, so a reload or a dropped connection resumes exactly where it stopped. */
 (function () {
@@ -25,7 +25,7 @@
   function token() {
     if (state.token && Date.now() / 1000 < state.exp - 60) return Promise.resolve();
     return fetch("/api/sports/token", { credentials: "same-origin", cache: "no-store" }).then(function (r) {
-      if (!r.ok) throw new Error(r.status === 401 ? "Sign in as a member to use Ask Scout." : "Sports is not available right now.");
+      if (!r.ok) throw new Error(r.status === 401 ? "Sign in as a member to use Ask Grader." : "Sports is not available right now.");
       return r.json();
     }).then(function (t) { state.token = t.token; state.exp = t.exp; state.base = (t.api_base || "").replace(/\/$/, ""); });
   }
@@ -51,7 +51,7 @@
     return esc(t).replace(/\[ref:([^\]\s]+)\]/g, function (_, id) {
       var n = citeNum(id);
       return '<a class="sa-cite" href="#sa-ev-' + n + '" aria-label="source ' + n + '">' + n + "</a>";
-    }).replace(/\[number removed\]/g, '<span class="sa-removed" title="Not found in Scout\'s data, so it was removed">removed</span>');
+    }).replace(/\[number removed\]/g, '<span class="sa-removed" title="Not found in Prop Grader\'s data, so it was removed">removed</span>');
   }
 
   function quota() {
@@ -59,7 +59,7 @@
       if (s._status !== 200) { $("sa-quota").textContent = ""; return; }
       var q = s.quota || {};
       $("sa-quota").textContent = s.available ? (q.remaining_questions + " of " + q.questions_limit + " questions left today")
-        : (s.reason === "off" ? "Ask Scout is not switched on yet." : "Ask Scout is starting - try again in a minute.");
+        : (s.reason === "off" ? "Ask Grader is not switched on yet." : "Ask Grader is starting - try again in a minute.");
       $("sa-ask").disabled = !s.available;
     }).catch(function (e) { $("sa-quota").textContent = e.message; $("sa-ask").disabled = true; });
   }
@@ -73,8 +73,8 @@
   }
 
   var STEP = { find_players: "Looked up the player", player_game_log: "Read the game log", market_quotes: "Read current quotes",
-               forecasts: "Read Scout forecasts", list_events: "Listed games", player_context: "Checked injury status",
-               factor_coverage: "Checked which factors Scout has", resolve_dates: "Resolved the dates" };
+               forecasts: "Read Grader forecasts", list_events: "Listed games", player_context: "Checked injury status",
+               factor_coverage: "Checked which factors Grader has", resolve_dates: "Resolved the dates" };
 
   function apply(e) {
     var d = e.data, ans = $("sa-answer");
@@ -97,7 +97,7 @@
       ans.innerHTML = renderText(d.answer);
       evidence(d.citations || {});
       var notes = [];
-      if (d.removed_numbers) notes.push(d.removed_numbers + (d.removed_numbers === 1 ? " number was" : " numbers were") + " removed because Scout's data does not contain them.");
+      if (d.removed_numbers) notes.push(d.removed_numbers + (d.removed_numbers === 1 ? " number was" : " numbers were") + " removed because Grader's data does not contain them.");
       (d.flags || []).forEach(function (f) {
         if (f.kind === "answer_truncated") notes.push("The answer was shortened.");
         if (f.kind === "model_refusal") notes.push("The assistant declined part of this question.");
@@ -114,7 +114,7 @@
     }
   }
 
-  var CAT = { historical_stats: "Game history", market_quotes: "Market quote", forecasts: "Scout forecast", reference: "Reference" };
+  var CAT = { historical_stats: "Game history", market_quotes: "Market quote", forecasts: "Grader forecast", reference: "Reference" };
   function evidence(c) {
     var ol = $("sa-ev"); ol.innerHTML = "";
     state.citeOrder.forEach(function (id) {
@@ -168,7 +168,7 @@
       if (r._status === 202 || r._status === 200) { state.run = r.run_id; state.seq = 0; save(); poll(); return; }
       busy(false); $("sa-out").classList.add("sa-hidden");
       var msg = { 429: "You've used today's questions.", 409: "A question is already in progress.",
-                  413: "That question is too long.", 503: "Ask Scout is not available right now." }[r._status] || (r.error || "Could not ask.");
+                  413: "That question is too long.", 503: "Ask Grader is not available right now." }[r._status] || (r.error || "Could not ask.");
       status(msg, true);
     }).catch(function (e) { busy(false); status(e.message, true); });
   });

@@ -355,7 +355,7 @@ def test_price_check_never_lists_an_unconfirmed_book_even_with_a_released_chance
     like_the_app(monkeypatch, ("fanduel", "draftkings"))
     monkeypatch.setattr(book_rules, "SETTLEMENT", {k: v for k, v in book_rules.SETTLEMENT.items() if k[0] != "draftkings"}
                         | {("fanduel", "nba"): book_rules.SETTLEMENT[("fanduel", "nba")]})
-    monkeypatch.setattr(wm, "_released_p", lambda g, sport, side: (0.70, 0.0, "cal-x"))   # a released Scout chance prices every book
+    monkeypatch.setattr(wm, "_released_p", lambda g, sport, side: (0.70, 0.0, "cal-x"))   # a released Grader chance prices every book
     s = _sheet(monkeypatch, [("p1", 20.5, [("unibet_au", 2.40, 1.60, 20), ("fanduel", 1.70, 2.10, 20)]),
                              ("p2", 21.5, [("unibet_au", 2.40, 1.70, 20), ("pointsbet_au", 1.70, 2.40, 20)])])
     assert s["ev"] and "fanduel" in {r["book"] for r in s["ev"]} and {r["book"] for r in s["ev"]} <= {"fanduel", "unibet_au"}

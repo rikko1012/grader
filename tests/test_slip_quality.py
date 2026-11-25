@@ -372,7 +372,7 @@ def test_why_line_names_matches_and_ranks():
     assert s[0]["why"] == "Best all-hit chance on the board: 2 matches, one leg each; legs rank 1, 2 of 4 by settled hit rate."
     assert s[1]["why"].startswith("Best all-hit chance left")
     r = build([rec("n", "g1", .7, sport="nfl", grade="A"), rec("m", "g2", .66, sport="nfl", grade="A")], research_ok=True)
-    assert "2 NBA/NFL legs ranked by Scout chance (no settled record yet)" in r["slips"][0]["why"]
+    assert "2 NBA/NFL legs ranked by Grader chance (no settled record yet)" in r["slips"][0]["why"]
 
 
 def test_shortage_says_which_rule_binds():
@@ -434,7 +434,7 @@ def test_adder_one_goblin_skips_a_second_goblin_and_keeps_the_members_own():
 
 
 def test_adder_one_goblin_counts_the_members_goblin_outside_the_pool():
-    """Review 2026-11-05: a goblin the member added that is not in Scout's pool (below the bar, held, ungraded) still counts, so
+    """Review 2026-11-05: a goblin the member added that is not in Grader's pool (below the bar, held, ungraded) still counts, so
     "at most 1 goblin" never suggests a second one. The route reads line_type from the board; the library reads it off the leg."""
     off, weak = rec("o", "e1", .8, line_type="goblin", line=14.5), rec("w", "e2", .56)
     gob, std = rec("g", "e3", .85, line_type="goblin", line=14.5), rec("s", "e4", .7)
@@ -455,7 +455,7 @@ def test_adder_names_conflict_same_player_and_same_match():
     out = advise([b, c], [b, c])
     assert out[0]["notes"][0]["code"] == "same_player"
     out = advise([b, d], [b, d])
-    assert out[0]["notes"][0]["code"] == "same_match" and "Scout does not offer" in out[0]["notes"][0]["text"]
+    assert out[0]["notes"][0]["code"] == "same_match" and "Grader does not offer" in out[0]["notes"][0]["text"]
     ub, ud = (dict(x, offer=dict(x["offer"], platform="underdog")) for x in (b, d))
     out = advise([ub, ud], [ub, ud])
     assert out[0]["notes"][0]["code"] == "same_match" and "does not offer" not in out[0]["notes"][0]["text"]

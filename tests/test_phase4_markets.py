@@ -1,5 +1,5 @@
 """Phase 4 item 2: SCOUT_MARKET_TOOLS +EV feed and arbitrage sheet (workspace_markets; math in gradecore.market_tools).
-EV = p_cal x decimal - 1, push-adjusted; p_cal = released Scout chance or the other books' no-vig consensus (never the priced book);
+EV = p_cal x decimal - 1, push-adjusted; p_cal = released Grader chance or the other books' no-vig consensus (never the priced book);
 stake share A = impA/(impA+impB); margin % = (1/(impA+impB) - 1) x 100; stale / prediction-market / pick'em legs flagged and left out."""
 import json
 import time
@@ -83,7 +83,7 @@ def test_released_scout_chance_is_used_with_its_push(fake, monkeypatch):
     monkeypatch.setattr(wm, "model_released", lambda sport, stat: True)
     s = wm.sheet(None, "nba", fake)
     r = next(x for x in s["ev"] if x["line"] == 20.5 and x["book"] == "fanduel" and x["side"] == "over")
-    assert r["p_cal"] == 0.9 and r["ev"] == pytest.approx(0.9 * 2.10 - 1, abs=1e-4) and r["p_source"].startswith("Scout calibrated chance")
+    assert r["p_cal"] == 0.9 and r["ev"] == pytest.approx(0.9 * 2.10 - 1, abs=1e-4) and r["p_source"].startswith("Grader calibrated chance")
     assert any(x["line"] == 21.0 for x in s["ev"])                         # the released chance carries p_push: whole lines priced
 
 
@@ -160,7 +160,7 @@ def test_plain_context_numbers_equal_the_existing_math(fake):
 
 
 def test_needs_is_push_adjusted_on_a_whole_number_line_priced_with_scouts_chance(fake, monkeypatch):
-    """Review 2026-11-05: on a whole-number line the Scout route keeps the push chance, so 'needs' is the push-adjusted break-even
+    """Review 2026-11-05: on a whole-number line the Grader route keeps the push chance, so 'needs' is the push-adjusted break-even
     (1 - p_push) / odds. With p 0.48, push 0.06 at 2.10 the row must not read 'fair 48% vs needs 47.6%+' against a loss, nor
     'fair below needs' beside a positive result."""
     monkeypatch.setattr(wm, "_released_p", lambda g, sport, side: (0.48, 0.06, "v1") if float(g["line"]).is_integer() else None)

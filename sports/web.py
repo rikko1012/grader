@@ -130,7 +130,7 @@ SWEEP_S = 10.0                                          # expired entries are dr
 _SWEPT = {"t": 0.0}
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 PLACEHOLDER = (b"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-               b"<title>Scout Sports</title><body style='font-family:system-ui;margin:2rem'><h1>Scout Sports</h1>"
+               b"<title>Prop Grader Sports</title><body style='font-family:system-ui;margin:2rem'><h1>Prop Grader Sports</h1>"
                b"<p>Sports is being built and is not available yet.</p></body>")
 
 

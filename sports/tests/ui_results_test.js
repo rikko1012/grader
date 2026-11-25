@@ -30,7 +30,7 @@ const pick = RP.pickH2H(hh);
 assert.strictEqual(pick.market, "mc-1"); assert.strictEqual(pick.stat, "all");
 let v = RP.h2hVerdict(pick);
 assert.strictEqual(v.verdict, "even"); assert.strictEqual(v.word, "No clear difference");
-assert.strictEqual(v.headline, "Scout hit 53.1% vs 51.8% for the market consensus on the same 820 props");
+assert.strictEqual(v.headline, "Grader hit 53.1% vs 51.8% for the market consensus on the same 820 props");
 assert.ok(v.detail.indexOf("95% range of the gap −1.0% to +3.6%") >= 0, v.detail);
 assert.ok(!/(^|[^\d.])0\.\d/.test(v.headline + v.detail), "raw decimal on the card: " + v.headline + v.detail);
 assert.strictEqual(RP.h2hVerdict(row("mc-1", 10, [0.001, 0.02])).verdict, "better");
@@ -49,7 +49,7 @@ assert.ok(h.indexOf("Show more (10)") >= 0 && h.indexOf("Player 0") >= 0 && h.in
 h = RP.recentHtml(recent, null, 20);
 assert.ok(h.indexOf("Show more (3)") >= 0);
 assert.ok(RP.recentHtml(recent, null, 30).indexOf("Show more") < 0);
-assert.ok(RP.recentHtml([], null).indexOf("No settled Scout picks yet") >= 0);
+assert.ok(RP.recentHtml([], null).indexOf("No settled Grader picks yet") >= 0);
 
 // details are collapsed by default
 const d = RP.detailsHtml([{id: "x", title: "T", sub: "S", html: "<p>x</p>"}, {id: "empty", title: "E", html: ""}]);
@@ -60,7 +60,7 @@ const sum = RP.summaryHtml("nba", Object.assign({gate: {settled_props: 1566, req
   recent: recent, head_to_head: hh, model_gate: {not_validated: null}}, L));
 for (const code of ["sm-1", "mc-1", "mi-1", "mkt-", "rg-1", "hh-1", "rp-1"]) assert.ok(sum.indexOf(code) < 0, "code on surface: " + code);
 const nfl = RP.summaryHtml("nfl", {gate: {settled_props: 0, required: 300}, leans: {n: 0}, model_gate: {not_validated: "NFL model not validated"}});
-assert.ok(nfl.indexOf("NFL model not validated") >= 0 && nfl.indexOf("No settled Scout picks yet") >= 0);
+assert.ok(nfl.indexOf("NFL model not validated") >= 0 && nfl.indexOf("No settled Grader picks yet") >= 0);
 for (const w of ["ROI", "profit", "units"]) assert.ok(sum.indexOf(w) < 0);
 // every rate on the surface is a percentage: no raw 0.xx decimal anywhere in the summary text
 const text = sum.replace(/<[^>]+>/g, " ");

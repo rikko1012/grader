@@ -1,4 +1,4 @@
-"""Scout Sports research assistant (owner brief 11): a read-only question answerer over typed Scout retrieval tools.
+"""Prop Grader Sports research assistant (owner brief 11): a read-only question answerer over typed Grader retrieval tools.
 
   config.py        settings from the environment (model id, quotas, limits); status() never shows the API key
   dates.py         explicit date routing: 'last night', 'this season', ... -> UTC ranges that are echoed back

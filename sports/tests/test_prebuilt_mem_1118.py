@@ -162,7 +162,7 @@ def test_streamed_pool_is_byte_identical_to_the_53dad0b_build(world):
                     reasons |= set(new["excluded"])
     assert n_offers > 600 and n_legs > 100                  # two 400-offer metadata chunks, real legs
     for r in ("not gradable", "started / locked", "start unknown", "game final", "game postponed", "price not fresh",
-              "no forecast for this exact line", "held stake (0U)", "no grade", "market prices Scout's side higher",
+              "no forecast for this exact line", "held stake (0U)", "no grade", "market prices Grader's side higher",
               "held by the sanity guard", "not playing"):
         assert r in reasons, (r, reasons)
 

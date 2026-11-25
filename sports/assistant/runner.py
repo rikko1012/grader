@@ -46,7 +46,7 @@ def process(run, llm, runs_path=None, store_path=None, now=None):
         try:
             scon = store.connect(store_path, read_only=True)
         except FileNotFoundError:
-            emit("error", {"code": "sports_store_not_ready", "message": "Scout's sports data is not available yet."})
+            emit("error", {"code": "sports_store_not_ready", "message": "Grader's sports data is not available yet."})
             runs.finish(con, run["run_id"], "failed", error="sports_store_not_ready", refund=True)
             return "failed"
         try:

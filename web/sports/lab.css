@@ -1,4 +1,4 @@
-/* Scout Sports model lab (admin) - scoped under .lab-root. */
+/* Prop Grader Sports model lab (admin) - scoped under .lab-root. */
 .lab-root { --l-bg: #f6f7f9; --l-panel: #fff; --l-ink: #15181d; --l-muted: #5d6573; --l-line: #dde2e9; --l-accent: #2456d6;
   --l-good: #1f7a4d; --l-bad: #a1251b; --l-chip: #eef2fb;
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--l-ink); background: var(--l-bg);

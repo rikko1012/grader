@@ -7,9 +7,9 @@ Market edge (NBA / NFL pick'em lines, standard lines only):
   same freshness limits workspace_ev.price_limits(); owner 2026-11-12: exact line only, books that settle like the app only,
   gradecore.book_rules) with at least MIN_BOOKS fresh independent books (two sites on one feed count once) - minus what one pick needs to break even on that app's 2-pick
   entry (gradecore.payouts on gradecore/pickem_payouts.json: Underdog standard 2-pick 53.5%, PrizePicks Power 2-pick 57.7%;
-  an Underdog payout modifier through ev_board.pickem_break_even). In percentage points. It is shown whether or not Scout has
-  a side: for the side the books favour (the higher fair chance), and for Scout's side too when Scout's side is the other one.
-  Never Scout's grade, never a sort or input of any grade. CS2 / LoL props have no sportsbook price (books there price only
+  an Underdog payout modifier through ev_board.pickem_break_even). In percentage points. It is shown whether or not Grader has
+  a side: for the side the books favour (the higher fair chance), and for Grader's side too when Grader's side is the other one.
+  Never Grader's grade, never a sort or input of any grade. CS2 / LoL props have no sportsbook price (books there price only
   the match winner), so their rows carry the plain reason instead.
 
 Best line per side (every sport): every book's current line for the same event / player / stat / period - PrizePicks and
@@ -120,7 +120,7 @@ def _side_edge(app, side, leg, priced, cfg):
 
 
 def edges(srv, sport, recs, now):
-    """{platform|offer_id: {"fav": side edge, "scout": side edge (Scout's side when it is not the favoured one)} or {"why"}}."""
+    """{platform|offer_id: {"fav": side edge, "scout": side edge (Grader's side when it is not the favoured one)} or {"why"}}."""
     if sport not in MARKET_SPORTS:
         return {}
     from gradecore import payouts

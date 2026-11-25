@@ -633,7 +633,7 @@ def test_pool_drops_legs_whose_side_the_market_prices_higher(con):
     assert set(mk) == {rb, re_, rok}                         # another line's headline is never used
     p = pool.build(con, "nba", "underdog", now=w.NOW, market_at=mk)
     assert {l["player_id"].split(":")[-1] for l in p["legs"]} == {"ok", "nomk"}
-    assert p["excluded"]["market prices Scout's side higher"] == 2
+    assert p["excluded"]["market prices Grader's side higher"] == 2
     assert {l["player_id"].split(":")[-1] for l in pool.build(con, "nba", "underdog", now=w.NOW)["legs"]} == \
         {"barnes", "edw", "ok", "nomk"}                      # no board snapshot: the forecast rule alone
 

@@ -1,7 +1,7 @@
 """Owner 2026-11-09: "include all the factors in cards" + "all odds on player props". In a real browser at 1440 and 390, real Handler
 and fixture data (no network): every sport's hub card shows the classic card's restored panels on its Stats tab (CS2: every factor,
 vs similar-ranked opponents, LAN vs online, BO3.gg stats, map pool, match and veto, HLTV, teammates (benched left out), checks,
-second source, FACEIT; LoL: every factor, team win chance, the model, times; NBA / NFL: every factor, Scout projection with its
+second source, FACEIT; LoL: every factor, team win chance, the model, times; NBA / NFL: every factor, Grader projection with its
 distribution and ladder, history and splits, matchup, minutes / role, matchup engine) and the full odds table on its Lines tab (every
 book, alternates, best per side, seen time). No hedge words; nothing runs past the screen; the slip column is never covered.
 CARD_SHOTS=<folder> keeps a screenshot of each card tab at both sizes."""

@@ -1,7 +1,7 @@
 """card-why (2026-11-06): 700 members at once on what this change touches - the new card script / styles, the NBA Sleeper and
 Dabble boards (hit rates at another line now counted from the player's saved game log) and an NBA Sleeper line's research card
 (line?sport=nba&book=sleeper, newly open). No 5xx; the sports service sees one player-file read per player (shared, never per
-member) and no member request reaches a provider. The "Why Scout leans" section is built in the browser from the card's own data,
+member) and no member request reaches a provider. The "Why Grader leans" section is built in the browser from the card's own data,
 so it adds no request. Fixture upstreams only (no network)."""
 import http.client
 import json

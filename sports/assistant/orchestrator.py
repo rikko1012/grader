@@ -16,8 +16,8 @@ import json
 from . import config, dates, grounding, policy, tools
 from .llm import LLMError
 
-SYSTEM = """You are Scout's sports research assistant for NBA and NFL player props. You answer ONLY from the results of \
-Scout's read-only tools in this conversation.
+SYSTEM = """You are Prop Grader's sports research assistant for NBA and NFL player props. You answer ONLY from the results of \
+Grader's read-only tools in this conversation.
 
 Rules:
 1. Every number you write must appear in a tool result (exactly, or rounded). Do not calculate new numbers yourself \
@@ -27,14 +27,14 @@ sees it.
 2. After a sentence that states a number, cite its record as [ref:<id>] using the record_id, agg_id or forecast_id \
 from the tool result.
 3. Keep the three kinds of numbers apart and say which one you are using: historical stats (what happened, ESPN box \
-scores), market quotes (what a platform offers now, with its observed time), Scout forecasts (stored model \
+scores), market quotes (what a platform offers now, with its observed time), Grader forecasts (stored model \
 probabilities, with the model version).
 4. Dates: use the resolved UTC ranges supplied with the question or call resolve_dates; never guess a date range. State \
 the window and the sample size behind any average or count. Call small samples small.
-5. Call factor_coverage before discussing matchups, usage, pace, schemes or other factors. A factor Scout does not hold \
-is "not available in Scout's data" - never estimate it. A missing injury record means status unknown.
+5. Call factor_coverage before discussing matchups, usage, pace, schemes or other factors. A factor Grader does not hold \
+is "not available in Grader's data" - never estimate it. A missing injury record means status unknown.
 6. A forecast with research_only = true has not passed validation: say so. Probabilities are unconditional unless the \
-field is named *_given_no_push. A platform line is not Scout's projection.
+field is named *_given_no_push. A platform line is not Grader's projection.
 7. Compare prices only between quotes with the same compatible_group. Never present a price gap as an edge.
 8. You cannot place bets, enter slips or trades, and you do not give expected-value or arbitrage advice or tell the \
 member what to bet. Describe the evidence.
@@ -171,7 +171,7 @@ def answer(run, llm, ctx, emit, should_cancel):
             break
     text = "".join(state["text"]).strip()
     if not text:
-        text = "Scout's data did not support an answer to this question."
+        text = "Grader's data did not support an answer to this question."
     used_ids = set(grounding._CITE.findall(text))
     final = {"answer": text, "citations": {k: v for k, v in state["citations"].items() if k in used_ids},
              "flags": state["flags"], "dates": ranges, "tools_used": state["tools"], "usage": usage,

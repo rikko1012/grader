@@ -98,7 +98,7 @@ def test_guard_row_holds_every_quote_keeps_chances_and_logs_the_line():
     quotes = [{"platform": "underdog", "record_id": "r4", "line": 24.5, "forecast_id": "f2"},
               {"platform": "betrivers", "record_id": "r5", "line": 24.5,
                "line_read": {"f": "f2", "ln": 24.5, "po": 0.62, "pu": 0.38, "pp": 0}},
-              {"platform": "fanduel", "record_id": "r6", "line": 22.5}]                     # no Scout view
+              {"platform": "fanduel", "record_id": "r6", "line": 22.5}]                     # no Grader view
     base = _row("points", "nba:espn:9", json.loads(json.dumps(quotes)))
     assert snapshots.guard_row("nba", base, fcs, None, "T") == []
     assert base["quotes"][0]["x"].get("ln") == "over" and "x" not in base["quotes"][2]

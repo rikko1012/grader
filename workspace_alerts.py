@@ -209,11 +209,11 @@ def deliver(destination,title,content,session=None,rest_path=ALERTS_PATH):
 def message(member,label,r,more,base=None):
     """(title, content, rest_path) of one delivery. Content stays within Whop's 500 characters with the unsubscribe link kept whole."""
     text=(f"{label}: {r['player']['name']} · {r['offer']['line']} {r['market']['stat_label']} · {r['offer']['platform']}"
-          +(f", plus {more} more matching line{'s' if more>1 else ''}" if more else '')+". Recheck the current line in Scout.")
+          +(f", plus {more} more matching line{'s' if more>1 else ''}" if more else '')+". Recheck the current line in Prop Grader.")
     stop=unsub_url(member,base)
-    tail=f" Stop these alerts: {stop}" if stop else " Turn alerts off in Scout > Alerts."
+    tail=f" Stop these alerts: {stop}" if stop else " Turn alerts off in Prop Grader > Alerts."
     content=text[:max(0,500-len(tail))]+tail
-    return 'Scout · '+str(label),content,(prop_path(r) if deeplink_on() else ALERTS_PATH)
+    return 'Prop Grader · '+str(label),content,(prop_path(r) if deeplink_on() else ALERTS_PATH)
 
 
 def _scan(db,root,sub,state_for,rows,now,differences,write):

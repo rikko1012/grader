@@ -250,15 +250,15 @@ def test_line_change_rereads_the_same_distribution_and_reasons_come_from_the_pip
     snapshots.scout_line_reads(row, fcs)
     lr = row["quotes"][1]["line_read"]
     assert lr["f"] == "fc-s" and lr["ln"] == 19.5 and (lr["po"], lr["pu"], lr["pp"]) == (0.3, 0.7, 0.0)
-    assert "line_read" not in row["quotes"][2]                        # a book line is not a Scout target
+    assert "line_read" not in row["quotes"][2]                        # a book line is not a Grader target
     run = {"forecast_at": "2026-10-23T20:00:00Z", "why_none": {"e|p": "player's current ESPN team is not in this event"}}
     q = {"gradable": True, "observed_at": h.T0}
-    assert snapshots.no_forecast_reason(row, q, run) == "No Scout forecast: player's current ESPN team is not in this event"
+    assert snapshots.no_forecast_reason(row, q, run) == "No Grader forecast: player's current ESPN team is not in this event"
     assert snapshots.no_forecast_reason(row, q, {}) == "No forecast run yet"
     assert snapshots.no_forecast_reason(row, {"gradable": True, "observed_at": "2026-10-23T21:00:00Z"},
                                         {"forecast_at": h.T0}) == "Line appeared after the last forecast run"
     assert snapshots.no_forecast_reason({**row, "capability": "gated", "capability_reason": "combo stat"}, q, run) == \
-        "Market not supported by the Scout model: combo stat"
+        "Market not supported by the Grader model: combo stat"
     assert snapshots.no_forecast_reason(row, {"gradable": False, "not_gradable_because": ["promotional line"]}, run) == \
         "Line not modelled: promotional line"
 
@@ -270,7 +270,7 @@ def test_board_quotes_carry_book_prices_and_scout_first_preference(built):
     con.close()
     b = _load(built, "board.json")
     fd = [q for r in b["markets"] for q in r["q"] if q["p"] == "fanduel"][0]
-    assert fd["d"] == [1.80, 2.05] and "nf" not in fd                  # price shown; no Scout placeholder on a book
+    assert fd["d"] == [1.80, 2.05] and "nf" not in fd                  # price shown; no Grader placeholder on a book
     assert snapshots.DEFAULT_MODELS[0] == "sm-1"
     assert all(f.get("k") in ("scout", "market", "informed") for f in b["fc"].values())
 

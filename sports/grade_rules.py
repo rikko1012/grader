@@ -6,8 +6,8 @@ Rules and their switches (each one line to roll back: set the variable and rebui
 (fixer, 2026-11-21): only the verified display bug fix defaults ON; every untested rule is shadow (default OFF).
 
   SPORTS_PP_SIDE_HOLD (default ON; =0 rolls back) - os-2 side hold, a DISPLAY BUG FIX under the owner's 2026-11-06
-      one-sided rule (cap-2): a PrizePicks quote whose Scout side PrizePicks does not list gets no side / letter (hold
-      "side", text "Scout's side is not offered on this line"). Before: the board lettered the UNLISTED side (live
+      one-sided rule (cap-2): a PrizePicks quote whose Grader side PrizePicks does not list gets no side / letter (hold
+      "side", text "Grader's side is not offered on this line"). Before: the board lettered the UNLISTED side (live
       2026-11-21: De'Aaron Fox 6.0 Under B, Stephon Castle 7.0 Under B, Derrick White 5.0 Under C on Over-only lines).
       It never touches the side PrizePicks DOES list (Cam Spencer A Over / Darius Acuff Jr. B Over on Over-only lines
       keep their letters), never reclassifies the line, never stops a forecast and never changes the record.
@@ -22,7 +22,7 @@ Rules and their switches (each one line to roll back: set the variable and rebui
   NBA_MVLEAN1 (default OFF; =1 turns it on - owner board preview first, it removes ~6% of NBA letters) + NBA_MVLEAN1_FROM
       (ISO UTC; unset / 'never' / invalid = the rule never applies, on the board or in the record) - mvlean-1, the
       CONFIRMED audit rule F03_mvlean1 (frozen logs/audit_1121/frozen/nba/F03_mvlean1.py, judged holdout/nba, verified
-      verify/nba). For an NBA pick'em quote whose Scout side is known: mv = (+1 Over / -1 Under) x (line - open), where
+      verify/nba). For an NBA pick'em quote whose Grader side is known: mv = (+1 Over / -1 Under) x (line - open), where
       open = the line of the FIRST sm-1 forecast saved for the same (event, player, stat, platform). If mv > 0.75 the
       side is kept and shown as "Lean <side>" (letter Lean, stake 0; the grade tooltip says why). One activation test
       (mvlean_active: flag on, FROM set, forecast time >= FROM) decides the board, the record's Grades table and its
@@ -50,11 +50,11 @@ MV_THRESHOLD = 0.75                       # frozen F03_mvlean1 THRESHOLD
 SIDE_VERSION = "os-2"
 BEST_VERSION = "bp-1"
 PICKEM = ("prizepicks", "underdog")
-SIDE_TEXT = {"over": "Over only line - Scout grades lines that offer both sides",
-             "under": "Under only line - Scout grades lines that offer both sides",
-             None: "Scout's side is not offered on this line"}
+SIDE_TEXT = {"over": "Over only line - Grader grades lines that offer both sides",
+             "under": "Under only line - Grader grades lines that offer both sides",
+             None: "Grader's side is not offered on this line"}
 HOLD_TEXT = SIDE_TEXT[None]               # SPORTS_PP_SIDE_HOLD alone: the line's listed side keeps its letter
-MV_WHY = "Shown as Lean: this line already moved more than 0.75 toward Scout's side since it opened"
+MV_WHY = "Shown as Lean: this line already moved more than 0.75 toward Grader's side since it opened"
 
 
 _YES = ("1", "true", "yes", "on")
@@ -148,7 +148,7 @@ def platform_of_record(rid):
 
 
 def move_toward(side, line, open_line):
-    """(+1 Over / -1 Under) x (line - open): how far the line has already moved toward Scout's side, or None."""
+    """(+1 Over / -1 Under) x (line - open): how far the line has already moved toward Grader's side, or None."""
     if side not in ("over", "under") or line is None or open_line is None:
         return None
     try:
@@ -217,7 +217,7 @@ def offered_sides(q):
 
 
 def side_hold(q, x):
-    """os-2: the hold for a PrizePicks quote whose Scout side is not offered on it, or None. PrizePicks only: it has no
+    """os-2: the hold for a PrizePicks quote whose Grader side is not offered on it, or None. PrizePicks only: it has no
     per-side suspension (its listed sides are the line's type), while an Underdog / sportsbook side that is suspended right
     now never changes a stored two-sided line's grading (cap-2)."""
     if not pp_side_hold_on() or not x or not x.get("ln") or q.get("platform") != "prizepicks":

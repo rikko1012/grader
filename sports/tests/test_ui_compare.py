@@ -200,7 +200,7 @@ def test_add_from_board_compare_verdict_same_game_and_storage(browser):
     page.goto("/sports#/compare?lg=nba")
     page.wait_for_selector(".sw-cmp-card")
     assert page.locator('#sw-views a[aria-current="page"]').get_attribute("data-view") == "compare"
-    # verdict: a (edge 6, Scout 62%) > b (edge 6, Scout 60%) > c (edge 3); d held -> Not ranked with the reason
+    # verdict: a (edge 6, Grader 62%) > b (edge 6, Grader 60%) > c (edge 3); d held -> Not ranked with the reason
     assert page.locator(".sw-cmp-best").get_attribute("data-best") == "offer:prizepicks:a1:r1:ab"
     ranks = page.evaluate("() => [...document.querySelectorAll('.sw-cmp-card')].map(c => c.dataset.rid + '=' + c.querySelector('[data-rank]').dataset.rank)")
     assert ranks == ["offer:prizepicks:a1:r1:ab=1", "offer:prizepicks:b1:r1:ab=2", "offer:underdog:c1:r1:ab=3", "offer:prizepicks:d1:r1:ab=none"], ranks
@@ -216,7 +216,7 @@ def test_add_from_board_compare_verdict_same_game_and_storage(browser):
     bk = page.locator('.sw-cmp-bk[data-key="a"]')
     assert bk.locator('[data-bestbook="over"]').get_attribute("data-bestline") == "20.5"
     assert bk.locator('[data-bestbook="under"]').get_attribute("data-bestline") == "21.5"
-    assert "Scout 62.0%" in bk.locator('[data-bestbook="over"]').inner_text()
+    assert "Grader 62.0%" in bk.locator('[data-bestbook="over"]').inner_text()
     # actions from the comparison (the ux agent's selector): Add to slip after choosing a side
     card = page.locator(".sw-cmp-card").first
     assert card.locator("[data-act-add]").is_disabled()

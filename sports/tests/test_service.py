@@ -340,7 +340,7 @@ def test_gateway_service_mode_runs_no_sports_work(monkeypatch):
 
 def test_gateway_static_page_and_assets_are_contained():
     code, body, _ = _gw("/sports")
-    assert code == 200 and b"Scout Sports" in body
+    assert code == 200 and b"Prop Grader Sports" in body
     for bad in ("/sports/../server.py", "/sports/..%2fserver.py", "/sports/x.py", "/sports/nope.css"):
         assert _gw(bad)[0] == 404, bad
 

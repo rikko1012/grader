@@ -3,14 +3,14 @@
 Selecting an extra book shows that book's lines for players already on the board. Nothing is recomputed:
   - same exact line as a PrizePicks / Underdog row -> that row's saved side, chance, projection and letter, unchanged; no stake
     (stakes are set for the pick'em entry the forecast was graded for);
-  - any other line -> Scout's chance at THAT line, read from the same saved projection distribution of that player / stat / maps
-    (line_chance: CS2 grader dist, LoL saved NB), labelled as Scout's chance at that line, with no letter and no stake; when the
+  - any other line -> Grader's chance at THAT line, read from the same saved projection distribution of that player / stat / maps
+    (line_chance: CS2 grader dist, LoL saved NB), labelled as Grader's chance at that line, with no letter and no stake; when the
     saved distribution does not reproduce the board's own chance, the line and price only.
   - every line -> L5 / L10 / L20 (and H2H / Season with SCOUT_BOARD_H2H) counted from the player's game log at the line shown
     (audit 2026-11-05 A2/B4), and the board player's research doc (history, stats, H2H, Ask) through line_doc().
 Matching is exact: normalised player name + stat + period; two board players with that name need the exact team too, otherwise
 the line is left out and counted as ambiguous. Never fuzzy.
-Rows are display-only research lines: they cannot be added to a Scout slip (one book per slip; slips are PrizePicks / Underdog).
+Rows are display-only research lines: they cannot be added to a Grader slip (one book per slip; slips are PrizePicks / Underdog).
 
 For 700 members: one build per (sport, book) every TTL s through srv.shared; members never trigger a provider request
 (book_providers' own poller, or the sports service, collects every price). This module imports no lol or sports package."""
@@ -34,10 +34,10 @@ ONE_SIDED_LABELS = ("Over only", "Under only")     # a pick'em line offering one
 # because this module imports no sports package (tests/test_sports_cap3_hub.py keeps the constants and the answers equal): a
 # side and letter only when the line's no-vig chance of that side is <= CAP_MAX_SIDE_MARKET - its own two decimal prices
 # first, else the board's market chance at that same line, else held. Held = no side, no letter, no stake, no p_side (so the
-# hub's Scout-chance sort puts it last); chances and projection stay; the hub board's own held book row says the same.
+# hub's Grader-chance sort puts it last); chances and projection stay; the hub board's own held book row says the same.
 CAP_VERSION = "cap-3"
 CAP_MAX_SIDE_MARKET = 0.65
-CAP_TEXT = "Scout grades lines priced near even."
+CAP_TEXT = "Grader grades lines priced near even."
 CAP_HOLD_LABEL = "Research estimate"               # = workspace_sports.HOLD_LABEL: the hub board's label for a held book row
 _PARSED = {}
 
@@ -201,7 +201,7 @@ def cap_held(kind, side, po=None, market=None):
 
 
 def _cap3(r, kind, over, under, market):
-    """Apply cap-3 to one derived record's Scout block in place (display only: the board's saved chances never change)."""
+    """Apply cap-3 to one derived record's Grader block in place (display only: the board's saved chances never change)."""
     s = r["scout"]
     if not cap_held(kind, s.get("side"), own_po(over, under), market):
         return
@@ -553,7 +553,7 @@ def _sports_season(ser, line):
 
 
 def chance_of(srv, sport, x, line):
-    """Scout's chance at this line from the board row's saved distribution (line_chance), or None."""
+    """Grader's chance at this line from the board row's saved distribution (line_chance), or None."""
     import line_chance
     if x is None:
         return None
@@ -664,7 +664,7 @@ def record_by_id(srv, sport, pid, oid):
 
 def line_doc(srv, sport, pid, oid):
     """(status, doc): an extra book's line opens the board player's research doc (history, stats, H2H, books, Ask) at its OWN line.
-    The record is the extra line's own (its line and price, and Scout's chance at that line or none); the history series is the
+    The record is the extra line's own (its line and price, and Grader's chance at that line or none); the history series is the
     player's game log, so every count is at the line shown. No letter and no stake (unchanged rule)."""
     import workspace_api as api
     import workspace_h2h

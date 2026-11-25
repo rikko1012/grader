@@ -191,7 +191,7 @@ def _check_summary(page, lg="nba"):
         assert t.locator("[data-rx-gn]").inner_text() == f"{g['n']:,}"
         assert t.locator("[data-rx-grate]").inner_text() == f"{round(g['hit_rate'] * 100, 1):.1f}%"
     assert page.locator(".rx-cmp").get_attribute("data-verdict") == "even"     # hit-rate gap CI includes 0
-    assert page.locator("[data-rx-cmp-head]").inner_text() == "Scout hit 53.1% vs 51.8% for the market consensus on the same 820 props"
+    assert page.locator("[data-rx-cmp-head]").inner_text() == "Grader hit 53.1% vs 51.8% for the market consensus on the same 820 props"
     assert page.locator("[data-rx-cmp]").inner_text().startswith("No clear difference (95% range of the gap −1.0% to +3.6%)")
     for i, g in enumerate(L["grades"]["rows"][:3]):                              # tile ranges are percentages too
         lo, hi = g["hit_rate_ci95"]

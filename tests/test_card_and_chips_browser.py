@@ -152,10 +152,10 @@ WHY = """() => { const w = document.querySelector('#hub-detail .h-why');
 def check_why(w, sp, extra=False):
     """the rules every card's Why section keeps, on any sport"""
     assert w['first'], w
-    assert w['title'].startswith(('Why Scout leans Over', 'Why Scout leans Under', 'The numbers for Over', 'The numbers for Under')), w['title']
+    assert w['title'].startswith(('Why Grader leans Over', 'Why Grader leans Under', 'The numbers for Over', 'The numbers for Under')), w['title']
     assert w['head'].strip() == w['title'].strip(), w['head']                            # no status line beside the title
     side = 'Over' if ' Over ' in w['title'] + ' ' else 'Under'
-    assert w['scout'] and re.match(r'Scout (projects|gives)', w['scout'][0]['text']), w['scout']
+    assert w['scout'] and re.match(r'Grader (projects|gives)', w['scout'][0]['text']), w['scout']
     # the forecast's colour follows its chance on the side shown: never green under 50%
     m = re.search(r'([\d.]+)% chance (Over|Under)', w['scout'][0]['text'])
     if m:
@@ -219,7 +219,7 @@ def test_nfl_card_injury_teammates_usage_and_engine_rows(browser, rich):
         mates = [x['text'] for x in w['also'] + w['for'] + w['risk'] if x['text'].startswith('Teammates out')]
         # five definite outs on an eight-name report (two of them past the six rows the stats tab lists): four names and "1 more"
         assert mates == ['Teammates out: Ty One, Bo Three, Di Five, Fa Seven and 1 more'], mates
-        # factor-engine rows (weight 0) never sit with Scout's reasons; where the card has room for them they say they are not used
+        # factor-engine rows (weight 0) never sit with Grader's reasons; where the card has room for them they say they are not used
         facts = w['scout'] + w['for'] + w['risk'] + w['also']
         assert all('241.5' not in x['text'] for x in w['scout'] + w['for'] + w['risk']), facts
         assert all('does not use' in x['text'] for x in facts if '241.5' in x['text']), facts

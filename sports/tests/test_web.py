@@ -53,7 +53,7 @@ def test_page_needs_the_ui_flag(monkeypatch):
     assert _call("/sports")[0] == 404
     monkeypatch.setenv("SPORTS_UI", "1")
     code, body = _call("/sports")
-    assert code == 200 and b"Scout Sports" in body
+    assert code == 200 and b"Prop Grader Sports" in body
 
 
 def test_single_flight_one_load_for_simultaneous_misses():

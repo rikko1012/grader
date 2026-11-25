@@ -205,7 +205,7 @@ def test_unreleased_league_still_follows_the_verdict(released, monkeypatch):
 def test_no_hedge_text_for_released_leagues_in_member_pages():
     web = ROOT / "web"
     labels = (web / "sports" / "labels.js").read_text(encoding="utf-8")
-    assert 'var GRADE_TAG = "Scout grade";' in labels and "Research grade" not in labels
+    assert 'var GRADE_TAG = "Grader grade";' in labels and "Research grade" not in labels
     for f in ("sports/picks.js", "sports/slips.js", "sports/results_public.js", "upgrade-hub.js", "sports/app.js",
               "sports/labels.js"):
         s = (web / f).read_text(encoding="utf-8")
@@ -217,7 +217,7 @@ def test_no_hedge_text_for_released_leagues_in_member_pages():
             assert bad not in s, (f, bad)
     # My picks: the per-pick validation state ("Projection only - model not yet validated") is not printed
     assert "(p.validation_state ? \"\" : esc(p.validation_text" in (web / "sports" / "picks.js").read_text(encoding="utf-8")
-    assert board_view.GRADE_TAG == "Scout grade" and "research" not in picks.GRADE_TABLE_LABEL.lower()
+    assert board_view.GRADE_TAG == "Grader grade" and "research" not in picks.GRADE_TABLE_LABEL.lower()
     src = (ROOT / "workspace_sports.py").read_text(encoding="utf-8")       # read as text: sports imports no hub module
     assert "Research grade" not in src and 'HOLD_DETAIL = "{LG} grades are switched off."' in src
     from sports.slips import validate

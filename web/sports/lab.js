@@ -1,4 +1,4 @@
-/* Scout Sports model lab (admin). Gets an admin sports token with the esports admin token (sent as a header), then
+/* Prop Grader Sports model lab (admin). Gets an admin sports token with the esports admin token (sent as a header), then
    reads / queues through /api/sports/admin/lab/*. All numbers shown come from the experiment record. */
 (function () {
   "use strict";

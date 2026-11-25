@@ -85,7 +85,7 @@
     leg.appendChild(read);
   }
   /* each leg's stake, from the board record it was added from (the hub's own leg id: sport|event|player|stat|period|platform|side|line)
-     and only on Scout's side: the stake the board row and the card state for that line. No record on the board now = no stake shown. */
+     and only on Grader's side: the stake the board row and the card state for that line. No record on the board now = no stake shown. */
   var legIx = {n: -1, map: {}};
   function legIndex() {
     var recs = V.boardRecs ? V.boardRecs() : {}, keys = Object.keys(recs);

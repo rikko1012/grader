@@ -281,7 +281,7 @@ def test_bo3_fields_stadodo_does_not_carry_are_dropped_too(browser, env, monkeyp
                 ser = raw["history"]["hltv_series"]
                 over = sum(1 for g in ser[:10] if g["value"] > raw["record"]["offer"]["line"])
                 hits = p.evaluate("[...document.querySelectorAll('#hub-decision .v3p-hits b')].map(b => b.textContent)")
-                assert hits[1] in (f"{over}/10", f"{10 - over}/10"), hits      # Scout's side (Under) on the HLTV series
+                assert hits[1] in (f"{over}/10", f"{10 - over}/10"), hits      # Grader's side (Under) on the HLTV series
         assert not p.errors, p.errors
     finally:
         c.close()

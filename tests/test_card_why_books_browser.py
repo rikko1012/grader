@@ -1,5 +1,5 @@
 """card-why (owner 2026-11-06: "why are dabble and other books not showing L5/10/20 but other books have them"): every extra book's
-rows show L5 / L10 / L20 on the board and open the full card with "Why Scout leans" - Sleeper and Dabble on CS2 AND on NBA, at the
+rows show L5 / L10 / L20 on the board and open the full card with "Why Grader leans" - Sleeper and Dabble on CS2 AND on NBA, at the
 board's own line and at a different line (NBA: counted from the player's saved game log, the same file the card reads).
 Real Handler + fixtures, 1440 and 390. AUDIT_SHOTS=<folder> keeps the screenshots."""
 import os

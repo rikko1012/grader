@@ -1,4 +1,4 @@
-"""cal-mi-1 (REGISTER A8): market-informed calibration of the displayed Scout chance - no look-ahead, sum-to-one,
+"""cal-mi-1 (REGISTER A8): market-informed calibration of the displayed Grader chance - no look-ahead, sum-to-one,
 off switches, weights JSON validation, and ONE calibrated chance on every surface (snapshot quote, row signal /
 research grade, compact quote, cal index, slip pool, tracked picks, the page's scoutAt)."""
 import json

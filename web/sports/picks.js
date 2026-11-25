@@ -1,4 +1,4 @@
-/* Scout Sports - card actions + My picks (ux agent). Classes "sw-act-*" / "sw-mp-*" under body.sw.
+/* Prop Grader Sports - card actions + My picks (ux agent). Classes "sw-act-*" / "sw-mp-*" under body.sw.
    1. Card action area (hook: app.js cardActions -> SportsPicks.actions): an Over / Under selector (native radios; an
       unoffered side is disabled with its reason), then "Add to slip" (writes Slip Studio's draft through SportsTray)
       and "Track pick" (POST /api/sports/picks/track against this exact offer revision, stake 0). Neither side is
@@ -58,8 +58,8 @@
   }
   function chanceText(p) {                             // the chance shown when tracked, and where it came from
     if (p.p_side === null || p.p_side === undefined)
-      return {chance: "No Scout chance shown", source: "no forecast on this line when tracked"};
-    var src = p.displayed_source === "scout_forecast" || !p.displayed_source ? "Scout forecast" : p.displayed_source;
+      return {chance: "No Grader chance shown", source: "no forecast on this line when tracked"};
+    var src = p.displayed_source === "scout_forecast" || !p.displayed_source ? "Grader forecast" : p.displayed_source;
     return {chance: pct(p.p_side), source: src + (p.model_version ? " · " + p.model_version : "") + (p.forecast_id ? " · " + p.forecast_id : "")};
   }
   function resultText(p) {                             // the result at the pick's OWN recorded line
@@ -117,7 +117,7 @@
   // added to a slip or tracked (the server refuses it too: capabilities.gate)
   function oneSidedHtml(over) {
     return '<div class="sw-act sw-act-none" data-onesided><p class="sw-small sw-faint">' + (over ? "Over only" : "Under only") +
-      " – Scout grades lines that offer both sides.</p></div>";
+      " – Grader grades lines that offer both sides.</p></div>";
   }
   function actions(legs, why, opts) {
     opts = opts || {};
@@ -219,7 +219,7 @@
       "<div><dt>Grade when tracked</dt><dd>" + (p.grade_shown && Lb() ? Lb().gradeHtml(p.grade_shown, p.side, null) : "—") + "</dd></div>" +
       "<div><dt>Stake</dt><dd>0</dd></div></dl>" +
       // ct-1b (owner 2026-11-08): NBA / NFL letters are released - the model's validation state ("Projection only -
-      // model not yet validated") is never printed on a tracked pick; only the factual "No Scout chance on this line"
+      // model not yet validated") is never printed on a tracked pick; only the factual "No Grader chance on this line"
       '<div class="sw-small sw-faint">' + (p.validation_state ? "" : esc(p.validation_text || "") + " ") + (src ? src({title: "Pick record", "pick id": p.pick_id, "offer record (exact revision)": p.record_id, revision: p.revision,
         forecast: p.forecast_id || "none", model: p.model_version || "none", "tracked at (your time)": trackedText(p.tracked_at), where: p.surface,
         "settled at": p.result && p.result.settled_at ? trackedText(p.result.settled_at) : "not settled", "settlement revision": p.result ? p.result.revision : null}, "Source") : "") + "</div></article>";
@@ -330,7 +330,7 @@
     }
     if (q.p === "kalshi" || !q.o) return "";           // board / match card
     if (q.v === "one_sided") return oneSidedHtml(q.o[0] === 1);   // owner 2026-11-06 (cap-2): shown, never graded or tracked
-    if (!q.g) return actions({}, {over: "Scout cannot settle this line", under: "Scout cannot settle this line"}, {compact: true});
+    if (!q.g) return actions({}, {over: "Grader cannot settle this line", under: "Grader cannot settle this line"}, {compact: true});
     var B = c.board || {stats: {}};
     [["over", 0], ["under", 1]].forEach(function (x) {
       if (q.o[x[1]] !== 1) { why[x[0]] = "Not offered on " + bookName(q.p); return; }

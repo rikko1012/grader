@@ -1,8 +1,8 @@
-"""cap-3 (owner 2026-11-08, hub NBA board sorted by Scout chance full of "Under 98.4% A" Polymarket ladder rungs: "fix this
+"""cap-3 (owner 2026-11-08, hub NBA board sorted by Grader chance full of "Under 98.4% A" Polymarket ladder rungs: "fix this
 these are only A's cause they're probbaly -1000 odd props"). On a line whose payout follows the price (books and exchanges /
-prediction markets) a Scout side + letter are given only when the market's no-vig chance of Scout's side is <= 0.65; pick'em
+prediction markets) a Grader side + letter are given only when the market's no-vig chance of Grader's side is <= 0.65; pick'em
 lines (PrizePicks / Underdog, fixed payout) are never affected. Held lines keep their projection and chances; no side, no
-letter, no edge, stake 0, text "Scout grades lines priced near even." One rule in board_view.quote_x, every surface."""
+letter, no edge, stake 0, text "Grader grades lines priced near even." One rule in board_view.quote_x, every surface."""
 import copy
 
 import pytest
@@ -14,7 +14,7 @@ from sports.slips import pool
 SHIPPED = dict(containment.OWNER_RELEASE)
 L10 = [5, 5, 0, 10]
 NOW = "2026-11-08T21:00:00Z"
-TEXT = "Scout grades lines priced near even."
+TEXT = "Grader grades lines priced near even."
 
 
 @pytest.fixture(autouse=True)
@@ -42,7 +42,7 @@ def test_constants():
 
 
 def test_polymarket_ladder_long_odds_is_held():
-    """Julius Randle-like ladder rung: 24.5 with market Under .798 and Scout Under .81 -> was an A, now held."""
+    """Julius Randle-like ladder rung: 24.5 with market Under .798 and Grader Under .81 -> was an A, now held."""
     x, code = qx("polymarket", 0.19, 0.81, 19.2, 24.5, {"po": 0.202, "pu": 0.798, "n": 3})
     assert code is None
     assert x == {"b": "cap", "t": TEXT, "v": "cap-3"}
@@ -143,7 +143,7 @@ def test_wide_exchange_rung_has_no_own_price():
 
 @pytest.mark.parametrize("platform", ["polymarket", "kalshi"])
 def test_wide_exchange_rung_falls_back_to_the_market_chance(platform):
-    """The reviewed case: Scout Over .985 at 14.5, market chance Over .96, rung 0.01 / 0.97 -> held (was an A)."""
+    """The reviewed case: Grader Over .985 at 14.5, market chance Over .96, rung 0.01 / 0.97 -> held (was an A)."""
     mkc = {"po": 0.96, "pu": 0.04, "n": 3}
     own = board_view.own_chance({"k": [0.01, 0.97]})
     x, code = qx(platform, 0.985, 0.015, 22.0, 14.5, mkc, own)

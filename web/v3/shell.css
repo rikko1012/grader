@@ -1,4 +1,4 @@
-/* 1time Scout v3 shell (SHARED). Loaded after tokens.css + components.css in every v3 bundle (web/UI_V3.md).
+/* Prop Grader v3 shell (SHARED). Loaded after tokens.css + components.css in every v3 bundle (web/UI_V3.md).
    Owns: the fixed header + phone bottom bar placement over the existing pages, the More sheet, the theme, and the shared
    loading / empty / error / boot states. Page groups never edit this file; they add their own sheet (board.css, slips.css ...).
    Every rule here is scoped under html[data-ui-v3] (or an sc- class), so nothing applies with the flag off: the file is not even

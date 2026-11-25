@@ -105,13 +105,13 @@ def test_model_only_rows_rank_apart(fake):
     assert {r["sport"] for r in mo} == {"nba", "cs2"} and all(r["basis"] == "model only" and "p_market" not in r for r in mo)
     evs = [r["ev_model"] for r in mo if r["ev_model"] is not None]          # NBA / NFL: no return figure (T5)
     assert evs == sorted(evs, reverse=True) and evs
-    ps = [r["p_model"] for r in mo]                                          # every sport ranked by Scout's chance (review 2026-11-07)
+    ps = [r["p_model"] for r in mo]                                          # every sport ranked by Grader's chance (review 2026-11-07)
     assert ps == sorted(ps, reverse=True)
 
 
 def test_audit_review_t5_no_book_price_list_ranks_every_sport_by_chance(fake):
     """Review 2026-11-07: hiding the NBA / NFL return figure (T5) sorted every NBA / NFL leg below every CS2 / LoL leg, so a 70%
-    NBA leg came after a 40% CS2 leg under the heading "ranked by Scout's chance" (and fell past the 100-row cut)."""
+    NBA leg came after a 40% CS2 leg under the heading "ranked by Grader's chance" (and fell past the 100-row cut)."""
     d = we.build(None, we.params({}, []), ALL)
     order = [(r["sport"], r["p_model"]) for r in d["model_only"]]
     assert order[0] == ("nba", 0.7)                                          # p4: 70% NBA leg first, above the 64% CS2 leg
@@ -120,15 +120,15 @@ def test_audit_review_t5_no_book_price_list_ranks_every_sport_by_chance(fake):
 
 
 def test_audit_t5_nba_nfl_legs_with_no_book_price_carry_no_return_figure(fake):
-    """Owner audit 2026-11-06 T5: "Show legs with no book price" ranked NBA / NFL legs by Scout's chance with an average return
-    (Scout 76.2% at +154) while NFL 65%+ picks hit 55.9%. The figure is hidden for NBA / NFL; nothing is labelled instead."""
+    """Owner audit 2026-11-06 T5: "Show legs with no book price" ranked NBA / NFL legs by Grader's chance with an average return
+    (Grader 76.2% at +154) while NFL 65%+ picks hit 55.9%. The figure is hidden for NBA / NFL; nothing is labelled instead."""
     d = we.build(None, we.params({}, []), ALL)
     mo = d["model_only"]
     nba = [r for r in mo if r["sport"] in ("nba", "nfl")]
     assert nba and all(r["ev_model"] is None for r in nba)
-    assert all(r["p_model"] is not None for r in nba)                        # Scout's chance itself is still shown
+    assert all(r["p_model"] is not None for r in nba)                        # Grader's chance itself is still shown
     nba_p = [r["p_model"] for r in mo if r["sport"] in ("nba", "nfl")]
-    assert nba_p == sorted(nba_p, reverse=True)                              # ranked by Scout's chance, as the heading says
+    assert nba_p == sorted(nba_p, reverse=True)                              # ranked by Grader's chance, as the heading says
     assert any(r["ev_model"] is not None for r in mo if r["sport"] == "cs2")  # esports legs keep theirs
     blob = json.dumps(d).lower()
     assert "unvalidated" not in blob and "estimate" not in blob

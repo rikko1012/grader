@@ -192,7 +192,7 @@ def test_board_rows_show_real_counts_placeholders_the_letter_and_the_lines_cell(
     assert l20.text_content() == '78%' and '7 Over of the last 9' in l20.get_attribute('title') and '(9 games on file)' in l20.get_attribute('title')
     assert 'h-few' in l20.get_attribute('class') and (l20.is_visible() or p.viewport_size['width'] < 600)
     assert '—' not in row.locator('.h-s-l5').text_content()
-    assert row.locator('.h-c-scout .h-grade.h-grade-b').inner_text() == 'B'                 # side, chance and letter in one Scout cell
+    assert row.locator('.h-c-scout .h-grade.h-grade-b').inner_text() == 'B'                 # side, chance and letter in one Grader cell
     scout = row.locator('.h-c-scout').text_content()
     assert 'Over' in scout and '61.2%' in scout and row.locator('.h-c-scout .h-direction').is_visible()
     assert row.locator('.h-chevron').count() == 0
@@ -216,7 +216,7 @@ def test_board_rows_show_real_counts_placeholders_the_letter_and_the_lines_cell(
     p.wait_for_selector('#hub-detail .h-stat-group h5', timeout=15000)
     assert p.locator('#hub-detail .h-full-research a').get_attribute('href').startswith('/sports?view=classic#/player/')
     heads = {up(h) for h in p.locator('#hub-detail .h-stat-group h5').all_text_contents()}
-    # card-and-chips 2026-11-06: factor-engine rows (weight 0) are headed as not part of Scout's forecast, never "Model inputs"
+    # card-and-chips 2026-11-06: factor-engine rows (weight 0) are headed as not part of Grader's forecast, never "Model inputs"
     assert {'MATCHUP', 'AVERAGES', "MATCHUP NUMBERS (NOT PART OF SCOUT'S FORECAST)"} <= heads and 'MODEL INPUTS' not in heads, heads
     no_h_scroll(p)
     assert not p.errors

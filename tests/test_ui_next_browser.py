@@ -152,7 +152,7 @@ def test_the_previous_design_is_the_default_and_one_flag_or_one_path_goes_to_the
 
 @pytest.mark.parametrize("size", [DESK, {"width": 375, "height": 812}], ids=["desktop", "phone375"])
 def test_the_previous_design_card_keeps_behind_the_grade_and_every_panel(browser, env, monkeypatch, size):
-    """the previous design's card carries the redesign's card content: Why Scout leans with Used / Not used, Behind the grade, the
+    """the previous design's card carries the redesign's card content: Why Grader leans with Used / Not used, Behind the grade, the
     record tiles, All odds, Factors and matchup ("tap a section to open or close"); nothing wider than a 375px phone."""
     monkeypatch.delenv("UI_NEXT", raising=False)
     for k in ("SCOUT_WORKSPACE_V2", "SCOUT_BOARD_H2H", "SCOUT_CLOSING_LINES", "SCOUT_LINE_HISTORY"):
@@ -339,9 +339,9 @@ def test_ev_and_arbitrage_have_their_own_screens_with_the_api_rows(browser, env,
     doc = {"as_of": iso(soon(0)), "owner": False, "method": {"ev_stale_s": 1800, "arb_max_age_s": 300},
            "sports": {"nba": {"state": "ok", "quotes_checked": 40, "markets_checked": 12, "sections_possible": {"ev": True, "arb": True},
                               "ev": [{"sport": "nba", "player": "Karl Anders", "side": "under", "line": 20.5, "stat_label": "Points", "event": "NYK at BOS", "book": "fanduel", "book_label": "FanDuel",
-                                      "american": "+105", "p_cal": 0.53, "needs": 0.4878, "ev": 0.0865, "per_100": 8.65, "chance_from": "Scout", "seen_at": iso(soon(0)), "kind": "book"},
+                                      "american": "+105", "p_cal": 0.53, "needs": 0.4878, "ev": 0.0865, "per_100": 8.65, "chance_from": "Grader", "seen_at": iso(soon(0)), "kind": "book"},
                                      {"sport": "nba", "player": "Jay Brown", "side": "over", "line": 24.5, "stat_label": "Points", "event": "NYK at BOS", "book": "betrivers", "book_label": "BetRivers",
-                                      "american": "+110", "p_cal": 0.5, "needs": 0.4762, "ev": 0.05, "per_100": 5.0, "chance_from": "Scout", "seen_at": iso(soon(0)), "kind": "book"}],
+                                      "american": "+110", "p_cal": 0.5, "needs": 0.4762, "ev": 0.05, "per_100": 5.0, "chance_from": "Grader", "seen_at": iso(soon(0)), "kind": "book"}],
                               "arbitrage": [{"sport": "nba", "player": "Reed Lean", "line": 6.5, "stat_label": "Assists", "event": "CHI at MIA", "return_per_100": 2.41,
                                              "legs": [{"book": "fanduel", "book_label": "FanDuel", "side": "over", "american": "+115", "stake_per_100": 47.63, "seen_at": iso(soon(0))},
                                                       {"book": "betrivers", "book_label": "BetRivers", "side": "under", "american": "+105", "stake_per_100": 52.37, "seen_at": iso(soon(0))}]}],
@@ -434,7 +434,7 @@ def test_one_row_per_prop_and_a_ladder_of_every_line(browser, env, size, tmp_pat
                 assert ("Over" if r["scout"]["side"] == "over" else "Under").upper() in text.upper() and f"{r['scout']['p_side'] * 100:.1f}%" in text
             if r["scout"].get("grade") and not r["scout"].get("hold") and r["scout"]["side"]:
                 assert r["scout"]["grade"] in tr.locator(".h-ld-grade").inner_text() or "Lean" in tr.locator(".h-ld-grade").inner_text()
-        # the row's own line is marked in the ladder, and the best line for its Scout side is named
+        # the row's own line is marked in the ladder, and the best line for its Grader side is named
         main = p.locator("tr.h-ladder-row tr.is-main")
         assert main.count() == 1 and main.get_attribute("data-line") == row.get_attribute("data-record")
         side = by_id[row.get_attribute("data-record")]["scout"]["side"]
@@ -479,7 +479,7 @@ def test_filters_and_search_never_hide_a_matched_line_in_a_grouped_row(browser, 
         in_sheet(p, "#hub-platform [data-id=all]").click()
         close_sheet(p)
         assert p.locator("tr.h-ladder-row tr.is-dim").count() == 0 and "match" not in row_of(p, "Shai Ladder", "Points").locator("[data-hub=ladder]").inner_text()
-        # Side = Under keeps only the lines Scout leans Under on; the count says how many
+        # Side = Under keeps only the lines Grader leans Under on; the count says how many
         p.locator("#hub-filters-toggle").click()
         p.locator("#hub-side").select_option("under")
         p.keyboard.press("Escape")

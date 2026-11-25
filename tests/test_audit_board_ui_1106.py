@@ -1,6 +1,6 @@
 """Owner site audit 2026-11-06 (5:40-6:05 PM CST), new board UI group, in a real browser against the real Handler with fixture data
 (no network: ESPN images are blocked). Display only: no grade, letter, chance, projection or stake changes anywhere.
-N6  NBA / NFL Side and Minimum grade filters: Side reads the offered side when a line has no Scout lean; Minimum grade is hidden (and
+N6  NBA / NFL Side and Minimum grade filters: Side reads the offered side when a line has no Grader lean; Minimum grade is hidden (and
     not applied) on a tab with no graded line.
 N10 the Views pop-over opens inside the window; the save / alert dialog keeps Cancel / Save at button height.
 N11 search finds a team by its exact other spellings (the book's own name, maintained aliases) and never joins an academy to its main
@@ -80,7 +80,7 @@ def tab_count(p, s):
 
 
 def expected(p, sport, side):
-    """the board's own records for one sport: current lines listed under `side` (Scout's lean, else each side the book offers)"""
+    """the board's own records for one sport: current lines listed under `side` (Grader's lean, else each side the book offers)"""
     return p.evaluate("""async ([s, side]) => { const d = await (await fetch('/api/upgrade/board?sport=' + s, {credentials: 'same-origin'})).json();
       const cur = d.records.filter(r => ['fresh','ok','ready','live'].includes(r.state.kind) && Date.parse(r.event.start_utc) > Date.now());
       return {n: cur.filter(r => r.scout.side ? r.scout.side === side : r.offer[side].offered).length,

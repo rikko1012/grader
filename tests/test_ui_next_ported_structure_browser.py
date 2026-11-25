@@ -78,7 +78,7 @@ def test_one_scout_cell_and_one_hit_strip_with_counts_in_tooltips(ctx, env):
     p = board(ctx, env)
     is_next(p)
     heads = p.locator('#hub-table thead th').all_text_contents()
-    assert [h.strip() for h in heads][:6] == ['Watch', 'Player', 'Market', 'Line', 'Proj.', 'Scout']
+    assert [h.strip() for h in heads][:6] == ['Watch', 'Player', 'Market', 'Line', 'Proj.', 'Grader']
     row = p.locator('#hub-rows tr[data-record]').first
     cells = row.locator('.h-strip .h-hit')
     assert cells.count() == 5                                     # L5 L10 L20 H2H SZN
@@ -146,7 +146,7 @@ def test_every_entry_point_opens_the_one_card_with_a_pinned_add(ctx, env, size):
     assert p.locator('#hub-ask-q').is_visible() and 'scout evidence guide' in p.locator('#hub-detail').inner_text().lower()
     p.keyboard.press('Escape')
     assert p.locator('#hub-card').is_hidden()
-    # 4) the Side button of a row without an offered Scout side opens the same card
+    # 4) the Side button of a row without an offered Grader side opens the same card
     p.evaluate("""(k) => { const b = document.querySelector(`#hub-rows .h-add[data-id="${CSS.escape(k)}"]`); b.dataset.hub = 'research'; b.click(); }""", k)
     p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-decision')
     assert p.locator('#hub-rows tr.is-expanded').get_attribute('data-record') == k
@@ -339,7 +339,7 @@ def test_owner_tools_stay_hidden_from_members_and_no_letter_rows_render_cleanly(
         p.locator('#hub-rows .h-player').first.click()
         p.wait_for_selector('#hub-detail .h-decision')
         chance = p.locator('#hub-detail .h-dec-chance').text_content()
-        assert 'Lean' in chance or 'Scout side' in chance, chance
+        assert 'Lean' in chance or 'Grader side' in chance, chance
         assert not p.errors
     finally:
         c.close()

@@ -199,7 +199,7 @@ def check_card(p, sport, size, theme):
     if p.locator("#hub-detail .v3p-pick").count():
         assert p.locator(".v3p-pick .sc-pick__chance b").inner_text() == p.locator("#hub-decision .h-dec-chance > b").inner_text()
         side = p.locator("#hub-decision .h-side-toggle [aria-pressed=true]").get_attribute("data-id").capitalize()
-        if p.locator(".v3p-pick .sc-scout-tag").count() or p.locator(".v3p-pick .sc-pick__chance b").inner_text() != "—":   # no Scout read: the prop leads
+        if p.locator(".v3p-pick .sc-scout-tag").count() or p.locator(".v3p-pick .sc-pick__chance b").inner_text() != "—":   # no Grader read: the prop leads
             assert p.locator(".v3p-pick .sc-pick__side b").inner_text().startswith(side)
         # polish2 (mocks 05 / 10): the side buttons carry the line, the strip has Chance / Grade / Stake and a Market chance cell
         line = p.locator("#hub-decision .v3p-lh b").inner_text()
@@ -407,7 +407,7 @@ def test_v3_two_map_combine_pools_exactly_and_never_moves_the_pick(browser, env,
         assert pressed(p) == cards[1:3]
         p.locator('#hub-decision [data-hub=history-side][data-id=under]').click()
         p.wait_for_function("document.querySelector('#hub-detail .v3p-pick .sc-pick__side b').textContent.startsWith('Under')")
-        assert "Scout" not in p.locator(".v3p-pick .sc-pick__side").inner_text()          # Scout's side is Over: no Scout tag on Under
+        assert "Grader" not in p.locator(".v3p-pick .sc-pick__side").inner_text()          # Grader's side is Over: no Grader tag on Under
         assert p.locator(".v3p-pick .sc-pick__chance b").inner_text() == p.locator("#hub-decision .h-dec-chance > b").inner_text()
         tab(p, "stats")
         tab(p, "overview")
@@ -420,7 +420,7 @@ def test_v3_two_map_combine_pools_exactly_and_never_moves_the_pick(browser, env,
 
 @pytest.mark.parametrize("size", [PHONE, DESK], ids=["390", "1280"])
 def test_v3_one_confirmed_map_is_always_in_the_default_combine(browser, env, monkeypatch, size):
-    """Map 1 confirmed (Mirage, Halcyon pick) and Map 2 still open: the default combine is Mirage + the likeliest Map 2 by Scout's
+    """Map 1 confirmed (Mirage, Halcyon pick) and Map 2 still open: the default combine is Mirage + the likeliest Map 2 by Grader's
     simulated veto (Inferno 41%), never two other maps. Each card says how likely it is to be played in Maps 1-2 (Mirage 100%)."""
     setup(env, monkeypatch, "dark")
     c, p = page(browser, env, size, "dark")
@@ -438,7 +438,7 @@ def test_v3_one_confirmed_map_is_always_in_the_default_combine(browser, env, mon
         assert p.locator("#hub-detail .v3p-map .v3p-inp").count() == p.locator("#hub-detail .v3p-map").count()
         # the Overview's Likely maps line leads with the same measure, one decimal (never "62%")
         ov = p.locator("#hub-card-body").inner_text()
-        assert "Likely in Maps 1-2 (Scout’s simulated veto): Mirage 100.0% · Inferno 41.0%" in ov, ov[:600]
+        assert "Likely in Maps 1-2 (Grader’s simulated veto): Mirage 100.0% · Inferno 41.0%" in ov, ov[:600]
         assert "Dust2 62.0%" in ov and "Dust2 62%" not in ov
         slot = p.locator('#hub-detail .v3p-map[data-v3p-map="mirage"] .v3p-slot')
         assert slot.inner_text() == "Map 1 · Halcyon pick"

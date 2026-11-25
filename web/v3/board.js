@@ -53,8 +53,8 @@
       return pr;
     };
   }
-  /* the row's stake, as the card's decision strip states it (upgrade-hub.js decisionHtml): Scout's side, a number of units, on a line
-     the app offers on both sides with Scout's side offered, not a view-only book. A sports line with a side but no published letter
+  /* the row's stake, as the card's decision strip states it (upgrade-hub.js decisionHtml): Grader's side, a number of units, on a line
+     the app offers on both sides with Grader's side offered, not a view-only book. A sports line with a side but no published letter
      ("No grade yet") reads as the sub-threshold rule the other sports use: Lean Over / Lean Under, Stake 0U. */
   function leanOnly(r) {
     var s = r && r.scout;
@@ -169,7 +169,7 @@
     if (!b || !small || td.querySelector('.sc-seen')) return;
     var t = small.textContent.replace(/\s+/g, ' ').trim(), m = AGE.exec(t);
     if (!m) return;
-    /* the app's full name from the cell's own title ("Underdog · Scout last read this line ..."), less the line kind tag */
+    /* the app's full name from the cell's own title ("Underdog · Grader last read this line ..."), less the line kind tag */
     var title = small.getAttribute('title') || '', label = title.split(' · ')[0] || m[1];
     var kind = b.querySelector('em');
     if (kind && kind.textContent && label.slice(-kind.textContent.length - 1) === ' ' + kind.textContent) label = label.slice(0, -kind.textContent.length - 1);
@@ -225,10 +225,10 @@
     if (!labels.length || !sided) { if (lg) lg.hidden = true; return; }
     var edge = document.querySelector('#hub-table thead th.h-c-edge');
     var et = edge ? (edge.getAttribute('title') || '') : '';
-    var html = '<span class="sc-lg-long">' + V.esc(labels.join(' · ')) + ': games that went Scout’s side at this line</span>' +
-      '<span class="sc-lg-short">Hit rate on Scout’s side, this line</span>' +
+    var html = '<span class="sc-lg-long">' + V.esc(labels.join(' · ')) + ': games that went Grader’s side at this line</span>' +
+      '<span class="sc-lg-short">Hit rate on Grader’s side, this line</span>' +
       '<span class="sc-key"><i class="g" aria-hidden="true"></i>60%+ <i aria-hidden="true"></i>40–59% <i class="p" aria-hidden="true"></i>under 40%</span>' +
-      (et ? '<span class="sc-lg-edge" title="' + V.esc(et) + '">Edge: ' + V.esc(et.replace(/^Scout chance/, 'Scout’s chance')) + '</span>' : '');
+      (et ? '<span class="sc-lg-edge" title="' + V.esc(et) + '">Edge: ' + V.esc(et.replace(/^(?:Grader|Scout) chance/, 'Grader’s chance')) + '</span>' : '');
     if (!lg) {
       lg = document.createElement('p');
       lg.id = 'sc-bd-legend';

@@ -1,4 +1,4 @@
-"""Real Scout Handler + shared UI: new sports reuse the existing board/card.
+"""Real Grader Handler + shared UI: new sports reuse the existing board/card.
 Only source data are fixtures; authentication, adapter, filters and UI are real.
 """
 import json

@@ -6,7 +6,7 @@
 
    Target: cs2_scout_ops/logs/design_1119/v3/A (board-*.html) + owner shots 06, 07, 11. The hub keeps its own markup and its own
    table / card switch at 1100px (its JS - the slip column, fitGameRows, DESKTOP - depends on it), so:
-   - 1101px and up: the hub's table, restyled (one strong number per row: Scout's chance; value inks only on hit counts and a positive edge);
+   - 1101px and up: the hub's table, restyled (one strong number per row: Grader's chance; value inks only on hit counts and a positive edge);
    - 1100px and down: each row is the approved 4-line phone card, laid out on a CSS grid from the hub's own cells
        1 name · role · match .................. side + chance
        2 line (was) · market · Proj ............ grade
@@ -181,7 +181,7 @@ html[data-ui-v3] #u-hub #hub-table .sc-seen{display:block;margin-top:2px;color:v
 html[data-ui-v3] #u-hub #hub-table .sc-seen b{font-weight:400;color:var(--sc-muted)}
 html[data-ui-v3] #u-hub #hub-table .sc-seen-px{display:none}
 html[data-ui-v3] #u-hub #hub-table td.h-c-proj{color:var(--sc-muted)!important;font:500 14px/1 var(--sc-font)!important}
-/* Scout: side + chance (the one strong number), then the letter / Lean wording */
+/* Grader: side + chance (the one strong number), then the letter / Lean wording */
 html[data-ui-v3] #u-hub #hub-table .h-scout{display:grid;gap:5px}
 html[data-ui-v3] #u-hub #hub-table .h-direction{display:flex;align-items:baseline;gap:8px;color:var(--sc-text)!important}
 html[data-ui-v3] #u-hub #hub-table .h-direction b{display:inline-flex;align-items:center;gap:4px;color:var(--sc-muted)!important;font:500 13px/1 var(--sc-font)!important}
@@ -303,7 +303,7 @@ html[data-ui-v3] #u-hub #hub-table .h-game-head[aria-pressed="true"]{box-shadow:
   html[data-ui-v3] #u-hub #hub-table .h-c-medge{width:78px!important}
   html[data-ui-v3] #u-hub #hub-table .h-c-compare{width:106px!important}
   html[data-ui-v3] #u-hub #hub-table .h-c-add{width:56px!important;padding-right:8px!important;text-align:right}
-  /* one Edge column with both numbers (Scout's edge, then "Books"), as the hub itself does from 1281px: the Market edge column steps aside */
+  /* one Edge column with both numbers (Grader's edge, then "Books"), as the hub itself does from 1281px: the Market edge column steps aside */
   html[data-ui-v3] #u-hub #hub-table.h-has-edge .h-c-medge{display:none!important}
   html[data-ui-v3] #u-hub #hub-table.h-has-edge td.h-c-edge .h-edge-books{display:flex!important;justify-content:flex-end;gap:3px;margin-top:3px}
   html[data-ui-v3] #u-hub #hub-table th.h-c-edge .h-th-sort{flex-direction:column;align-items:flex-end;gap:2px;width:100%;text-align:right}
@@ -385,7 +385,7 @@ html[data-ui-v3] #u-hub #hub-table .h-game-head[aria-pressed="true"]{box-shadow:
 
   /* the card: one grid, the hub's cells placed by area. 8 tracks: line | market | Proj. | (1fr) | Compare | +N props | watch | add.
      Items that span the 1fr track (name, grade, meta) do not size the tracks; line 4's controls set the right-hand tracks, and the
-     market takes what is left on line 2 (cut with an ellipsis before anything else moves). The Scout cell's parts sit on two lines (side + chance on line 1, the letter on line 2) through display:contents. */
+     market takes what is left on line 2 (cut with an ellipsis before anything else moves). The Grader cell's parts sit on two lines (side + chance on line 1, the letter on line 2) through display:contents. */
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record],html[data-ui-v3] #u-hub.h-cols #hub-table>tbody>tr[data-record],
   html[data-ui-v3] #u-hub #hub-table.h-has-edge>tbody>tr[data-record],html[data-ui-v3] #u-hub #hub-table.h-has-medge>tbody>tr[data-record],
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record].h-nohits{
@@ -546,11 +546,11 @@ html[data-ui-v3] #u-hub #hub-count{position:absolute!important;width:1px!importa
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-player small>*{white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] td.h-c-edge .h-below{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout>.h-scout-grade{align-self:start;flex-wrap:nowrap}
-  /* line 1 may now take two lines (a long matchup wraps): the name and Scout's side stay level at the top */
+  /* line 1 may now take two lines (a long matchup wraps): the name and Grader's side stay level at the top */
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record]>td.h-c-player{align-self:start}
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record] .h-scout>:is(.h-direction,.h-direction-options){align-self:start}
 }
-/* the Lean chip is never cut: on a narrow Scout column the stake moves under it */
+/* the Lean chip is never cut: on a narrow Grader column the stake moves under it */
 html[data-ui-v3] #u-hub #hub-table .h-scout-grade{flex-wrap:wrap;row-gap:4px}
 html[data-ui-v3] #u-hub #hub-table .h-scout-grade .sc-lean{max-width:none!important;overflow:visible!important;text-overflow:clip!important;flex:none}
 
@@ -601,7 +601,7 @@ html[data-ui-v3] #u-hub #hub-table td.h-c-player .sc-bd-av+.h-player{width:calc(
 html[data-ui-v3] #u-hub #hub-sources p{display:block!important}html[data-ui-v3] #u-hub #hub-sources p b{display:inline!important;margin-right:4px}
 
 /* ---- qa-boards (2026-11-20, live-data pass) ---- */
-/* phone / tablet card, line 2: Scout's letter + stake take only the right-hand tracks (over +N props, watch, add), so the market
+/* phone / tablet card, line 2: Grader's letter + stake take only the right-hand tracks (over +N props, watch, add), so the market
    gets the room the 1fr track used to leave empty beside Proj. (it wrapped to three lines on 390px with 100px blank on its right) */
 @media (max-width:1100px){
   html[data-ui-v3] #u-hub #hub-table>tbody>tr[data-record],html[data-ui-v3] #u-hub.h-cols #hub-table>tbody>tr[data-record],

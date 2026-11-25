@@ -1,4 +1,4 @@
-"""Soccer/tennis data adapter for Scout's existing board and player drawer.
+"""Soccer/tennis data adapter for Grader's existing board and player drawer.
 
 Uses the existing private Sports connection. No sports imports, model fitting,
 provider calls or history database reads occur in the main web process.
@@ -128,7 +128,7 @@ def _record(o, research, forecast=None):
         'scout': {'side': None, 'read_rev': 'history-only', 'p_side': None, 'p_over': None, 'p_under': None,
                   'p_push': None, 'projection': None, 'range80': None, 'grade': None, 'units': None,
                   'stake_reason': None, 'model_version': None, 'forecast_at': None,
-                  'hold': {'short': 'Player research', 'reason': 'Verified game history. Scout projections are not released.'},
+                  'hold': {'short': 'Player research', 'reason': 'Verified game history. Grader projections are not released.'},
                   'validation': {'kind': 'history', 'label': 'Player research', 'detail': context_note}},
         'history': {**{f'l{n}': _tally(games, o['line'], n) for n in (5, 10, 20)},
                     'avg': sum(g['value'] for g in games[:10])/len(games[:10]) if games else None, 'recent': None,

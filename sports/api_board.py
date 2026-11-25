@@ -1,4 +1,4 @@
-"""Scout Sports read endpoints for the member workspace (UI agent). Registered in sports/web.py ROUTES, run in the
+"""Prop Grader Sports read endpoints for the member workspace (UI agent). Registered in sports/web.py ROUTES, run in the
 sports service process. Every answer is a PRECOMPUTED snapshot file written by the worker (sports/snapshots.py): no
 store query, no model work per request - a handler reads bytes from disk once per file change (mtime + size) and
 serves them from a bounded in-memory cache.

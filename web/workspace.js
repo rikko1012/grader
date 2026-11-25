@@ -161,7 +161,7 @@
     const s = rec.scout, sd = side || s.side, one = s.hold && ["Over only", "Under only"].includes(s.hold.label) ? s.hold.label : null;
     if (one) return { html: `<span class="verdict">${one}</span>`, text: one };          /* LoL os-1 / sports cap-2: never graded */
     if (!sd) return { html: '<span class="verdict">No lean</span>', text: "No lean" };
-    if (s.side && sd !== s.side) return { html: `<span class="verdict">Scout side is ${cap(s.side)}</span>`, text: `Scout side is ${cap(s.side)}` };
+    if (s.side && sd !== s.side) return { html: `<span class="verdict">Grader side is ${cap(s.side)}</span>`, text: `Grader side is ${cap(s.side)}` };
     if (s.hold) return { html: `<span class="verdict">${cap(sd)}</span>`, text: `Research estimate ${cap(sd)}` };
     if (s.grade) return { html: `<span class="verdict"><span class="g-letter">${esc(s.grade)}</span> ${cap(sd)}</span>`, text: `${s.grade} ${cap(sd)}` };
     return { html: `<span class="verdict">Lean ${cap(sd)}</span>`, text: `Lean ${cap(sd)}` };
@@ -325,7 +325,7 @@
       if (S.slip.legs.length) scheduleCheck();
     } catch (err) {
       if (err.status === 409 && err.doc && err.doc.legs) { S.check = err.doc; S.checkSig = sig(); say("The check at Track found a change. Nothing was tracked."); }
-      else if (err.status === 503) say("Scout is busy. Your slip is still here: press Track again.");
+      else if (err.status === 503) say("Grader is busy. Your slip is still here: press Track again.");
       else if (!S.signedOut) say("Track did not finish. Your slip is still here.");
     }
     S.trackBusy[key] = false;
@@ -639,7 +639,7 @@
   /* ---- render: board ---- */
   function renderHead() {
     const sortBtn = (k, label) => `<button type="button" class="hd-sort" aria-pressed="${S.f.sort === k}" ${act("sort", k)}>${label}${S.f.sort === k ? ICON.down : ""}</button>`;
-    keepFocus(() => { $("board-head").innerHTML = `<span class="h-player">${sortBtn("start", "Start")}${sortBtn("player", "Player")}</span><span>Line</span><span>${sortBtn("chance", "Scout")}</span><span>Hit rate</span><span class="h-pp">PrizePicks</span><span class="h-ud">Underdog</span><span class="h-other">Other books</span><span></span>`; });
+    keepFocus(() => { $("board-head").innerHTML = `<span class="h-player">${sortBtn("start", "Start")}${sortBtn("player", "Player")}</span><span>Line</span><span>${sortBtn("chance", "Grader")}</span><span>Hit rate</span><span class="h-pp">PrizePicks</span><span class="h-ud">Underdog</span><span class="h-other">Other books</span><span></span>`; });
   }
   function hitCell(n, t, side) {
     const hits = side === "under" ? t.under : t.over, decided = t.n - t.push, rate = decided ? hits / decided : 0;
@@ -690,7 +690,7 @@
     const addBtn = flag ? `<button class="add" type="button" disabled aria-label="${esc(rec.player.name)}: Match started">${ICON.plus}</button>`
       : !side && !inSlip ? `<button class="add" type="button" ${act("row-choose", row.id)} aria-label="Choose a side for ${esc(rec.player.name)}">${ICON.plus}</button>`
         : `<button class="add" type="button" aria-pressed="${inSlip}" ${act("row-add", row.id)} aria-label="${inSlip ? "Remove" : "Add"} ${esc(pick)} ${inSlip ? "from" : "to"} slip">${inSlip ? ICON.check : ICON.plus}</button>`;
-    const read = flag ? startWord(rec) : side ? `Scout ${v.text} ${pct(s.p_side)}` : s.p_over != null ? `Over ${pct(s.p_over)}, Under ${pct(s.p_under)}` : "No lean";
+    const read = flag ? startWord(rec) : side ? `Grader ${v.text} ${pct(s.p_side)}` : s.p_over != null ? `Over ${pct(s.p_over)}, Under ${pct(s.p_under)}` : "No lean";
     const marketLabel = esc(rec.market.stat_label) + (rec.market.period === "full_game" ? "" : ` · ${esc(rec.market.period_label)}`);
     const est = s.hold ? `<span class="g-est">Research estimate</span>` : "";
     const sub2 = [est, s.projection != null ? `Proj ${esc(tenth(s.projection))}` : "", s.units ? `${esc(s.units)}U` : "", rec.sport === "lol" && s.grade ? "0U" : ""].filter(Boolean).join('<span class="sc-rest"> · </span>');
@@ -734,7 +734,7 @@
     const list = visibleRows();
     $("view-research").toggleAttribute("data-no-other", !list.some((r) => r.offers.some((o) => !["prizepicks", "underdog"].includes(o.offer.platform))));
     const off = want.filter(([, c]) => c.status === "unavailable");
-    const down = off.length ? `<div class="state"><h3>${esc(off.map(([k]) => D.sports[k]).join(", "))} board unavailable</h3><p>Scout could not read ${off.length > 1 ? "these boards" : "the board"}. Your slip and tracked picks are safe.</p><button class="btn" type="button" ${act("retry-board")}>Retry</button></div>` : "";
+    const down = off.length ? `<div class="state"><h3>${esc(off.map(([k]) => D.sports[k]).join(", "))} board unavailable</h3><p>Grader could not read ${off.length > 1 ? "these boards" : "the board"}. Your slip and tracked picks are safe.</p><button class="btn" type="button" ${act("retry-board")}>Retry</button></div>` : "";
     const loading = want.some(([, c]) => c.status === "loading") ? skeletonRows(4) : "";
     const at = want.map(([, c]) => c.at).filter(Boolean).sort()[0];
     $("board-meta").textContent = `${plural(list.length, "prop")}${at ? ` · Updated ${clock(at)}` : ""}`;
@@ -765,8 +765,8 @@
       $("filters-body").innerHTML = `<h3 class="eyebrow">Saved views</h3><ul class="views-list">${presets().map((v) => viewItem(v, false)).join("")}${S.views.map((v) => viewItem(v, true)).join("")}</ul>
         <form class="save-row" id="save-view"><label class="field"><span class="sr">View name</span><input type="text" id="view-name" maxlength="28" placeholder="Name this view"></label><button class="btn" type="submit">Save</button></form>
         ${seg("sort", "Sort", [["start", "Start"], ["chance", "Chance"], ["player", "Player"]])}${seg("day", "Day", dayOpts)}
-        ${seg("side", "Scout side", [["all", "Both"], ["over", "Over"], ["under", "Under"]])}
-        ${seg("tier", "Scout read", [["all", "All"], ["graded", "Graded"], ["lean", "Lean"], ["estimate", "Estimate"]])}
+        ${seg("side", "Grader side", [["all", "Both"], ["over", "Over"], ["under", "Under"]])}
+        ${seg("tier", "Grader read", [["all", "All"], ["graded", "Graded"], ["lean", "Lean"], ["estimate", "Estimate"]])}
         ${seg("period", "Period", [["all", "All"], ["map1", "Map 1"], ["maps12", "Maps 1-2"], ["maps13", "Maps 1-3"], ["full_game", "Game"]])}
         ${sel("book", "Book", bookOpts())}${sel("market", "Market", marketOpts())}${tog("gapsOnly", "Books differ on the line")}${tog("hideOff", "Hide started")}${tog("watchOnly", `Watchlist only (${S.watch.length})`)}
         <button class="btn btn-quiet" type="button" ${act("reset-filters")}>Reset filters</button>`;
@@ -780,7 +780,7 @@
     if (phase === "empty") return "";
     if (phase === "running") return "<b>Checking</b>";
     if (phase === "signedout") return "<b>Your session ended.</b> Sign in to check this slip.";
-    if (phase === "down") return S.checkErr === "limit" ? "<b>Too many checks this minute.</b> Scout will check again shortly." : "<b>The check did not answer.</b> Track and Copy stay off.";
+    if (phase === "down") return S.checkErr === "limit" ? "<b>Too many checks this minute.</b> Grader will check again shortly." : "<b>The check did not answer.</b> Track and Copy stay off.";
     const vals = Object.values(c.entries), ready = vals.filter((e) => e.ok).length;
     return `<b>${ready} of ${plural(vals.length, "entry").replace("entrys", "entries")} ready.</b> Checked ${clock(c.checked_at)}.`;
   }
@@ -789,7 +789,7 @@
   function renderLeg(l, phase, link) {
     const c = phase === "fresh" ? S.check.legs[l.id] : null;
     const problems = c && !c.ok ? `<div class="problems">${c.problems.map((p) => `<p class="problem">${esc(p.text)}${p.swap ? `<br><button class="btn" type="button" ${act("swap-leg", l.id)}>Use current offer</button>` : ""}${p.retry ? `<br><button class="btn" type="button" ${act("check-now")}>Check again</button>` : ""}</p>`).join("")}</div>` : "";
-    const against = l.shown_label.startsWith("Scout side");
+    const against = /^(?:Grader|Scout) side/.test(l.shown_label);
     const read = against ? esc(l.shown_label) : `${esc(l.shown_label)} ${pct(l.shown_p)}`;
     return `<div class="leg${c && !c.ok ? " bad" : ""}">
       <span class="leg-name">${esc(l.player)}<span class="s-tag">${esc(D.sports[l.sport])}</span></span>
@@ -988,8 +988,8 @@
     const reason = s.stake_reason ? `<p class="consensus">${esc(s.stake_reason)}</p>` : "";
     const detail = val.detail ? `<p class="consensus">${esc(val.detail)}</p>` : "";
     const label = val.label ? `<span class="tag">${esc(val.label)}</span>` : "";
-    return `<section class="sec" aria-label="Scout forecast"><div class="sec-h"><h3 class="eyebrow">Scout forecast</h3>${label}</div>
-      <div class="forecast"><div class="fc-top"><div class="fc-num">${off ? "--" : pct(p)}</div><div class="fc-lab">${off ? `Scout saved a chance for ${cap(s.side)} only` : `Forecast chance of ${cap(side)} ${esc(rec.offer.line)}`}<br>${v.html} · Stake ${esc(stake)}</div></div>${s.range80 ? `<p class="consensus">80% range ${esc(s.range80[0])} to ${esc(s.range80[1])}</p>` : ""}${reason}${detail}</div></section>`;
+    return `<section class="sec" aria-label="Grader forecast"><div class="sec-h"><h3 class="eyebrow">Grader forecast</h3>${label}</div>
+      <div class="forecast"><div class="fc-top"><div class="fc-num">${off ? "--" : pct(p)}</div><div class="fc-lab">${off ? `Grader saved a chance for ${cap(s.side)} only` : `Forecast chance of ${cap(side)} ${esc(rec.offer.line)}`}<br>${v.html} · Stake ${esc(stake)}</div></div>${s.range80 ? `<p class="consensus">80% range ${esc(s.range80[0])} to ${esc(s.range80[1])}</p>` : ""}${reason}${detail}</div></section>`;
   }
   function secDetails(rec) {
     const ln = lineOf(rec).doc, f = ln && ln.forecast;
@@ -1137,10 +1137,10 @@
   }
   function pickRow(r) {
     const st = r.status, open = S.openPick === r.id;
-    const scoutSide = cap(r.scout_side || ""), against = r.scout_side && r.side !== r.scout_side;      /* Scout's grade and stake belong to Scout's side, never to the member's */
+    const scoutSide = cap(r.scout_side || ""), against = r.scout_side && r.side !== r.scout_side;      /* Grader's grade and stake belong to Grader's side, never to the member's */
     const read = r.research ? `${r.hold || "Research estimate"} ${scoutSide}`.trim() : `${r.grade || "Lean"} ${scoutSide}`.trim();
-    const kv = [["Sport", D.sports[r.sport] || r.sport], ["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Scout read", read],
-      ...(r.research ? [] : [["Scout stake", `${r.units == null ? 0 : r.units}U${scoutSide ? ` on ${scoutSide}` : ""}`]]), ...(against ? [["Your side", `${cap(r.side)}, against Scout`]] : []),
+    const kv = [["Sport", D.sports[r.sport] || r.sport], ["Chance you saw", r.displayed_p == null ? "None saved for this side" : pct(r.displayed_p)], ["Grader read", read],
+      ...(r.research ? [] : [["Grader stake", `${r.units == null ? 0 : r.units}U${scoutSide ? ` on ${scoutSide}` : ""}`]]), ...(against ? [["Your side", `${cap(r.side)}, against Grader`]] : []),
       ["Projection", r.projection == null ? "--" : tenth(r.projection)], ["Book", r.platform_label]];
     const saved = r.forecast_p == null || r.research ? [] : [["Saved forecast", `${r.forecast_grade === "LEAN" || !r.forecast_grade ? "Lean" : r.forecast_grade} ${scoutSide} ${pct(r.forecast_p)}, ${r.forecast_units == null ? 0 : r.forecast_units}U`]];
     const ids = [...saved, ["Offer", r.offer_revision], ["Forecast", r.forecast_id], ["Model", r.model_version], ["Tracked", stamp(r.tracked_at)], ["Receipt", r.id]];
@@ -1162,7 +1162,7 @@
     const sportSeg = sportsOn().length > 1 ? `<div class="seg" role="group" aria-label="Show sport">${[["all", "All"], ...sportsOn().map((k) => [k, D.sports[k]])].map(([k, l]) => `<button type="button" aria-pressed="${S.picksSport === k}" ${act("picks-sport", k)}>${l}</button>`).join("")}</div>` : "";
     const head = `<div class="page-h"><div><h1 id="picks-h" tabindex="-1">My picks</h1><p>Each receipt keeps what you saw when you tracked it. Corrections are added below, never written over.</p></div><div class="page-acts">${sportSeg}${seg}</div></div>`;
     let inner;
-    if (!doc) inner = S.mine.status === "unavailable" ? `<div class="state"><h3>My picks unavailable</h3><p>Your receipts are saved. Scout could not read them just now.</p><button class="btn" type="button" ${act("retry-mine")}>Retry</button></div>` : Array.from({ length: 4 }, () => '<div class="skel-line tall"></div>').join("");
+    if (!doc) inner = S.mine.status === "unavailable" ? `<div class="state"><h3>My picks unavailable</h3><p>Your receipts are saved. Grader could not read them just now.</p><button class="btn" type="button" ${act("retry-mine")}>Retry</button></div>` : Array.from({ length: 4 }, () => '<div class="skel-line tall"></div>').join("");
     else {
       const stale = S.mine.status === "stale" ? `<div class="strip inset"><b>Saved copy from ${esc(when(doc.as_of))}</b><button class="btn" type="button" ${act("retry-mine")}>Retry</button></div>` : "";
       const groups = [], receipts = mineReceipts();
@@ -1188,7 +1188,7 @@
   function boardRecord() {
     const seg = `<div class="seg" role="group" aria-label="Group results by">${Object.entries(GROUPS).map(([k, g]) => `<button type="button" aria-pressed="${S.group === k}" ${act("group", k)}>${g[2]}</button>`).join("")}</div>`;
     const R = S.results.cs2.doc;
-    if (!R) return S.results.cs2.status === "unavailable" ? `<div class="state"><h3>Scout board record unavailable</h3><p>Scout could not read the record just now.</p><button class="btn" type="button" ${act("retry-results")}>Retry</button></div>` : '<div class="skel-line tall"></div><div class="skel-line tall"></div>';
+    if (!R) return S.results.cs2.status === "unavailable" ? `<div class="state"><h3>Grader board record unavailable</h3><p>Grader could not read the record just now.</p><button class="btn" type="button" ${act("retry-results")}>Retry</button></div>` : '<div class="skel-line tall"></div><div class="skel-line tall"></div>';
     if (!R.picks || !R.picks.picks) return `<p class="ln-note">No settled picks meet this rule yet.</p><p class="ln-note">${esc(R.rule)}.</p><p class="ln-note">${esc(R.definition)}</p>`;
     const p = R.picks, g = GROUPS[S.group], rowsOut = (R[g[0]] || []).filter((x) => x.picks).map((x) => resRow(g[1] ? x[g[1]] : `${x.stat} ${x.scope}`, x)).join("");
     const ci = p.observed_ci ? `95% interval ${pct(p.observed_ci[0])} to ${pct(p.observed_ci[1])}, whole matches resampled.` : "";
@@ -1215,7 +1215,7 @@
   }
   function otherRecord(k) {
     const box = S.results[k], R = box.doc, name = D.sports[k];
-    if (!R) return box.status === "unavailable" ? `<div class="state"><h3>${esc(name)} record unavailable</h3><p>Scout could not read the record just now.</p><button class="btn" type="button" ${act("retry-results")}>Retry</button></div>` : '<div class="skel-line tall"></div><div class="skel-line tall"></div>';
+    if (!R) return box.status === "unavailable" ? `<div class="state"><h3>${esc(name)} record unavailable</h3><p>Grader could not read the record just now.</p><button class="btn" type="button" ${act("retry-results")}>Retry</button></div>` : '<div class="skel-line tall"></div><div class="skel-line tall"></div>';
     const t = R.totals, word = t.match_word || "matches";
     const stale = box.status === "stale" ? '<p class="ln-note">Saved copy.</p>' : "";
     if (!t.picks) return `${stale}<p class="ln-note">No settled forecasts meet this rule yet.</p><p class="ln-note">${esc(R.population)}</p><p class="ln-note">${esc(R.rule)}</p>`;
@@ -1223,7 +1223,7 @@
     const group = keys.includes(S.group) ? S.group : keys[0];
     const seg = keys.length > 1 ? `<div class="seg" role="group" aria-label="Group results by">${keys.map((g) => `<button type="button" aria-pressed="${group === g}" ${act("group", g)}>${names[g]}</button>`).join("")}</div>` : "<span></span>";
     const ci = t.ci ? `95% interval ${pct(t.ci[0])} to ${pct(t.ci[1])}, whole ${word} resampled.` : "";
-    const mk = R.market ? `<p class="ln-note">Same props, scored against the market estimate ${esc(R.market.market || "")}: Scout Brier ${num(R.market.scout_brier)}, market Brier ${num(R.market.market_brier)} on ${num(R.market.pairs)} props across ${num(R.market.games)} games. Lower is better.</p>` : "";
+    const mk = R.market ? `<p class="ln-note">Same props, scored against the market estimate ${esc(R.market.market || "")}: Grader Brier ${num(R.market.scout_brier)}, market Brier ${num(R.market.market_brier)} on ${num(R.market.pairs)} props across ${num(R.market.games)} games. Lower is better.</p>` : "";
     return `${stale}<div class="res-top"><div class="rec-strip"><div><b>${t.wins == null ? t.picks : `${t.wins}-${t.losses}`}</b><span>${t.wins == null ? "Settled forecasts" : "Won-lost"}, ${t.pushes == null ? "pushes apart" : t.pushes === 1 ? "1 push apart" : `${t.pushes} pushes apart`}</span></div><div><b>${t.observed == null ? "--" : pct(t.observed)}</b><span>Hit rate, settled forecasts</span></div><div><b class="gold-t">${t.printed == null ? "--" : pct(t.printed)}</b><span>Forecast chance, average</span></div><div><b>${t.matches == null ? "--" : t.matches}</b><span>${cap(word)}</span></div></div></div>
       <p class="ln-note">${esc(R.population)}</p><p class="ln-note">${esc(R.rule)} ${ci} ${R.as_of ? `As of ${esc(when(R.as_of))}.` : ""}</p>${R.gate ? `<p class="ln-note">${esc(R.gate)}</p>` : ""}
       <div class="res-bar">${seg}<div class="res-legend"><span><i class="st"></i>Forecast chance</span><span><i class="ob"></i>Hit rate</span></div></div>
@@ -1233,8 +1233,8 @@
     const box = $("view-results"), on = sportsOn(), k = on.includes(S.resSport) ? S.resSport : "cs2";
     const tabs = on.length > 1 ? `<div class="seg res-tabs" role="group" aria-label="Sport">${on.map((x) => `<button type="button" aria-pressed="${k === x}" ${act("res-sport", x)}>${esc(D.sports[x])}</button>`).join("")}</div>` : "";
     const head = `<div class="page-h"><div><h1 id="results-h" tabindex="-1">Results</h1><p>Separate records. They are never added together. A push is its own result: it is never a win.</p></div>${tabs}</div>`;
-    const title = k === "cs2" ? "Scout board record" : S.results[k].doc ? S.results[k].doc.label : `${D.sports[k]} record`;
-    const lede = k === "cs2" ? '<p class="ln-note">Saved Scout forecasts that meet the rule and definition below, whoever tracked them.</p>' : "";
+    const title = k === "cs2" ? "Grader board record" : S.results[k].doc ? S.results[k].doc.label : `${D.sports[k]} record`;
+    const lede = k === "cs2" ? '<p class="ln-note">Saved Grader forecasts that meet the rule and definition below, whoever tracked them.</p>' : "";
     const inner = `<section class="res-sec first" aria-labelledby="res-board"><h2 id="res-board">${esc(title)}</h2>${lede}${k === "cs2" ? boardRecord() : otherRecord(k)}</section>
       <section class="res-sec" aria-labelledby="res-mine"><h2 id="res-mine">Your tracked picks</h2>${yourRecord()}</section>`;
     keepFocus(() => { box.innerHTML = head + inner; });

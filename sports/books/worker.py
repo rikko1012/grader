@@ -21,7 +21,7 @@ A metered per-game "feed" provider (none registered now: The Odds API moved to s
 ladder from the plan (plan.py), every call checked against the daily allowance and the reserve. OddsPapi reads a whole
 league per request through its own account-wide quota guard (_league_reads). Errors back off per provider
 (60 s doubling to 30 min; a refusal - 401 / 403 - waits 6 h). Polite pacing per host is in net.py. Member requests and
-the Scout board only ever read storage.
+the Grader board only ever read storage.
 """
 import argparse
 import os

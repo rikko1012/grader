@@ -1,9 +1,9 @@
 """Same-game injury report reconciliation (remaining brief 13, SPORTS_CONTEXT_RECONCILE, default off, owner on).
 
-A projection is made at its forecast_at with the injury report Scout held then; the board shows the report Scout holds
+A projection is made at its forecast_at with the injury report Grader held then; the board shows the report Grader holds
 now. When a status on either team changed in between (audit case: a player listed Questionable when his projection was
 made and Out on the board), the page must say so, with both times: the forecast's forecast_at and the ESPN source time /
-Scout read time of the new status.
+Grader read time of the new status.
 
 Built in the WORKER inside the snapshot build (sports/snapshots.build) - never in the web process. Bounded: one store
 read per distinct forecast time (at most MAX_TIMES per board, newest first) plus one for now; the comparison itself is
@@ -11,13 +11,13 @@ dict lookups over the two teams' rosters. Display only: no grade, chance, stake,
 the forecast log is never written.
 
 Rules
-- The status at time T for a player = the injury record revision Scout held at T (known_at <= T, store CURRENT rule).
+- The status at time T for a player = the injury record revision Grader held at T (known_at <= T, store CURRENT rule).
   Same record identity as the board (source_key "injury|<subject>|<event>").
 - Listed = present "yes". A record with present "no" (ESPN "Active") and no record at all both read as not listed:
   ESPN's report has no removal entry, so a player who drops off the report without an "Active" entry stays as last
   listed - that is the board's rule too, never invented here.
 - A change = the listed status differs between forecast_at and now (a detail-only change, e.g. body part, is not one).
-- Every change carries the ESPN entry date (source_as_of, None when ESPN gave none) and when Scout first held the new
+- Every change carries the ESPN entry date (source_as_of, None when ESPN gave none) and when Grader first held the new
   status (read_at = its known_at).
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ def on(env=None):
 
 
 def statuses_at(con, league, at):
-    """{player id: {status, present, detail, as_of, read_at, last_seen_at, source}} - the injury record revision Scout
+    """{player id: {status, present, detail, as_of, read_at, last_seen_at, source}} - the injury record revision Grader
     held at `at` for every player with one."""
     out = {}
     for r in store._latest_rows(con, "context", "league = ?", [league], at, READ_LIMIT):

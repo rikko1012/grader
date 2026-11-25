@@ -1,6 +1,6 @@
 """os-1 (owner 2026-11-06, scope "Underdog only") in a real browser at 1440 and 390 (real Handler + fixture data, no network):
-an Underdog LoL line listing one option reads "Over only" on the board row with its line and book - no Scout chance, letter or
-Add - its card says "Over only: Scout grades lines that offer both sides." with no Add button, the slip stays empty, and the
+an Underdog LoL line listing one option reads "Over only" on the board row with its line and book - no Grader chance, letter or
+Add - its card says "Over only: Grader grades lines that offer both sides." with no Add button, the slip stays empty, and the
 classic LoL rows say "Over only" too. PrizePicks lines (a More-only goblin included) keep their letters and Add.
 No sideways scroll. AUDIT_SHOTS=<folder> keeps screenshots. Every name is a TEST FIXTURE (tests/fixtures/workspace_lol_board.json)."""
 import os
@@ -10,7 +10,7 @@ import pytest
 
 from tests.test_upgrade_browser import in_sheet, close_sheet, browser, env, ctx, open_page, no_h_scroll, DESK, PHONE  # noqa: F401
 
-NOTE = "Over only: Scout grades lines that offer both sides."
+NOTE = "Over only: Grader grades lines that offer both sides."
 GOBLIN = {"basis": "adjusted-odds line, no allowed sides sent", "higher": {"offered": True}, "lower": {"offered": None}}
 SHOTS = Path(os.environ.get("AUDIT_SHOTS") or "")
 

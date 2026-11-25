@@ -3,7 +3,7 @@
    here would stop the whole bundle (tests/test_ui_v3_gate.py parses every bundle file).
 
    Display only:
-   - Pictures come from Scout's own origin (/img/..., img_cache.py), never from a third-party host. Which board player has a READY
+   - Pictures come from Grader's own origin (/img/..., img_cache.py), never from a third-party host. Which board player has a READY
      picture is read from /img/index/<sport>.json (exact ids from the board snapshot; a name maps only when one board player has it).
    - A picture needs the card's sport, read from the card itself (the row's record key, the open card's record key, the leg's or
      slip card's sport tag, the receipt's sport): a sport without pictures (CS2, LoL) or an unknown sport keeps the monogram, and a name

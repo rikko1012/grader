@@ -1805,7 +1805,7 @@ def _slip_feed(bk):
     b = prizepicks.board() if bk == "prizepicks" else underdog.board()
     rows = b.get("rows") or []
     # the feed's own read identity (2026-10-26 audit: the key held id(rows[0]), but prizepicks.board() hands out fresh row
-    # copies on every call, so the PrizePicks index was rebuilt on every member check): last good read, when Scout took it
+    # copies on every call, so the PrizePicks index was rebuilt on every member check): last good read, when Grader took it
     # in, the feed state (it sets every row's "stale"), the error and the row count; Underdog hands out its own row objects,
     # so their identity is a valid part of its key (a replaced board is rebuilt even within one "at")
     key = (b.get("at"), b.get("ingested_at"), b.get("state"), b.get("error"), len(rows),
@@ -2448,7 +2448,7 @@ def _lol_key(platform, market_key):
 
 LOL_SLIP_REASON = {"stake 0U": "LoL stakes are 0U until LoL picks have a settled record at real lines - no slip is suggested until then",
                    "the model's side is not offered": "the pick's side is not offered on that line",
-                   "the line offers one side only": "lines that offer one side only are not graded: Scout grades lines that offer both sides",
+                   "the line offers one side only": "lines that offer one side only are not graded: Grader grades lines that offer both sides",
                    "offered sides not": "the feed does not list the pick's side as offered",
                    "rule not": "the platform's settlement rule for that prop is not on file",
                    "not offered as a slip leg": "that stat is not used in slips",
@@ -2502,7 +2502,7 @@ def lol_one_sided_label(platform, sides, saved=None):
     return LOL_ONE_SIDED.get(saved) or _lol_one_sided(platform, sides)
 
 
-LOL_ONE_SIDED_NOTE = "{}: Scout grades lines that offer both sides."
+LOL_ONE_SIDED_NOTE = "{}: Grader grades lines that offer both sides."
 
 
 def _lol_side_offered(platform, sides, model_side):
@@ -5544,7 +5544,7 @@ class Handler(BaseHTTPRequestHandler):
                                  "grader_allows": whop_auth.has_access(uid, force=True) if uid else None})
                 return self.send(200, {"plan": q.get("plan"), "memberships": rows})
             if u.path == "/admin/pp_history" and self.authed(q.get("token")):
-                # every PrizePicks line Scout observed: openings, moves, provider-id changes, removals (prizepicks.py)
+                # every PrizePicks line Grader observed: openings, moves, provider-id changes, removals (prizepicks.py)
                 ev = prizepicks.history(q.get("market") or None, qint(q, "limit", 500, 1, 5000))
                 b = prizepicks.board()
                 return self.send(200, {"feed": {k: b.get(k) for k in ("state", "at", "checked_at", "lines", "error", "ingested_at", "source")},
@@ -6803,19 +6803,19 @@ def unsubscribe_page(member, token, confirm=False):
     import workspace_alerts, workspace_api
     esc = htmllib.escape
     shell = ("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-             "<title>Scout alerts</title><style>body{background:#000;color:#eee;font:16px/1.5 system-ui,sans-serif;margin:0;padding:24px;max-width:520px}"
+             "<title>Grader alerts</title><style>body{background:#000;color:#eee;font:16px/1.5 system-ui,sans-serif;margin:0;padding:24px;max-width:520px}"
              "button{min-height:44px;padding:0 18px;border-radius:8px;border:1px solid #f5c842;background:#f5c842;color:#000;font-weight:600}"
-             "p{color:#bbb}</style>__NEXT__</head><body><h1>Scout alerts</h1>{}</body></html>")
+             "p{color:#bbb}</style>__NEXT__</head><body><h1>Grader alerts</h1>{}</body></html>")
     shell = shell.replace("__NEXT__", "<style>" + web_file("public-next.css").decode("utf-8") + "body{padding:24px;max-width:520px}</style>" if ui_next_default() else "")
     if not workspace_alerts.unsub_ok(member, token):
-        return 400, shell.replace("{}", "<p>This link is not valid. Turn alerts off in Scout under Alerts.</p>").encode(), "text/html; charset=utf-8"
+        return 400, shell.replace("{}", "<p>This link is not valid. Turn alerts off in Prop Grader under Alerts.</p>").encode(), "text/html; charset=utf-8"
     if not confirm:
         body = (f"<p>Stop background alerts for this account? Live highlight on the research screen is not affected.</p>"
                 f"<form method=post action='/alerts/unsubscribe'><input type=hidden name=m value='{esc(member, quote=True)}'>"
                 f"<input type=hidden name=t value='{esc(token, quote=True)}'><button type=submit>Stop alerts</button></form>")
         return 200, shell.replace("{}", body).encode(), "text/html; charset=utf-8", {"Cache-Control": "no-store"}
     workspace_alerts.subscription(workspace_api.data_dir(), member, False)
-    return 200, shell.replace("{}", "<p>Done. Background alerts are off for this account. You can turn them back on in Scout under Alerts.</p>").encode(), \
+    return 200, shell.replace("{}", "<p>Done. Background alerts are off for this account. You can turn them back on in Prop Grader under Alerts.</p>").encode(), \
         "text/html; charset=utf-8", {"Cache-Control": "no-store"}
 
 

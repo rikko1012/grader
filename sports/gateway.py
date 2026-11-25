@@ -1,4 +1,4 @@
-"""The esports-process side of Scout Sports - the ONLY sports code an esports request thread runs (owner brief 2).
+"""The esports-process side of Prop Grader Sports - the ONLY sports code an esports request thread runs (owner brief 2).
 
 server.py's single flag-guarded hook calls gateway.handle_get(...) for /sports, /sports/<asset> and /api/sports/*.
 Standard library + sports/authtoken.py only: importing this module does not import the sports store, models or
@@ -41,7 +41,7 @@ ASSET_MAX = 2_000_000
 _FIXED_TYPES = {".js": "application/javascript", ".css": "text/css", ".json": "application/json", ".html": "text/html"}
 RESP_MAX = 4_000_000
 PLACEHOLDER = (b"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-               b"<title>Scout Sports</title><body style='font-family:system-ui;margin:2rem'><h1>Scout Sports</h1>"
+               b"<title>Prop Grader Sports</title><body style='font-family:system-ui;margin:2rem'><h1>Prop Grader Sports</h1>"
                b"<p>Sports is being built and is not available yet.</p></body>")
 MODES = ("service", "proxy", "inprocess")
 PAGE_ALIASES = {"results": "results.html"}          # /sports/results: admin only since 2026-11-09 (members -> /sports#/slate)

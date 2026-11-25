@@ -281,7 +281,7 @@ def check(con, item, now=None):
             rec_p = {"p_over": ca["po"], "p_under": ca["pu"], "p_push": ca["pp"]}
         for k, v in shown.items():
             if v is not None and abs(v - rec_p[k]) > DISPLAY_TOL:
-                raise Refused("display_mismatch", "The chance shown differs from Scout's record - refresh")
+                raise Refused("display_mismatch", "The chance shown differs from Grader's record - refresh")
         displayed = rec_p
     else:
         if any(v is not None for v in shown.values()):
@@ -537,7 +537,7 @@ def settle_all(store_con, con=None, settled_at=None, now=None):
 def _state_text(state):
     from .model import grade_policy
     if state is None:
-        return "No Scout chance on this line"
+        return "No Grader chance on this line"
     if state == grade_policy.STATES[2]:                 # the policy's own name for a passed forward gate
         return "Validated on live lines"
     return grade_policy.TEXT_HISTORY if state == grade_policy.STATES[1] else grade_policy.TEXT_UNVALIDATED
@@ -634,7 +634,7 @@ def _cluster_ci(items, stat, reps=1000, seed=7):
     return [round(vals[int(0.025 * (len(vals) - 1))], 4), round(vals[int(0.975 * (len(vals) - 1))], 4)]
 
 
-GRADE_TABLE_LABEL = "Scout grade: hit rate by the grade shown when each pick was tracked"
+GRADE_TABLE_LABEL = "Grader grade: hit rate by the grade shown when each pick was tracked"
 
 
 def grade_table(items):
@@ -708,20 +708,20 @@ def plain_gate_reason(why):
     'variant one_sided' on member pages). The full reason list stays in the offer view for the owner."""
     w = " ".join(why or ()).lower()
     if "one-sided" in w:                                # owner 2026-11-06: Over only / Under only lines are not graded
-        return "Scout doesn't grade or track this pick: the line offers one side only."
+        return "Grader doesn't grade or track this pick: the line offers one side only."
     if "scope" in w:
-        part = "it is a quarter or half line, and Scout only tracks full-game lines"
+        part = "it is a quarter or half line, and Grader only tracks full-game lines"
     elif "promotional" in w:
         part = "it is a promotional line"
     elif "variant" in w:
         part = "it pays differently from the standard line"
     elif "not resolved" in w:
-        part = "Scout could not match the game or the player"
+        part = "Grader could not match the game or the player"
     elif "no side offered" in w or "offer " in w:
         part = "the line is not open"
     else:
-        part = "Scout does not track this stat"
-    return "Scout can't track this pick: " + part + "."
+        part = "Grader does not track this stat"
+    return "Grader can't track this pick: " + part + "."
 
 
 def aggregate(con):
@@ -755,7 +755,7 @@ def aggregate(con):
             "notes": ["member picks only; test picks (admin token, marked test, SPORTS_PICKS_SCRATCH) are under 'test'",
                       "hit rate = wins / (wins + losses); pushes, voids and unresolved are listed, not counted",
                       "Brier / log-loss of the displayed chance of the chosen side given no push, settled picks with a "
-                      "Scout chance only",
+                      "Grader chance only",
                       "95% intervals: bootstrap over games (1,000 resamples, seed 7)",
                       "stakes are 0; research grades (rg-1, sports-gp-1 bands) are shown labelled 'Research grade - not "
                       "validated'; by_grade uses the letter recorded when each pick was tracked; no returns"]}

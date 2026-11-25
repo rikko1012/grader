@@ -8,7 +8,7 @@ like CS2 live grades. Inside the window the published chance does not separate o
 
 sq-1, in plain words:
   1. Pool. Only PrizePicks / Underdog lines that are open now: the platform feed reads ok, the start is at least LEAD_S away, the
-     row is not held, Scout's side is offered, the chance is a number. CS2 needs a live letter (A+ to B) with a stake, or a 0U
+     row is not held, Grader's side is offered, the chance is a number. CS2 needs a live letter (A+ to B) with a stake, or a 0U
      stake that only the same-match exposure cap took away. LoL needs the model's letter (A+ to B; LoL letters carry 0 units).
      NBA / NFL letters (A to C, released by the owner 2026-11-08, ct-1b) have no settled band yet: research_ok=True lets them in
      (the hub always passes it since 2026-11-12) and they rank at RESEARCH_WEIGHT; research_ok=False keeps the frozen research
@@ -333,7 +333,7 @@ def _rule_leg(l):
 
 def same_match_allowed(platform):
     """Underdog publishes that opposing players of one match are allowed (the payout may shift); PrizePicks keeps its same-match
-    limits in its app chart, so Scout does not offer them there."""
+    limits in its app chart, so Grader does not offer them there."""
     return platform == "underdog"
 
 
@@ -375,7 +375,7 @@ LINE_RULE_DEFAULT = "no_goblins"      # the member routes' default (workspace_ap
 
 
 def line_ok(l, lines):
-    """The member's goblin rule for one leg Scout picks: standard = no goblins or demons, no_goblins = no goblins (demons allowed),
+    """The member's goblin rule for one leg Grader picks: standard = no goblins or demons, no_goblins = no goblins (demons allowed),
     one_goblin / all = any line type (one_goblin is capped per slip by max_goblins)."""
     lt = (l or {}).get("line_type") or "standard"
     if lines == "standard":
@@ -540,7 +540,7 @@ def why_line(legs, pool_size, first, reused, spread=False):
             else "Best all-hit chance on the board" if first else "Best all-hit chance left" + ("" if reused else " with unused props"))
     one = "one leg each" if matches == len(legs) else "same-match legs"
     research = sum(1 for l in legs if l["research"] and not l.get("band"))
-    tail = f"; {research} NBA/NFL {'leg' if research == 1 else 'legs'} ranked by Scout chance (no settled record yet)" if research else ""
+    tail = f"; {research} NBA/NFL {'leg' if research == 1 else 'legs'} ranked by Grader chance (no settled record yet)" if research else ""
     return f"{head}: {matches} matches, {one}; legs rank {ranks} of {pool_size} by settled hit rate{tail}."
 
 
@@ -626,7 +626,7 @@ def build(legs, opts):
             shortage = (f"Mixed sports needs legs from 2 sports; the eligible legs on {label} are all one sport right now."
                         if len(by_sport) < 2 else f"No valid mixed-sport slip could be formed from the eligible legs on {label}.")
         elif no_repeat:
-            shortage = "No props were repeated: Scout's search found no more valid slips among the unused eligible legs."
+            shortage = "No props were repeated: Grader's search found no more valid slips among the unused eligible legs."
         else:
             shortage = "Every other valid combination of the eligible legs is already in this batch."
     return {"slips": slips, "shortage": shortage, "search": {"nodes": nodes, "exact": exact, "node_limit": NODE_LIMIT, "pool_cap": POOL_CAP}}
@@ -643,7 +643,7 @@ def _brief(l):
 def advise(slip, legs_by_key, ranked, entry_type=None, lines="all"):
     """slip: [{sport, book, row_id, side, player, team, event, stat, period}] in the member's order (never reordered).
     legs_by_key: every pool leg by key (all platforms); ranked: pool legs best first. -> [{key, notes, in_pool, rank?, band?,
-    replacement?}] one per leg, same order. lines: the member's goblin rule for what Scout suggests; a leg the member chose is never
+    replacement?}] one per leg, same order. lines: the member's goblin rule for what Grader suggests; a leg the member chose is never
     flagged for its line type. Each slip leg may carry line_type (the route reads it from the board), so a goblin the member added
     that is not in the pool still counts toward "at most 1 goblin"."""
     out = []
@@ -663,7 +663,7 @@ def advise(slip, legs_by_key, ranked, entry_type=None, lines="all"):
             elif o.get("sport") == s.get("sport") and o.get("event") and o.get("event") == s.get("event"):
                 allowed = same_match_allowed(s.get("book"))
                 notes.append({"code": "same_match", "text": f"Same match as {o.get('player')}: results can move together."
-                              + ("" if allowed else " PrizePicks same-match limits are in its app; Scout does not offer this.")})
+                              + ("" if allowed else " PrizePicks same-match limits are in its app; Grader does not offer this.")})
         row = {"key": key, "notes": notes, "in_pool": me is not None}
         if me is not None:
             row.update(rank=me["rank"], band=_brief(me)["band"], rank_p=round(me["rank_p"], 4))

@@ -174,9 +174,9 @@
       $("ss-build").disabled = !p.eligible;
       if (!p.eligible) {                               // never a silent "0 picks": a clear locked state with the reasons
         el.innerHTML = '<div class="ss-locked" role="status"><p><strong>No pick can go into ' + (/^[AEIOU]/.test(LABEL[ctx().platform] || "") ? "an " : "a ") + esc(LABEL[ctx().platform]) + " " + esc(ctx().league.toUpperCase()) +
-          " slip right now.</strong> " + (p.offers ? "Scout holds " + int(p.offers) + " " + esc(LABEL[ctx().platform]) + " lines, and none can be used yet:" : "No " + esc(LABEL[ctx().platform]) + " lines are on the board yet.") + "</p>" +
+          " slip right now.</strong> " + (p.offers ? "Grader holds " + int(p.offers) + " " + esc(LABEL[ctx().platform]) + " lines, and none can be used yet:" : "No " + esc(LABEL[ctx().platform]) + " lines are on the board yet.") + "</p>" +
           (p.offers ? '<ul class="ss-reasons">' + reasonList(p) + "</ul>" : "") +
-          '<p class="ss-help">Lines open again as books post the next games and Scout projects them. Prices as of ' + esc(when(p.snapshot_at)) + ".</p></div>";
+          '<p class="ss-help">Lines open again as books post the next games and Grader projects them. Prices as of ' + esc(when(p.snapshot_at)) + ".</p></div>";
         return;
       }
       el.innerHTML = '<p><strong class="ss-num">' + int(p.eligible) + "</strong> picks can go into a slip, of " + int(p.offers) +
@@ -220,7 +220,7 @@
       '<span class="ss-pick"><span class="ss-side-' + l.side + '">' + esc(sideText(platform, l.side)) + "</span> " +
       '<span class="ss-num">' + esc(l.line) + "</span>" + (l.platform === "underdog" && l.multiplier != null && Math.abs(l.multiplier - 1) > 1e-9 ? ' <span class="ss-tag ss-mult" title="Underdog payout multiplier for this pick">' + esc(mult2(l.multiplier)) + "</span>" : "") + "</span>" +
       '<span class="ss-meta">' + esc(L.statOf(l)) + " - " + esc(l.event_ref || "") + " - " + esc(when(l.start_utc)) +
-      (l.custom ? " - no Scout chance for a line that is not offered" : l.p_win != null ? ' - Scout chance <span class="ss-num">' + pct(l.p_win) + "</span>" + (l.p_push ? " (push " + pct(l.p_push) + ")" : "") : "") +
+      (l.custom ? " - no Grader chance for a line that is not offered" : l.p_win != null ? ' - Grader chance <span class="ss-num">' + pct(l.p_win) + "</span>" + (l.p_push ? " (push " + pct(l.p_push) + ")" : "") : "") +
       (l.custom ? ' <span class="ss-tag ss-hyp">custom line - hypothetical</span>' : "") +
       (!l.custom && l.research_grade && L.gradeHtml ? " " + L.gradeHtml(l.research_grade, l.side, null) : "") +
       (l.research_only ? ' <span class="ss-tag ss-research" title="' + esc(RESEARCH_TEXT) + '">Research estimate · stake 0</span>' : "") + "</span>" + (extra || "") + "</li>";
@@ -379,7 +379,7 @@
   var TEMPLATE = [
     '  <header class="ss-head">',
     '    <div>',
-    '      <p class="ss-kicker">Scout Sports</p>',
+    '      <p class="ss-kicker">Prop Grader Sports</p>',
     '      <h1 id="ss-title">Slip Studio</h1>',
     '    </div>',
     '    <div class="ss-context" role="group" aria-label="Sport and platform">',

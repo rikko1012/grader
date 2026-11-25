@@ -15,7 +15,7 @@ th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;white
 th{color:var(--muted);font-weight:600}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
 .flag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin:2px;font-size:12px}
 
-/* Scout diagnostics workspace */
+/* Grader diagnostics workspace */
 :root{--bg:#090d14;--panel:#111b29;--line:#293950;--text:#eef4fc;--muted:#a4b4ca}
 *{box-sizing:border-box}body{background:radial-gradient(ellipse at 95% 0,#1c314d66,transparent 45%),var(--bg);font-family:Inter,system-ui,sans-serif;line-height:1.65}.wrap{max-width:1440px;padding:32px}
 .diag-nav{display:flex;justify-content:space-between;gap:16px;padding:0 0 24px;border-bottom:1px solid var(--line);margin-bottom:30px;color:#ffb477;font-size:11px;font-weight:700;letter-spacing:.15em}.diag-nav a{color:var(--muted);text-decoration:none;letter-spacing:0;font-size:13px}
@@ -133,7 +133,7 @@ async function loadStore() {
     <div class="muted">${esc(S.gaps_total ?? (S.gaps || []).length)} recorded gaps (immutable; missing quotes are never backfilled)</div>`;
 }
 loadStore();
-// Scout Sports daily grade check (REGISTER A9a): per league the A9 5 verdict, letters stated vs hit, and containment
+// Prop Grader Sports daily grade check (REGISTER A9a): per league the A9 5 verdict, letters stated vs hit, and containment
 async function loadSportsGrades() {
   const el = $("#sportsgrades");
   let G;

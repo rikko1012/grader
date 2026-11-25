@@ -133,7 +133,7 @@ def test_my_picks_v3_keeps_every_field(browser, env, monkeypatch, size, theme):
         p.locator(f"{sec} .u-pick button[data-u=pick]").first.click()
         p.wait_for_selector(f"{sec} .u-pick-body .u-kv")
         kv = p.locator(f"{sec} .u-pick-body .u-kv").inner_text()
-        for k in ("Chance you saw", "Scout read", "Projection", "Book", "Tracked", "Receipt"):
+        for k in ("Chance you saw", "Grader read", "Projection", "Book", "Tracked", "Receipt"):
             assert k in kv, k
         assert p.locator(f"{sec} .u-pick-body .u-time li").count() >= 1
         # the light / dark ground is the v3 one, and the page clears the phone bottom bar

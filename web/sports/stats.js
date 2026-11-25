@@ -1,4 +1,4 @@
-/* Scout Sports - pure display functions (no DOM). Shared by every surface so one record always renders the same way.
+/* Prop Grader Sports - pure display functions (no DOM). Shared by every surface so one record always renders the same way.
    Loaded in the page as window.SportsStats and in node tests via require(). */
 (function (root) {
   "use strict";
@@ -195,7 +195,7 @@
     return pct(p);
   }
   // the three probability types (owner 2026-10-24) - one label per kind, never mixed
-  var KIND_LABEL = {scout: "Scout model", informed: "Market-informed model", market: "Market estimate"};
+  var KIND_LABEL = {scout: "Grader model", informed: "Market-informed model", market: "Market estimate"};
   function kindOf(model) {
     if (!model) return null;
     if (model === "mi-1") return "informed";
@@ -214,7 +214,7 @@
      "n of 300": 300 is the MINIMUM before the registered review, not a target that validates by itself. */
   var GATE_N = 300;
   var GATE_RULE = "Pass rule (registered gate F): at least 300 settled props from 100+ games at real offered lines; " +
-    "Scout's chance on its side within 3 points of how often that side hit (game-clustered interval including 0); " +
+    "Grader's chance on its side within 3 points of how often that side hit (game-clustered interval including 0); " +
     "and a lower log-loss than the market-only baseline on the same props. Reviewed at 300, 600 and 1,000 settled " +
     "props; nothing passes automatically.";
   function validationState(settled, target) {     // "1,566 settled (minimum 300) · under review"
@@ -239,14 +239,14 @@
     return INJ[k] || (k.charAt(0).toUpperCase() + k.slice(1)).replace(/_/g, " ");
   }
   function plural(n, one, many) { return int(n) + " " + (n === 1 ? one : (many || one + "s")); }
-  // which kind of number a forecast record is: Scout's own model, or a model read from market prices
+  // which kind of number a forecast record is: Grader's own model, or a model read from market prices
   var MARKET_MODELS = {"mc-1": "market consensus", "sharp-2": "Kalshi ladder", "sharp-1": "sharp books"};
   function modelSource(m) {
     if (!m) return null;
     if (m.indexOf("mkt-") === 0) return {kind: "market", label: "Market model · " + bookName(m.slice(4))};
     if (MARKET_MODELS[m]) return {kind: "market", label: "Market model · " + m + " (" + MARKET_MODELS[m] + ")"};
-    if (m === "mi-1") return {kind: "scout", label: "Scout mi-1 (market-informed)"};
-    return {kind: "scout", label: "Scout " + m};
+    if (m === "mi-1") return {kind: "scout", label: "Grader mi-1 (market-informed)"};
+    return {kind: "scout", label: "Grader " + m};
   }
 
   var KINDS = {devig: "both sides, no-vig", mid: "midpoint", one_sided: "one side priced only - no chance",

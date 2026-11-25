@@ -1,4 +1,4 @@
-/* Scout Sports - ux agent: card actions (sw-act-*), slip tray (sw-tray-*), filters (sw-fx-*), My picks (sw-mp-*).
+/* Prop Grader Sports - ux agent: card actions (sw-act-*), slip tray (sw-tray-*), filters (sw-fx-*), My picks (sw-mp-*).
    Every rule is scoped under .sw (the Sports page only). */
 /* card actions: Over / Under selector, then Add to slip / Track pick */
 .sw .sw-act{margin-top:10px}

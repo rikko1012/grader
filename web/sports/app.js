@@ -1,4 +1,4 @@
-/* Scout Sports member workspace: Slate -> Prop board -> Player workspace -> Match context -> Slip Studio link -> Results.
+/* Prop Grader Sports member workspace: Slate -> Prop board -> Player workspace -> Match context -> Slip Studio link -> Results.
    Data: only the sports API's precomputed snapshots (sports/api_board.py), fetched with the st1 token flow:
    GET /api/sports/token (esports origin, server-side paid check) -> {token, exp, api_base}; then
    api_base + /api/sports/... with "Authorization: Bearer <token>", refreshed before exp.
@@ -24,7 +24,7 @@
   var STALE_SNAPSHOT_S = 20 * 60, STALE_QUOTE_S = 30 * 60, CACHE_TTL_MS = 60000, BOARD_PAGE = 120;
   var REASONS = {
     market_only_baseline: "Market-only: the chance comes from Kalshi prices for this player and stat, not from his own statistics.",
-    kalshi_quote_time_unknown: "Kalshi does not timestamp its quotes; their age is measured from when Scout observed them.",
+    kalshi_quote_time_unknown: "Kalshi does not timestamp its quotes; their age is measured from when Grader observed them.",
     research_only_no_grade: "No grade or stake: this model version has no grade policy.",
     between_rungs: "The line sits between two Kalshi rungs; the chance blends the reading from both.",
     same_line: "Kalshi lists this exact line.",
@@ -202,12 +202,12 @@
   function mkSource(mk, c) {                            // the market estimate's record, one click away
     var now = Date.now(), hid = S.hiddenBooks(mk, now);
     return src({title: "Market estimate (" + (c ? S.plural(c.n, "book") : "no book") + ")",
-      freshness: "observed age: a book counts when Scout re-read its price within the last 15 min (unchanged prices included), whatever the book's own last-change time",
+      freshness: "observed age: a book counts when Grader re-read its price within the last 15 min (unchanged prices included), whatever the book's own last-change time",
       rule: "mc-1 rule: equal-weight log-odds of eligible books (fresh <= 15 min, both sides priced or an exchange midpoint), each book's nearest line moved to this line with the stat's measured spread; the line's own book never counts for itself",
       "books counted": ((c && c.used) || []).map(bookName),
       "each book": S.usableBooks(mk, now).map(function (b) { return bookName(b.p) + " " + S.line(b.l) + ": " + S.bookPrice(b) + " -> Over " + S.bookChance(b) + " (" + S.age(b.t) + ")"; }),
       "not shown (stale or not usable)": hid.map(function (b) { return bookName(b.p) + " " + S.line(b.l) + ": " + (b.why || "not usable") + ", observed " + S.age(b.t); }),
-      "independence": "From book prices - not Scout data and not a confirmation of a Scout number"}, "source");
+      "independence": "From book prices - not Grader data and not a confirmation of a Grader number"}, "source");
   }
   function mkBooks(mk, open, bare) {                    // per-book list: ONLY books with a usable price now
     var shown = S.usableBooks(mk, Date.now());
@@ -287,11 +287,11 @@
       "<p>Board built " + esc(S.localTime(manifest.built_at)) + ". Chances are unconditional: Over, Under and Push add up to 100%. History: ESPN; prices on the board: " + esc(marketSources(manifest)) + ".</p>" +
       '<details class="sw-more"><summary>Technical details</summary><p class="sw-small sw-faint">Snapshot ' + esc(manifest.version) + " · contracts " + esc(manifest.contracts) + " · capabilities " + esc(manifest.capabilities) + (tech ? " · model versions " + tech : "") + "</p></details></details>";
   }
-  function modelWords(mv) {                             // "sm-1" -> "Scout projection", "mkt-polymarket" -> "Market (Polymarket)"
+  function modelWords(mv) {                             // "sm-1" -> "Grader projection", "mkt-polymarket" -> "Market (Polymarket)"
     var k = S.kindOf(mv);
     if (k === "market") { var x = S.modelSource(mv); return x && /·/.test(x.label) ? "Market (" + x.label.split("·")[1].trim().replace(/ \(.*\)$/, "") + ")" : "Market"; }
-    if (k === "informed") return "Scout projection (market-informed)";
-    return "Scout projection";
+    if (k === "informed") return "Grader projection (market-informed)";
+    return "Grader projection";
   }
   function marketSources(manifest) {                     // the books actually on the board now (manifest.sources)
     var s = manifest && manifest.sources || {};
@@ -343,7 +343,7 @@
         else if (e && (e.ci || e.not_evaluable_on_tune)) groups.none.push([r, e.ci ? "weight 0 · tune change " + S.num(e.tune_crps_diff, 4) + " (" + S.num(e.ci[0], 4) + " to " + S.num(e.ci[1], 4) + ")" : "weight 0 · could not be evaluated: " + e.not_evaluable_on_tune]);
         else groups.na.push([r, r.status === "unavailable" ? "not available: " + (r.source || "") : r.status === "forward only (logged, not yet testable)" ? "logged forward - not testable yet" : r.status === "derivable later" ? "not built yet: " + (r.source || r.treatment || "") : (r.treatment || r.status)]);
       });
-      var titles = {used: "Used by the Scout model", base: "Base projection", shadow: "Tested - in the sm-2 challenger only", none: "Tested - no measured effect", na: "Not available or not tested"};
+      var titles = {used: "Used by the Grader model", base: "Base projection", shadow: "Tested - in the sm-2 challenger only", none: "Tested - no measured effect", na: "Not available or not tested"};
       el.innerHTML = '<h2 id="' + id + '-h">Factors · ' + esc(mk.stat_label) + "</h2>" + ["used", "base", "shadow", "none", "na"].filter(function (k) { return groups[k].length; }).map(function (k) {
         return '<details class="sw-more"' + (k === "used" ? " open" : "") + "><summary>" + esc(titles[k]) + " · " + groups[k].length + '</summary><div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">' + esc(titles[k]) + '</caption><thead><tr><th>Factor</th><th>Status</th></tr></thead><tbody>' +
           groups[k].map(function (x) { return "<tr><td>" + esc(x[0].factor) + '<div class="sw-faint sw-small">' + esc(x[0].definition || "") + '</div></td><td class="sw-small">' + esc(x[1]) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
@@ -377,7 +377,7 @@
   function quoteSource(q) {
     return src({title: bookName(q.p) + " offer", "offer record": q.r, line: S.line(q.l), variant: q.v,
       "sides offered": (q.o[0] ? "Over " : "") + (q.o[1] ? "Under" : "") || "none",
-      "last observed by Scout": S.localTime(q.t) + " (" + S.age(q.t) + ")",
+      "last observed by Grader": S.localTime(q.t) + " (" + S.age(q.t) + ")",
       "source update time": q.su ? S.localTime(q.su) : "not given by the source",
       "payout multipliers": q.m ? "Over " + (q.m[0] || "-") + " / Under " + (q.m[1] || "-") : null,
       "Kalshi YES bid / ask": q.k ? S.cents(q.k[0]) + " / " + S.cents(q.k[1]) : null}, "Quote record");
@@ -398,12 +398,12 @@
     return '<span class="sw-tag inj">' + esc(st || "Injury report") + "</span>" + (rest ? ' <span class="sw-injd">· ' + esc(rest) + "</span>" : "");
   }
   // ONE coverage definition on Slate, Match context and the board (sports/scout_chance.py sc-1): props = player
-  // markets Scout holds for the game; "with a Scout chance" = props (markets) with at least one sc-1 Scout chance
+  // markets Grader holds for the game; "with a Grader chance" = props (markets) with at least one sc-1 Grader chance
   // (snapshot coverage.scout_chances.markets; the board counts its rows with m.sc > 0 - the same rule).
   function scMarkets(c) { return c.scout_chances && typeof c.scout_chances.markets === "number" ? c.scout_chances.markets : c.forecasts; }
   function coverageKv(c) {
     var n = scMarkets(c);
-    return '<div class="sw-kv"><span><b>' + S.int(c.markets) + "</b> " + (c.markets === 1 ? "prop" : "props") + "</span><span><b>" + S.int(n) + "</b> with a Scout chance</span><span><b>" + S.int(c.players) + "</b> " + (c.players === 1 ? "player" : "players") + "</span></div>";
+    return '<div class="sw-kv"><span><b>' + S.int(c.markets) + "</b> " + (c.markets === 1 ? "prop" : "props") + "</span><span><b>" + S.int(n) + "</b> with a Grader chance</span><span><b>" + S.int(c.players) + "</b> " + (c.players === 1 ? "player" : "players") + "</span></div>";
   }
   // Game lines (spread / total / moneyline) - rendered ONLY from typed fields the slate snapshot carries:
   // e.game_lines = {spread|total|moneyline: {..., source, observed_at, history: [[iso, value], ...]}} (contract in
@@ -446,7 +446,7 @@
       freshness(man, got); footer(man);
       var f = state.filters[state.lg];
       var html = '<div class="sw-eyebrow">' + state.lg.toUpperCase() + ' · Slate</div><h1 class="sw-h1">Games and coverage</h1>' +
-        '<p class="sw-sub">Start times in your time zone. Each game lists its props, how many of them have a Scout chance, and the injury report.</p>' +
+        '<p class="sw-sub">Start times in your time zone. Each game lists its props, how many of them have a Grader chance, and the injury report.</p>' +
         '<div class="sw-filters" role="search"><div class="sw-field grow"><label for="sw-sq">Find a team</label>' +
         '<input id="sw-sq" type="search" aria-keyshortcuts="/" autocomplete="off" placeholder="' + esc(L.teamPlaceholder(state.lg)) + '" value="' + esc(f.slateQ || "") + '"></div>' +
         '<button type="button" class="sw-btn" id="sw-sreset">Reset</button></div><div id="sw-slatebody"></div>';
@@ -459,7 +459,7 @@
         var evs = d.events.filter(function (e) {           // QoL 1107: case, accents and extra spaces ignored (the board's rule)
           return S.textMatch([e.home.abbr, e.home.name, e.away.abbr, e.away.name, teamAbbr(e.home), teamAbbr(e.away)].join(" "), f.slateQ);
         });
-        if (!d.events.length) { body.innerHTML = stateBox("No games on the slate", "Scout lists " + state.lg.toUpperCase() + " games from today through the next days once the schedule is published."); return; }
+        if (!d.events.length) { body.innerHTML = stateBox("No games on the slate", "Grader lists " + state.lg.toUpperCase() + " games from today through the next days once the schedule is published."); return; }
         // games that started / finished leave the main list (owner: the slate shows what can still be played);
         // they stay one click away in a collapsed section so today's results context is not lost
         var done = gameDone;
@@ -482,7 +482,7 @@
               }).join("") + "</ul></details>" : '<div class="sw-faint sw-small">No player of either team on the ESPN injury report.</div>') +
               '<div class="sw-actions"><a class="sw-btn sw-btn-sm" href="#/board?lg=' + state.lg + '&ev=' + encodeURIComponent(e.event_id) + '">Props for this game</a><a class="sw-btn sw-btn-sm" href="#/game/' + encodeURIComponent(e.event_id) + '">Match context</a></div>' +
               '<details class="sw-more sw-gdetails"><summary>Details</summary><p class="sw-small sw-faint">Start from ' + esc(e.start_source || "the schedule") + " · checked " + esc(S.age(e.observed_at)) +
-              ((e.reschedules || []).length ? " · rescheduled " + e.reschedules.length + "x" : "") + " " + src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: L.eventStatus(e.status), "observed by Scout": S.localTime(e.observed_at), reschedules: (e.reschedules || []).map(function (r) { return r.from_utc + " -> " + r.to_utc; })}) + "</p></details></article>";
+              ((e.reschedules || []).length ? " · rescheduled " + e.reschedules.length + "x" : "") + " " + src({title: "Game record", "event record": e.record_id, "start (UTC)": e.start_utc, "start source": e.start_source, status: L.eventStatus(e.status), "observed by Grader": S.localTime(e.observed_at), reschedules: (e.reschedules || []).map(function (r) { return r.from_utc + " -> " + r.to_utc; })}) + "</p></details></article>";
         }
         var day = null;
         if (!up.length) out += stateBox("No upcoming games", "Every " + state.lg.toUpperCase() + " game on the slate has started. New games appear here as soon as the schedule and lines are published.");
@@ -640,10 +640,10 @@
     if (!any) return "";                                // contained wording lives on the held rows (A9a 4), never here
     return '<p class="sw-grade-banner" data-grade-banner>' + esc(L.GRADE_TAG) + " · " + esc(L.GRADE_BANDS) + " · stakes 0</p>";
   }
-  function scoutBlock(m, q, f, B) {                     // Scout's own projection (sm-1) or mi-1, labelled
+  function scoutBlock(m, q, f, B) {                     // Grader's own projection (sm-1) or mi-1, labelled
     if (q.v === "one_sided")                            // owner 2026-11-06 (cap-2): labelled by its side, never graded
       return '<div class="sw-num-block sw-scout" data-onesided><div class="sw-num-label">' + (q.o && q.o[0] ? "Over only" : "Under only") +
-        '</div><p class="sw-small">Scout grades lines that offer both sides.</p></div>';
+        '</div><p class="sw-small">Grader grades lines that offer both sides.</p></div>';
     var stat = (B.stats[m.st] || m.st).toLowerCase(), kind = f ? S.kindOf(f.m) : null;
     if (f && kind !== "market") {
       return '<div class="sw-num-block sw-scout"><div class="sw-num-label">' + esc(S.kindLabel(f.m)) + "</div>" +
@@ -654,12 +654,12 @@
     }
     if (q.lr) {
       var src0 = B.fc[q.lr.f];
-      return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Scout model</div>' +
+      return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Grader model</div>' +
         (src0 && src0.mu !== null && src0.mu !== undefined ? '<div class="sw-proj">Projected: <b>' + S.num(src0.mu, 1) + "</b> " + esc(stat) + (src0.iv ? ' <span class="sw-faint">· 80% range ' + src0.iv[0] + "–" + src0.iv[1] + "</span>" : "") + "</div>" : "") +
         (q.ca ? threeChances(q.ca.po, q.ca.pu, q.ca.pp, q.l, null) : threeChances(q.lr.po, q.lr.pu, q.lr.pp, q.l, null)) + gradeLine(q) +
         techDetails(["sm-1 · read at this line from the forecast at " + S.line(q.lr.ln), esc(settledText(settledOf(B, "sm-1")))], src0 ? fcSource(q.lr.f, src0, q) : "") + "</div>";
     }
-    if (q.nf) return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Scout model</div><p class="sw-small">Projection unavailable: ' + esc(q.nf) + "</p></div>";
+    if (q.nf) return '<div class="sw-num-block sw-scout"><div class="sw-num-label">Grader model</div><p class="sw-small">Projection unavailable: ' + esc(q.nf) + "</p></div>";
     return "";
   }
   function marketBlock(m, q, f, B) {                    // market estimate from book prices - separate, labelled
@@ -789,7 +789,7 @@
     if (!ms.length) return "";                           // count - no research / under-review status above released letters
     return '<p class="sw-tb-valid" id="sw-validation">Forward record: ' + ms.map(function (x) {
       return esc(S.kindLabel(x.model_version)) + " " + esc(S.int(x.settled || 0)) + " settled"; }).join(" · ") +
-      ". Edge = Scout chance minus the market chance at the same line, in probability points (not expected value).</p>" +
+      ". Edge = Grader chance minus the market chance at the same line, in probability points (not expected value).</p>" +
       '<details class="sw-validation-details"><summary>How validation works</summary><p class="sw-small sw-faint sw-tb-rule">' + esc(S.GATE_RULE) + "</p></details>";
   }
   function renderBoard(params, onlyEvent) {
@@ -820,7 +820,7 @@
         var total = live.filter(function (m) { return (ff.more || m.pr) && (!onlyEvent || m.e === onlyEvent); }).length;
         var cnt = document.getElementById("sw-bcount"), body = document.getElementById("sw-bbody");
         var withFc = rows.filter(function (m) { return (m.sc || 0) > 0; }).length;   // sc-1, = slate coverage.scout_chances.markets
-        cnt.innerHTML = prefBookHtml(B) + '<p class="sw-count" aria-live="polite"><span><b>' + S.int(rows.length) + "</b> of " + S.int(total) + (total === 1 ? " market" : " markets") + "</span><span><b>" + S.int(withFc) + "</b> with a Scout chance</span>" +
+        cnt.innerHTML = prefBookHtml(B) + '<p class="sw-count" aria-live="polite"><span><b>' + S.int(rows.length) + "</b> of " + S.int(total) + (total === 1 ? " market" : " markets") + "</span><span><b>" + S.int(withFc) + "</b> with a Grader chance</span>" +
           (!ff.more && B.board.secondary_markets ? "<span>" + S.int(B.board.secondary_markets) + " more under “More stats”</span>" : "") + "</p>";
         if (!total) {                                   // match context: a started game is not "no lines yet"
           var gev = onlyEvent && B.board.events[onlyEvent], gone = gev && R.started({ev: gev}, nowMs);
@@ -830,7 +830,7 @@
           return;
         }
         if (!B.markets.some(function (m) { return m.q.some(function (q) { return q.f; }); }))
-          cnt.innerHTML += '<div class="sw-banner">Scout chances are not published yet. The board shows every book’s line, the Market chance (every fresh book that prices the identical market, combined; each book’s own chance is listed under it), and each player’s game history (open a player).</div>';
+          cnt.innerHTML += '<div class="sw-banner">Grader chances are not published yet. The board shows every book’s line, the Market chance (every fresh book that prices the identical market, combined; each book’s own chance is listed under it), and each player’s game history (open a player).</div>';
         if (!rows.length) {
           body.innerHTML = stateBox("No props match these filters", (S.fold(ff.q) ? "Nothing on the board matches “" + esc(ff.q.trim()) + "” with these filters. Check the spelling, try" : "Try") +
             " another stat or book, or reset the filters.", '<button type="button" class="sw-btn" id="sw-reset2">Reset filters</button>');
@@ -960,7 +960,7 @@
     if (!rows && !dvp.length) return "";
     return (rows ? '<div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Team context</caption><thead><tr><th></th><th scope="col">' + esc(teamAbbr(e.away)) + '</th><th scope="col">' + esc(teamAbbr(e.home)) + "</th></tr></thead><tbody>" + rows + "</tbody></table></div>" : "") +
       (dvp.length ? '<h3 style="margin-top:10px">Defense vs position</h3><ul class="sw-list sw-small">' + dvp.join("") + "</ul>" : "") +
-      (T.as_of ? '<p class="sw-faint sw-small">' + esc(T.source || "Scout game store") + " · through " + esc(S.localTime(T.as_of, {month: "short", day: "numeric"})) + "</p>" : "");
+      (T.as_of ? '<p class="sw-faint sw-small">' + esc(T.source || "Grader game store") + " · through " + esc(S.localTime(T.as_of, {month: "short", day: "numeric"})) + "</p>" : "");
   }
 
   // --------------------------------------------------------------------------------------------- player workspace
@@ -988,7 +988,7 @@
     var lx = x(ln + 0.5);
     var ticks = [lo, Math.round((lo + hi) / 2), hi - 1].map(function (v) { return '<text x="' + x(v + 0.5).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + v + "</text>"; }).join("");
     var n = S.forecastNumbers(f);
-    var label = "Scout outcome distribution for " + S.line(ln) + ": mean " + S.num(p.mean, 1) + ". Over " + n.over + ", Under " + n.under + ", Push " + n.push + ".";
+    var label = "Grader outcome distribution for " + S.line(ln) + ": mean " + S.num(p.mean, 1) + ". Over " + n.over + ", Under " + n.under + ", Push " + n.push + ".";
     return '<svg class="sw-chart" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(label) + '">' + bars +
       '<line x1="' + lx.toFixed(1) + '" x2="' + lx.toFixed(1) + '" y1="10" y2="' + (H - 22) + '" stroke="var(--text)" stroke-dasharray="4 3"/><text x="' + (lx > W - 60 ? lx - 4 : lx + 4).toFixed(1) + '" y="20"' + (lx > W - 60 ? ' text-anchor="end"' : "") + '>line ' + esc(S.line(ln)) + "</text>" + ticks + "</svg>";
   }
@@ -1092,7 +1092,7 @@
           return '<button type="button" class="sw-qcard" data-q="' + esc(q.record_id) + '" aria-pressed="' + on + '">' + book(q.platform) +
             '<span><span class="sw-line">' + S.line(q.line) + "</span>" + (capVariant(q.variant) ? ' <span class="sw-tag alt">' + esc(q.variant) + "</span>" : "") + "</span>" +
             '<span class="sw-offered">' + offeredText([sides.over && sides.over.offered ? 1 : 0, sides.under && sides.under.offered ? 1 : 0]) + "</span>" +
-            (n ? '<span class="sw-small">O <b class="sw-p over" data-fc="' + esc(n.id) + '" data-fcside="over">' + n.over + '</b> · U <b class="sw-p under" data-fc="' + esc(n.id) + '" data-fcside="under">' + n.under + "</b></span>" : '<span class="sw-small sw-faint">' + (q.gradable ? "No Scout projection yet" : esc(L.gateReason((q.not_gradable_because || [])[0] || "") || "Not settled by Scout")) + "</span>") + "</button>";
+            (n ? '<span class="sw-small">O <b class="sw-p over" data-fc="' + esc(n.id) + '" data-fcside="over">' + n.over + '</b> · U <b class="sw-p under" data-fc="' + esc(n.id) + '" data-fcside="under">' + n.under + "</b></span>" : '<span class="sw-small sw-faint">' + (q.gradable ? "No Grader projection yet" : esc(L.gateReason((q.not_gradable_because || [])[0] || "") || "Not settled by Grader")) + "</span>") + "</button>";
         }).join("") + '</div><button type="button" class="sw-stripbtn next" data-strip="1" aria-label="More lines" hidden>›</button></div>';
         h += '<div class="sw-grid2" style="margin-top:12px"><div>' + (m.scope && m.scope !== "full_game" ? '<section class="sw-state">Period-specific history is unavailable for ' + esc(m.scope.replace(/_/g, " ")) + '. Full-game totals are not compared with this line.</section>' : historyPanel(m, ln, sel)) + '<div id="sw-without"></div></div><div>' + forecastPanel(fc, det, sel, m) + "</div></div>";
         h += contextCheckHtml(P.context_check, fc && fc.forecast_at, "Injury report since this projection", "sw-cc-h");
@@ -1106,13 +1106,13 @@
         });
         if (rungs.length) {
           h += '<details class="sw-more"><summary>Kalshi ladder: ' + S.plural(rungs.length, "rung") + " (Kalshi prices only; the market estimate combines every book)</summary><div class=\"sw-scroll\"><table class=\"sw-mini\"><caption class=\"sw-sr\">Kalshi rungs</caption><thead><tr><th>Rung (Over)</th><th class=\"num\">YES bid</th><th class=\"num\">YES ask</th><th class=\"num\">Volume</th><th class=\"num\">Open interest</th><th>Observed</th><th><span class=\"sw-sr\">Source</span></th></tr></thead><tbody>" +
-            rungs.map(function (k) { var s = k.sides[0]; return "<tr><td>" + S.line(k.line) + '</td><td class="num">' + S.cents(s.bid) + '</td><td class="num">' + S.cents(s.ask) + '</td><td class="num">' + S.num(k.liquidity.volume, 0) + '</td><td class="num">' + S.num(k.liquidity.open_interest, 0) + "</td><td class=\"sw-small\">" + esc(S.age(k.last_seen_at)) + "</td><td>" + src({title: "Kalshi rung", record: k.record_id, line: k.line, "YES bid": s.bid, "YES ask": s.ask, "source time": "not given by Kalshi", "observed by Scout": k.last_seen_at, rule: k.rule_version}) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
+            rungs.map(function (k) { var s = k.sides[0]; return "<tr><td>" + S.line(k.line) + '</td><td class="num">' + S.cents(s.bid) + '</td><td class="num">' + S.cents(s.ask) + '</td><td class="num">' + S.num(k.liquidity.volume, 0) + '</td><td class="num">' + S.num(k.liquidity.open_interest, 0) + "</td><td class=\"sw-small\">" + esc(S.age(k.last_seen_at)) + "</td><td>" + src({title: "Kalshi rung", record: k.record_id, line: k.line, "YES bid": s.bid, "YES ask": s.ask, "source time": "not given by Kalshi", "observed by Grader": k.last_seen_at, rule: k.rule_version}) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
         }
         var mq = m.market ? S.marketFor(m.market, sel && sel.record_id) : null;
         if (m.market && (S.marketShown(mq) || S.usableBooks(m.market, Date.now()).length)) {
           h += '<section class="sw-panel sw-mkpanel" aria-label="Market chance"><h2>' + esc(S.marketLabel(mq)) + (sel ? " · " + esc(bookName(sel.platform)) + " " + S.line(sel.line) : "") + "</h2>" +
             '<p class="sw-small">' + mkShort(mq, sel ? sel.line : m.market.l) + (mq && mq.used ? ' <span class="sw-faint">(' + esc(mq.used.map(bookName).join(", ")) + ")</span>" : "") + "</p>" + mkBooks(m.market, true) +
-            (fc ? '<p class="sw-faint sw-small">Scout\u2019s own chance is separate (below).</p>' : "") + "</section>";
+            (fc ? '<p class="sw-faint sw-small">Grader\u2019s own chance is separate (below).</p>' : "") + "</section>";
         }
         h += '<details class="sw-more sw-evidence"><summary>Source records</summary>' + evidencePanel(P, fc, games, m, histErr) + "</details>";
         main.innerHTML = h;
@@ -1127,17 +1127,17 @@
       function capVariant(v) { return v && ["standard", "balanced", "main", "ladder_rung", "one_sided"].indexOf(v) < 0; }
 
       function forecastPanel(fc, det, q, mk) {
-        var h = '<section class="sw-panel" aria-labelledby="sw-fc-h"><h2 id="sw-fc-h">' + esc(fc ? modelWords(fc.model_version) : "Scout projection") + (q ? " · Line " + S.line(q.line) + " · " + esc(bookName(q.platform)) : "") + "</h2>";
+        var h = '<section class="sw-panel" aria-labelledby="sw-fc-h"><h2 id="sw-fc-h">' + esc(fc ? modelWords(fc.model_version) : "Grader projection") + (q ? " · Line " + S.line(q.line) + " · " + esc(bookName(q.platform)) : "") + "</h2>";
         if (!q) return h + '<p class="sw-muted">No pick’em line for this stat.</p></section>';
         if (!fc) {
           var lr = q.line_read, lsrc = lr ? P.forecasts[lr.f] : null;
           if (lr) {
-            return h + '<p class="sw-small sw-muted">Read at this line from the Scout forecast at ' + S.line(lr.ln) + " (same distribution, same inputs)" + (lsrc ? " " + fcSource(lr.f, lsrc, {r: q.record_id}) : "") + "</p>" +
+            return h + '<p class="sw-small sw-muted">Read at this line from the Grader forecast at ' + S.line(lr.ln) + " (same distribution, same inputs)" + (lsrc ? " " + fcSource(lr.f, lsrc, {r: q.record_id}) : "") + "</p>" +
               (lsrc && lsrc.projection_mean !== null ? '<div class="sw-big"><div><span class="sw-k">Projected</span><span class="sw-v">' + S.num(lsrc.projection_mean, 1) + "</span></div>" + (lsrc.detail && lsrc.detail.interval ? '<div class="sw-small sw-muted">80% range ' + lsrc.detail.interval[0] + "–" + lsrc.detail.interval[1] + "</div>" : "") + "</div>" : "") +
               '<div class="sw-sides">' + ["over", "under", "push"].map(function (k) { return '<div class="sw-side"><span class="sw-k sw-small sw-faint">' + (k === "push" ? "Push" : (k === "over" ? "Over " : "Under ") + S.line(q.line)) + '</span><div class="sw-v sw-p ' + k + '">' + S.pct((q.cal || lr)["p" + k[0]]) + "</div></div>"; }).join("") + "</div>" + gradeLine(q) + slipButtons(q, null) + "</section>";
           }
-          return h + '<p class="sw-muted">Projection unavailable: ' + esc(q.no_fc || (mk.capability !== "supported" ? (mk.capability_reason || "market not supported by the Scout model") :
-            q.gradable ? "no Scout forecast for this line in the last run" : (q.not_gradable_because || []).map(L.gateReason).join("; "))) + "</p>" + slipButtons(q, null) + "</section>";
+          return h + '<p class="sw-muted">Projection unavailable: ' + esc(q.no_fc || (mk.capability !== "supported" ? (mk.capability_reason || "market not supported by the Grader model") :
+            q.gradable ? "no Grader forecast for this line in the last run" : (q.not_gradable_because || []).map(L.gateReason).join("; "))) + "</p>" + slipButtons(q, null) + "</section>";
         }
         var n = S.forecastNumbers(fc, q.cal && q.cal.f === fc.forecast_id ? q.cal : null);
         var sides = {}; q.sides.forEach(function (s) { sides[s.side] = s; });
@@ -1163,7 +1163,7 @@
             det.pmf.bins.filter(function (b) { return b[2] >= 0.005; }).map(function (b) { return "<tr><td>" + b[0] + (b[1] > 1 ? "–" + (b[0] + b[1] - 1) : "") + '</td><td class="num">' + S.pct(b[2]) + "</td></tr>"; }).join("") + "</tbody></table></div></details>";
         }
         if (det && det.ladder && det.ladder.length) {
-          h += '<h3 style="margin-top:14px">At another line</h3><div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Scout chances at other lines from the same distribution</caption><thead><tr><th>Line</th><th class="num">Over</th><th class="num">Under</th><th class="num">Push</th><th><span class="sw-sr">Use for history</span></th></tr></thead><tbody>' +
+          h += '<h3 style="margin-top:14px">At another line</h3><div class="sw-scroll"><table class="sw-mini"><caption class="sw-sr">Grader chances at other lines from the same distribution</caption><thead><tr><th>Line</th><th class="num">Over</th><th class="num">Under</th><th class="num">Push</th><th><span class="sw-sr">Use for history</span></th></tr></thead><tbody>' +
             det.ladder.map(function (r) {
               var cur = r.line === (ps.customLine !== undefined && ps.customLine !== null ? ps.customLine : fc.line);
               return '<tr class="' + (cur ? "sel" : "") + '"><td>' + S.line(r.line) + (r.stored ? ' <span class="sw-faint sw-small">this forecast</span>' : "") + '</td><td class="num">' + S.pct(r.p_over) + '</td><td class="num">' + S.pct(r.p_under) + '</td><td class="num">' + S.pct(r.p_push) + '</td><td><button type="button" class="sw-link sw-small" data-ladder="' + r.line + '">History<span class="sw-sr"> at ' + S.line(r.line) + "</span></button></td></tr>";
@@ -1195,7 +1195,7 @@
         var h = '<section class="sw-panel" aria-labelledby="sw-hi-h"><h2 id="sw-hi-h">History · ' + esc(mk.stat_label) + "</h2>";
         if (histErr) return h + '<p class="sw-muted">Game history did not load (' + esc(histErr.kind) + ').</p></section>';
         var have = games.filter(function (g) { return g.values && g.values[mk.stat] !== undefined; });
-        if (!have.length) return h + '<p class="sw-muted">Scout holds no game history for this player and stat yet.</p></section>';
+        if (!have.length) return h + '<p class="sw-muted">Grader holds no game history for this player and stat yet.</p></section>';
         var seas = S.seasonGames(games);
         h += '<div class="sw-windows" role="group" aria-label="Games window">' + [5, 10, 20].map(function (n) {
           return '<button type="button" data-win="' + n + '" aria-pressed="' + (ps.win === n) + '">L' + n + "</button>";
@@ -1229,7 +1229,7 @@
           used.map(function (g, gi) {
             var o = S.outcome(g.values[mk.stat], ln);
             return (gi > 0 && String(used[gi - 1].season) !== String(g.season) ? '<tr class="sw-season-row"><td colspan="' + (state.lg === "nba" ? 6 : 5) + '">season break · ' + esc(L.seasonLabel(g.season, state.lg)) + " below</td></tr>" : "") + "<tr><td>" + esc(S.shortDate(g.start_utc)) + "</td><td>" + esc((g.home === false ? "@ " : "vs ") + (g.opponent ? g.opponent.abbr : "?")) + '</td><td class="num">' + S.num(g.values[mk.stat], 0) + "</td><td>" + esc(o === "over" ? "▲ Over" : o === "under" ? "▼ Under" : o === "push" ? "● Push" : "—") + "</td>" +
-              (state.lg === "nba" ? '<td class="num">' + S.num(g.parts.min, 0) + "</td>" : "") + "<td>" + src({title: "Game " + S.shortDate(g.start_utc), "event record": g.event_record_id, source: g.source.join(", "), "stat records": Object.keys(g.record_ids).map(function (k) { return k + ": " + g.record_ids[k]; }), "observed by Scout": g.observed_at}) + "</td></tr>";
+              (state.lg === "nba" ? '<td class="num">' + S.num(g.parts.min, 0) + "</td>" : "") + "<td>" + src({title: "Game " + S.shortDate(g.start_utc), "event record": g.event_record_id, source: g.source.join(", "), "stat records": Object.keys(g.record_ids).map(function (k) { return k + ": " + g.record_ids[k]; }), "observed by Grader": g.observed_at}) + "</td></tr>";
           }).join("") + "</tbody></table></div></details>";
         // splits
         var sp = S.splits(games.filter(function (g) { return g.participation === "played"; }).slice(0, 82), mk.stat, ln, P.next_event && P.next_event.opponent);
@@ -1270,7 +1270,7 @@
         }
         if (!out) return "";
         return '<section class="sw-panel" aria-labelledby="sw-mu-h"><h2 id="sw-mu-h">Matchup · ' + esc(mk.stat_label) + '</h2><div class="sw-grid2">' + out + "</div>" +
-          '<p class="sw-faint sw-small">Descriptive: matchup numbers move the Scout projection only after a chronological test.</p></section>';
+          '<p class="sw-faint sw-small">Descriptive: matchup numbers move the Grader projection only after a chronological test.</p></section>';
       }
 
       function contextPanel(P, games, mk) {
@@ -1290,7 +1290,7 @@
           if (c.value === null || c.value === undefined) return "";
           return "<li>" + esc(c.label) + ": <b>" + esc(c.value) + "</b></li>";
         }).join("") + "</ul>" +
-          "</div></div>" + engineContext(F.engine, mk) + "</section>";       // info Scout does not hold is left out, not listed
+          "</div></div>" + engineContext(F.engine, mk) + "</section>";       // info Grader does not hold is left out, not listed
         return h;
       }
 
@@ -1394,7 +1394,7 @@
       var models = Object.keys(R.summary || {});
       if (!models.length && !(PL && PL.settled)) {
         main.innerHTML = h + (PL && RP ? '<p class="rx-status" data-rx-status>' + esc(RP.validationLine(PL.gate)) + "</p>" : "") +
-          stateBox("No settled forecasts yet", "Forecasts are scored after their games are final and Scout settles them from the box score. " + ((man && man.models || []).map(function (x) { return S.int(x.forecasts) + " forecasts waiting"; }).join(" · ") || ""));
+          stateBox("No settled forecasts yet", "Forecasts are scored after their games are final and Grader settles them from the box score. " + ((man && man.models || []).map(function (x) { return S.int(x.forecasts) + " forecasts waiting"; }).join(" · ") || ""));
         return;
       }
       // A7: the summary's comparison is the one-pick-per-prop head-to-head (rp-2) when the public file has it
@@ -1402,8 +1402,8 @@
                                                       hh: PL.head_to_head && (PL.head_to_head.rows || []).length ? PL.head_to_head : R.head_to_head});
       else h += '<section class="sw-panel"><p class="sw-muted">The summary is being prepared. The full numbers are in Details below.</p></section>';
       var det = [];
-      if (RP && R.head_to_head)          // N5 hh-1: Scout vs market on the same props (full table)
-        det.push({id: "h2h", title: "Scout vs the market: full table", sub: RP.BRIER_SUB + " Log loss score: lower is better. Score difference below 0 = Scout closer; hit-rate difference above 0 = Scout hit more often.",
+      if (RP && R.head_to_head)          // N5 hh-1: Grader vs market on the same props (full table)
+        det.push({id: "h2h", title: "Grader vs the market: full table", sub: RP.BRIER_SUB + " Log loss score: lower is better. Score difference below 0 = Grader closer; hit-rate difference above 0 = Grader hit more often.",
                   html: RP.h2hHtml(R.head_to_head, statName, {h: "h3", id: "sw-r-h2h"})});
       if (RP && PL && !RP.isContained(PL) && PL.grades && PL.grades.rows && PL.grades.rows.length)
         det.push({id: "grades", title: "Graded picks in full", sub: L.GRADE_TAG + ". " + L.GRADE_BANDS + ". Stakes 0.",
@@ -1419,11 +1419,11 @@
                     models.map(function (mv) { var s = R.summary[mv]; return '<tr><th scope="row">' + esc(mv) + '</th><td class="num">' + S.num(s.projection.mae, 2) + ci(s.projection.mae_ci) + '</td><td class="num">' + S.num(s.projection.bias, 2) + ci(s.projection.bias_ci) + '</td><td class="num">' + S.int(s.projection.n) + '</td><td class="num">' + S.int(s.pushes) + '</td><td class="num">' + S.int(s.void) + "</td></tr>"; }).join("") + "</tbody></table></div>" +
                     '<p class="sw-small sw-muted">' + models.map(function (mv) { var r = R.summary[mv].returns; return esc(mv) + ": " + (r.recorded ? r.recorded + " settlements carry an actual stake and payout." : "no settlement records an actual stake and payout, so no returns are shown."); }).join(" ") + "</p>"});
       }
-      // N7: proper names (player record), one row per player / stat / line / game / model, Scout's side named
+      // N7: proper names (player record), one row per player / stat / line / game / model, Grader's side named
       var led = L.ledgerRows(R.rows || []), dupes = (R.rows || []).length - led.length;
       if (led.length) det.push({id: "ledger", title: "Every settled forecast (" + S.int(led.length) + ")", sub: "One row per forecast, every model, with its source records." + (R.total_rows > R.rows.length ? " Newest " + S.int(R.rows.length) + " rows of " + S.int(R.total_rows) + "." : ""),
         html: (dupes ? '<p class="sw-small sw-faint">' + S.plural(dupes, "row") + " for the same player, stat, line, game and model (another book's copy of the line) shown once; the books are listed on the row.</p>" : "") +
-        '<div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Settled</th><th>Player</th><th>Stat</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Actual</th><th>Outcome</th><th class="num">Scout chance for Over/Under</th><th class="num">Brier score (3 outcomes)</th><th><span class="sw-sr">Source</span></th></tr></thead><tbody>' +
+        '<div class="sw-scroll"><table class="sw-mini"><thead><tr><th>Settled</th><th>Player</th><th>Stat</th><th class="num">Line</th><th class="num">Projection</th><th class="num">Actual</th><th>Outcome</th><th class="num">Grader chance for Over/Under</th><th class="num">Brier score (3 outcomes)</th><th><span class="sw-sr">Source</span></th></tr></thead><tbody>' +
         led.map(function (r) {
           var sd = L.scoutSide(r), stat = statName(r.stat);
           return "<tr><td>" + esc(S.shortDate(r.settled_at)) + "</td><td>" + esc(L.ledgerName(r)) + (r.books.length > 1 ? ' <span class="sw-faint sw-small">' + esc(r.books.map(bookName).join(", ")) + "</span>" : "") + "</td><td>" + esc(stat) + '</td><td class="num">' + S.line(r.line) + '</td><td class="num">' + S.num(r.projection_mean, 1) + '</td><td class="num">' + S.num(r.actual, 0) + "</td><td>" + esc(r.status === "settled" ? L.words(r.outcome || "") : L.words(r.status || "")) + '</td><td class="num">' + (sd ? esc(sd.label) + " " + S.pct(sd.p) : "—") + '</td><td class="num">' + S.num(r.brier, 3) + "</td><td>" + src({title: "Settlement", "forecast id": r.forecast_id, model: r.model_version, books: r.books.map(bookName).join(", "), "settlement records": r.settlement_ids, revision: r.settlement_revision, rule: r.rule_version, "Over / Under / Push given": S.pct(r.p_over) + " / " + S.pct(r.p_under) + " / " + S.pct(r.p_push), "chance of the settled outcome": S.pct(r.p_outcome)}) + "</td></tr>";
@@ -1440,7 +1440,7 @@
 
   function renderNotFound(r) {                          // unknown hash route: say so, never fall back silently
     banner.innerHTML = ""; footer(null);
-    main.innerHTML = stateBox("Page not found", "There is no Scout Sports page at <b>#/" + esc([r.view, r.arg].filter(Boolean).join("/")) + "</b>.",
+    main.innerHTML = stateBox("Page not found", "There is no Prop Grader Sports page at <b>#/" + esc([r.view, r.arg].filter(Boolean).join("/")) + "</b>.",
       '<p><a class="sw-btn" href="#/slate?lg=' + state.lg + '">Slate</a> <a class="sw-btn" href="#/board?lg=' + state.lg + '">Prop board</a> <a class="sw-btn" href="#/picks?lg=' + state.lg + '">My picks</a></p>');
   }
   function renderSlips() {                              // Slip Studio inside the main shell (web/sports/slips.js)
@@ -1502,7 +1502,7 @@
                     slips: "Slip Studio", player: "Player", game: "Match context"};
   function setTitle(view, name) {
     if (hubOwns()) return;
-    document.title = (name ? name + " · " : VIEW_TITLE[view] ? VIEW_TITLE[view] + " · " : "") + state.lg.toUpperCase() + " · 1time Scout Sports";
+    document.title = (name ? name + " · " : VIEW_TITLE[view] ? VIEW_TITLE[view] + " · " : "") + state.lg.toUpperCase() + " · Prop Grader Sports";
   }
   // QoL 1107: back on a slate / board tab left open 10+ minutes -> reload it quietly, keeping the board's scroll and row
   // count (no label, no polling: one read per return, the same as the member tapping Retry). Skipped while the member is

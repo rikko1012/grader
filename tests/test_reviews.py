@@ -162,8 +162,8 @@ def test_display_names():
     assert reviews.names("Sam Kim") == {"short": "Sam K.", "full": "Sam Kim"}
     assert reviews.names("  mary  ann  smith ")["short"] == "mary S."
     assert reviews.names("jordan23") == {"short": "jordan23", "full": "jordan23"}
-    assert reviews.names("someone@example.com")["short"] == "Scout member"
-    assert reviews.names("")["full"] == "Scout member"
+    assert reviews.names("someone@example.com")["short"] == "Prop Grader member"
+    assert reviews.names("")["full"] == "Prop Grader member"
     assert reviews.names("Bad‮Name\x00")["full"] == "Bad Name"
 
 

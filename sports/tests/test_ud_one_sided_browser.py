@@ -1,5 +1,5 @@
 """cap-2 (owner 2026-11-06), rendered: a one-sided Underdog line on the board table, the board cards and the Underdog
-sheet reads "Over only" with its line and price, never a Scout chance, lean, grade, edge or slip / track actions -
+sheet reads "Over only" with its line and price, never a Grader chance, lean, grade, edge or slip / track actions -
 at 390 px and 1440 px with no sideways page scroll (ui_mock harness: no server, no network). Every name / number here
 is a TEST FIXTURE."""
 import pytest
@@ -28,7 +28,7 @@ def _board():
     # a one-sided line that (wrongly) still carries a forecast and a graded signal: the page must ignore both
     one = {"r": ONE, "p": "underdog", "l": 4.5, "v": "one_sided", "o": [1, 0], "m": [0.86, None], "t": T, "su": T, "g": 0,
            "f": "f1", "x": {"v": "cf-2", "ln": "over", "pl": 0.62, "e": 6, "g": 0, "c": 4, "cw": ["fixture"], "s": 6, "n": 2, "gr": "B"},
-           "nf": "Over only line - Scout grades lines that offer both sides"}
+           "nf": "Over only line - Grader grades lines that offer both sides"}
     B["markets"].append({"k": "e", "e": "g1", "pid": "nba:player:espn:e", "n": "Fixture Echo", "pos": "G", "tm": "BOS",
                          "tid": "nba:team:espn:2", "st": "threes", "pr": 1, "cap": "supported", "q": [one], "kn": [], "kr": [],
                          "alt": [], "promo": [], "mk": {"at": {ONE: {"po": 0.52, "pu": 0.48, "pp": 0, "n": 2}}}, "sc": 0})
@@ -79,7 +79,7 @@ def test_board_table_and_cards_label_the_side_and_never_grade(browser, width):
     page.wait_for_selector(".sw-research-card")
     card = page.locator(f'.sw-actions-slot[data-rid="{ONE}"]').locator("xpath=ancestor::div[contains(@class,'sw-offer')][1]")
     txt = card.inner_text()
-    assert "Over only" in txt and "Scout grades lines that offer both sides" in txt
+    assert "Over only" in txt and "Grader grades lines that offer both sides" in txt
     assert card.locator(".sw-scout[data-onesided]").count() == 1
     assert card.locator("[data-act-add], [data-act-track]").count() == 0
     assert "one_sided" not in txt and "62.0%" not in txt and "No bet" not in txt

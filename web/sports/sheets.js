@@ -1,8 +1,8 @@
-/* Scout Sports SHEETS view (#/sheets/<prizepicks|underdog|consistent>) - sheets agent, self-contained.
+/* Prop Grader Sports SHEETS view (#/sheets/<prizepicks|underdog|consistent>) - sheets agent, self-contained.
    Data: GET /api/sports/sheets?league=..&sheet=.. (sports/sheets.py sh-1 / cs-1, worker-built files).
    Mounted by ONE line in app.js render():  else if (r.view === "sheets" && window.SportsSheets) window.SportsSheets.render({...})
    ROW SEMANTICS ARE THE BOARD'S: every PrizePicks / Underdog row is SportsRows.propRow(market, offer, {fc, view, now})
-   (web/sports/table.js pr-1, sports/UI.md "Prop board table") - lean, Scout chance, market chance at that line, edge in
+   (web/sports/table.js pr-1, sports/UI.md "Prop board table") - lean, Grader chance, market chance at that line, edge in
    probability points, gap flag, L10 / L5 (bv-1), cf-1 confidence. This file only adds the variant column (goblin /
    demon / alternate), filters and the Most-consistent table. Pure helpers are exported for node. */
 (function (root) {
@@ -12,7 +12,7 @@
   var PAGE = 150, LS = "scout.sports.sheets.v1";
   var VARIANT = {standard: "Standard", balanced: "Standard", main: "Standard", ladder_rung: "Standard",
                  goblin: "Goblin", demon: "Demon", alternate: "Alternate", over_only: "Over only", under_only: "Under only"};
-  // combined stats: Scout has no joint model for them yet (sports/capabilities.py COMBOS)
+  // combined stats: Grader has no joint model for them yet (sports/capabilities.py COMBOS)
   var COMBOS = {pra: 1, pr: 1, pa: 1, ra: 1, stocks: 1, rush_rec_yds: 1, pass_rush_yds: 1};
 
   // ------------------------------------------------------------------------------------------ pure helpers
@@ -100,7 +100,7 @@
   function noChanceText(r) {
     if (r.held) return r.held;
     if (r.scout) return "No lean";
-    return r.combo ? "No Scout projection for combined stats yet" : "No Scout chance at this line";
+    return r.combo ? "No Grader projection for combined stats yet" : "No Grader chance at this line";
   }
   function sortRows(rows, key, dir, events) {            // missing values always last, stable; events = D.events (game start)
     var f = KEYS[key] || KEYS.edge, sgn = dir === "asc" ? 1 : -1;
@@ -258,7 +258,7 @@
           (vis.over ? '<td class="num shx-o">' + (overShown(r) ? pctTxt(sc && sc.po) : '<span class="sw-faint sw-small">Under only</span>') + "</td>" : "") +
           (vis.under ? '<td class="num shx-u">' + (underShown(r) ? pctTxt(sc && sc.pu) : '<span class="sw-faint sw-small">Over only</span>') + "</td>" : "") +
           (vis.market ? '<td class="num sw-small">' + mkt + "</td>" : "") +
-          (vis.edge ? '<td class="num' + (r.gap ? " shx-gap" : "") + '">' + edgeText(r.edge) + (r.gap ? '<div class="sw-small" title="Scout and the market differ by 10 points or more on Over">model vs market gap</div>' : "") + "</td>" : "") +
+          (vis.edge ? '<td class="num' + (r.gap ? " shx-gap" : "") + '">' + edgeText(r.edge) + (r.gap ? '<div class="sw-small" title="Grader and the market differ by 10 points or more on Over">model vs market gap</div>' : "") + "</td>" : "") +
           (vis.l10 ? '<td class="num sw-small">' + esc(r.hit ? R.hitText(r.hit.l10) : "—") + (r.hit && r.hit.l10.n ? ' <span class="sw-faint">(' + r.hit.l10.n + ")</span>" : "") + seasonsNote(r.hit, lg) + "</td>" : "") +
           "<td>" + lean + "</td>" +
           (vis.conf ? '<td class="num">' + conf + "</td>" : "") + "</tr>";
@@ -272,7 +272,7 @@
       more.textContent = "Show " + Math.min(PAGE, rows.length - shown) + " more";
     }
     main.innerHTML = head(lg, sheet) +
-      '<p class="sw-sub">Every current ' + esc(sheet === "prizepicks" ? "PrizePicks" : "Underdog") + " line in one table. Scout chances are read at each exact line from one projected distribution. <b>Edge</b> = Scout chance minus the market's chance, in percentage points (not expected value). A lean is shown only when the chance and the projection agree. Every column means exactly what it means on the Prop board.</p>" +
+      '<p class="sw-sub">Every current ' + esc(sheet === "prizepicks" ? "PrizePicks" : "Underdog") + " line in one table. Grader chances are read at each exact line from one projected distribution. <b>Edge</b> = Grader chance minus the market's chance, in percentage points (not expected value). A lean is shown only when the chance and the projection agree. Every column means exactly what it means on the Prop board.</p>" +
       '<div class="shx-filters">' + sel("shx-stat", "Stat", statOpts(all, D), st.stat) + sel("shx-ev", "Game", evOpts(D), st.ev) +
       sel("shx-variant", "Type", [["all", "All types"], ["standard", "Standard"], ["goblin", "Goblin"], ["demon", "Demon"], ["alternate", "Alternate"]].concat(sheet === "underdog" ? [["over only", "Over only"]] : []), st.variant) +
       sel("shx-lean", "Lean", [["any", "Any"], ["lean", "Has a lean"], ["over", "Lean Over"], ["under", "Lean Under"]], st.lean) +

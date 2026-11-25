@@ -15,7 +15,7 @@ html[data-ui-v3] body.locked:has(#gate:not([hidden]))::before{content:"";positio
   radial-gradient(70% 90% at 94% -8%,color-mix(in srgb,var(--sc-accent-fill) var(--sc-lit),transparent) 0%,transparent 78%),
   radial-gradient(46% 60% at 4% -10%,rgba(120,130,255,.08),transparent 70%),
   linear-gradient(180deg,var(--sc-sky),var(--sc-bg))}
-html[data-ui-v3] body.locked:has(#gate:not([hidden])) .wrap>header{display:none!important}              /* the classic brand row: the v3 header already carries 1T Scout */
+html[data-ui-v3] body.locked:has(#gate:not([hidden])) .wrap>header{display:none!important}              /* the classic brand row: the v3 header already carries Prop Grader */
 html[data-ui-v3] body.locked:has(#gate:not([hidden])) .sc-v3-tabs,html[data-ui-v3] body.locked:has(#gate:not([hidden])) .sc-v3-bar .sc-nav,html[data-ui-v3] body.locked:has(#gate:not([hidden])) .sc-v3-bar [data-v3=search],
 html[data-ui-v3] body.locked:has(#gate:not([hidden])) .sc-v3-bar [data-v3=slip],html[data-ui-v3] body.locked:has(#gate:not([hidden])) .sc-v3-bar [data-v3=more],html[data-ui-v3] body.locked:has(#gate:not([hidden])) .sc-v3-bar .sc-slip{display:none!important}
 html[data-ui-v3] body.locked.sc-v3-shell:has(#gate:not([hidden])){padding-bottom:0}

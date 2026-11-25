@@ -12,15 +12,15 @@ DEFINITIONS
                     REGISTER.md 7); the count alone never validates: "1,566 settled (minimum 300) · under review",
                     plus the one-line pass rule (GATE_RULE). "validated" stays False until a registered review passes.
   projection        error = settled value - projection mean; MAE and bias (mean error).
-  Scout lean        the board's lean rule (SportsRows.leanOf, sports/UI.md): Scout records only (market-only models
+  Grader lean        the board's lean rule (SportsRows.leanOf, sports/UI.md): Grader records only (market-only models
                     have none); Over when P(Over) > 50% and the mean is above the line, Under mirrored. Hit rate = wins / (wins + losses); pushes listed apart.
   intervals         95% percentile bootstrap over GAMES (all rows of a game resampled together), 1,000 draws, seed 7;
                     none with fewer than 2 games.
   calibration       P(over | no push) in 10-point bands: mean stated chance vs observed Over share (pushes left out).
   probability band  the lean side's chance given no push: 50-55, 55-60, 60-65, 65+ (labelled "probability band" -
                     grade letters are withheld until the owner turns grades on).
-  recent            rx-1 (owner 2026-10-25 "easier to understand"): the newest RECENT_N settled Scout leans, one row
-                    per prop (game, player, stat, line; newest Scout forecast), newest settlement first - player name,
+  recent            rx-1 (owner 2026-10-25 "easier to understand"): the newest RECENT_N settled Grader leans, one row
+                    per prop (game, player, stat, line; newest Grader forecast), newest settlement first - player name,
                     stat, line, lean side, result at that line, final value, rg-1 research grade, chance of the side.
   model gate        per league: the stats whose sm-1 model passed its registered gate (board_view.gate_state) and,
                     when none did, the member text "<LG> model not validated" (board_view.NOT_VALIDATED_TEXT).
@@ -37,9 +37,9 @@ DEFINITIONS
                          model saw at forecast time); ties: newest forecast, then forecast id. This is result-blind
                          but it is NOT necessarily the board's headline line: it is the line where that model leaned
                          least, so stated hit rates lean toward closer-to-even lines (said in COUNTING);
-                      4. across Scout models the board's model order (snapshots.models_pref) decides; a Scout model
+                      4. across Grader models the board's model order (snapshots.models_pref) decides; a Grader model
                          before a market-only model.
-                    Per model tables use step 1-3 inside each model. The head-to-head pairs EACH Scout model with
+                    Per model tables use step 1-3 inside each model. The head-to-head pairs EACH Grader model with
                     the market on THAT model's own representative line only (one pair per model per prop).
                     raw_counts keeps the forecast-level totals for the owner.
                     Excluded entirely: quarter / half forecasts (S1/S2) and forecasts saved for a stored one-sided
@@ -61,7 +61,7 @@ VERSION = "rp-2"
 PICKEM = ("prizepicks", "underdog")
 GATE = 300
 GATE_RULE = ("Pass rule (registered gate F): at least 300 settled props from 100+ games at real offered lines; "
-             "Scout's chance on its side within 3 points of how often that side hit (game-clustered interval "
+             "Grader's chance on its side within 3 points of how often that side hit (game-clustered interval "
              "including 0); and a lower log-loss than the market-only baseline on the same props. Reviewed at 300, "
              "600 and 1,000 settled props; nothing passes automatically.")
 
@@ -458,7 +458,7 @@ def one_per_prop(rows, pref=None):
 
 
 def _model_rank(pref=None):
-    """one_per_prop's order of models: a Scout model before a market one, then the snapshots.models_pref order, then
+    """one_per_prop's order of models: a Grader model before a market one, then the snapshots.models_pref order, then
     the model name."""
     from .forecast_detail import kind
     if pref is None:
@@ -621,7 +621,7 @@ def _contained(league, stat):
 
 
 def grades(rows, league=None):
-    """rg-1 research letters of settled Scout leans: sports-gp-1 band of the UNROUNDED unconditional lean-side chance
+    """rg-1 research letters of settled Grader leans: sports-gp-1 band of the UNROUNDED unconditional lean-side chance
     (board_view.research_grade); n, W-L-P, hit rate + game-clustered 95% interval. Research - not validated. The
     board's market (N4) / sanity holds are live-board rules and are not re-applied to stored forecasts here.
     The chance is the one members saw: the shown (cal-mi-1) chance stored beside the forecast when its market was ON
@@ -708,7 +708,7 @@ def _league_stats(league):
 
 
 def recent(rows, names=None, n=RECENT_N, league=None):
-    """rx-1: newest n settled Scout leans, one per prop (newest Scout forecast of that prop), newest settled first."""
+    """rx-1: newest n settled Grader leans, one per prop (newest Grader forecast of that prop), newest settled first."""
     from . import board_view
     best = {}
     for r in rows:
@@ -758,7 +758,7 @@ def build(con, now=None, base=None):
                ("gate", f"at least {GATE} settled props (game x player x stat) per league before the registered "
                         f"review; {GATE_RULE}"),
                ("projection", "error = settled value - projection mean; MAE and bias"),
-               ("lean", "Scout models only: Over when its chance of Over is above 50% and its projection is above the "
+               ("lean", "Grader models only: Over when its chance of Over is above 50% and its projection is above the "
                         "line (Under mirrored); hit rate = wins / (wins + losses), pushes apart"),
                ("ci", "95% bootstrap over games (1,000 draws, seed 7)"),
                ("calibration", "chance of Over given no push in 10-point bands vs the observed Over share"))}}
@@ -790,7 +790,7 @@ _SPILL_SCHEMA = (
     "CREATE TABLE hh (k TEXT PRIMARY KEY, k_seq INTEGER, fa TEXT, prefix TEXT, k4m TEXT, ln REAL, mkt INTEGER, "
     "blob BLOB)",
     "CREATE TABLE opp (pos INTEGER PRIMARY KEY, k3 TEXT, a INTEGER, b INTEGER, m TEXT, blob BLOB)",   # step 4 input
-    "CREATE TABLE own (k4 TEXT PRIMARY KEY, line REAL)",          # head_to_head_rows: each Scout model's own line
+    "CREATE TABLE own (k4 TEXT PRIMARY KEY, line REAL)",          # head_to_head_rows: each Grader model's own line
     "CREATE TABLE lines (k TEXT PRIMARY KEY)",                    # ... and the props x lines they make
     "CREATE TABLE rec (pos INTEGER PRIMARY KEY, k TEXT, fa TEXT, sa TEXT, fid TEXT, blob BLOB)",     # recent() input
     "CREATE TABLE cal (pos INTEGER PRIMARY KEY, at TEXT, status TEXT)",                              # calendar input
@@ -883,7 +883,7 @@ def league_block(con, lg, now, rows):
         _flush_rows(sp, batch_rec, batch_cal)
         s = total.result()
         stats = {st: stats[st].result() for st in sorted(stats)}
-        # recent(): newest Scout forecast per (game, player, stat, line) among the settled leans (first on a tie), newest
+        # recent(): newest Grader forecast per (game, player, stat, line) among the settled leans (first on a tie), newest
         # settled first; recent() on those RECENT_N rows gives the list it gives on every row
         rec_rows = [spill.unpack(b) for (b,) in _ordered(
             sp, "rec", "SELECT id FROM (SELECT pos AS id, sa, fid, ROW_NUMBER() OVER (PARTITION BY k ORDER BY fa DESC, pos) "
@@ -983,7 +983,7 @@ def _flush_rows(sp, rec, cal):
 
 def _feed_head_to_head(sp, acc):
     """head_to_head(head_to_head_rows(all rows, reps)) from the spill: the newest row per head_to_head key whose line is
-    a Scout model's own representative line (a market at that line, or that Scout model itself), grouped per prop key
+    a Grader model's own representative line (a market at that line, or that Grader model itself), grouped per prop key
     in the order the keys first arrived - head_to_head's own grouping order."""
     from . import spill
     q = ("SELECT id FROM (SELECT h.rowid AS id, h.k_seq, MIN(h.k_seq) OVER (PARTITION BY h.prefix) AS first FROM hh h "
@@ -1011,13 +1011,13 @@ def _ordered(sp, table, ids_sql, cols="t.blob"):
 
 
 COUNTING = ("one pick per game x player x stat (rp-2): a pick'em app line (any type) before a sportsbook line, then "
-            "the line closest to Scout's projection at forecast time - so the counted line is often a near-even line, "
+            "the line closest to Grader's projection at forecast time - so the counted line is often a near-even line, "
             "not always the board's headline line; raw_counts = every forecast of every listed line, kept for the owner")
 
 
 def head_to_head_rows(all_rows, reps):
-    """A7 (follow-up 2026-11-06): each Scout model's forecasts ONLY at that model's own representative line, plus the
-    market forecasts at those lines. Before, the union of every Scout model's lines paired each model once per line in
+    """A7 (follow-up 2026-11-06): each Grader model's forecasts ONLY at that model's own representative line, plus the
+    market forecasts at those lines. Before, the union of every Grader model's lines paired each model once per line in
     the union (sm-1 @15.5 and mi-1 @16.5 -> 2 pairs each); now head_to_head yields one pair per model per prop."""
     scout_mv = _scout()
     own = {(r["event_id"], r["player_id"], r["stat"], r.get("model")): round(float(r["line"]), 3)
@@ -1044,15 +1044,15 @@ def build_if_stale(con, force=False, base=None):
 
 
 # ------------------------------------------------------------------------------------------- hh-1 head to head (N5)
-# Scout vs market on the SAME props (owner re-audit 2026-10-24 N5): the per-model tables above score each model on
+# Grader vs market on the SAME props (owner re-audit 2026-10-24 N5): the per-model tables above score each model on
 # the props IT forecast, so their Brier scores are not comparable. hh-1 pairs them:
 #   prop key   (game, player, stat, line) - the same line, so the same settlement outcome
-#   pair       the newest forecast of a Scout model (sm-1 / mi-1) and the newest of a market model (mc-1, sharp-*,
+#   pair       the newest forecast of a Grader model (sm-1 / mi-1) and the newest of a market model (mc-1, sharp-*,
 #              mkt-<source>) on the same key, both settled Over or Under (pushes / voids counted, not scored)
 #   scores     binary, on the chance of Over given no push q = P(Over) / (P(Over) + P(Under)):
 #              Brier (q - y)^2 (0.25 = always 50%), log loss -ln(chance given to what happened), hit rate of the
 #              side the model favoured (q = 0.5 exactly: no side, left out of that model's hit rate)
-#   difference Scout minus market per pair (Brier / log loss: negative = Scout better); 95% bootstrap interval over
+#   difference Grader minus market per pair (Brier / log loss: negative = Grader better); 95% bootstrap interval over
 #              GAMES (all pairs of a game resampled together, 1,000 draws, seed 7)
 HH_VERSION = "hh-1"
 SCOUT = ("sm-1", "mi-1")
@@ -1116,7 +1116,7 @@ def head_to_head(rows):
 
 class HeadToHead:
     """head_to_head's pairs and scores fed one prop key at a time (2026-11-08 review: neither the rows nor the pair
-    dicts of the season are held). add(game, stat, {model: newest row}) in head_to_head's key order; per (Scout,
+    dicts of the season are held). add(game, stat, {model: newest row}) in head_to_head's key order; per (Grader,
     market, stat) the scores in pair order, the per-pair differences and their per-game lists for the interval."""
 
     def __init__(self):
@@ -1175,8 +1175,8 @@ class HeadToHead:
         return out
 
 
-HH_METHOD = ("Scout (sm-1 / mi-1) and each market estimate on the SAME props: same game, player, stat and line, so the "
+HH_METHOD = ("Grader (sm-1 / mi-1) and each market estimate on the SAME props: same game, player, stat and line, so the "
              "same settlement; newest forecast of each; pushes and voids counted, not scored. Binary scores on the "
              "chance of Over given no push: Brier (0.25 = always 50%), log loss, hit rate of the favoured side. "
-             "Difference = Scout minus market (Brier / log loss below 0 = Scout better), 95% bootstrap interval over "
+             "Difference = Grader minus market (Brier / log loss below 0 = Grader better), 95% bootstrap interval over "
              "games (1,000 draws, seed 7).")

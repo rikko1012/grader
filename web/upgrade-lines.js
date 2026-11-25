@@ -21,7 +21,7 @@ export const playerKey = r => [r.sport, r.event.id, r.player.key].join('|');
 export const lineId = r => [r.sport, r.offer.platform, r.offer.offer_id].join('|');
 
 /* The line a row shows when the sort does not rank lines itself (start time, player name): a graded line first, then a line with a
-   Scout side, then a PrizePicks / Underdog line (the ones a slip can hold), then a standard line, then the line nearest the
+   Grader side, then a PrizePicks / Underdog line (the ones a slip can hold), then a standard line, then the line nearest the
    projection. Lower sorts first. */
 export function mainRank(r) {
   const s = r.scout || {}, line = Number(r.offer.line);

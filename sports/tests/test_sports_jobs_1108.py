@@ -147,7 +147,7 @@ def test_cluster_ci_does_not_copy_the_sampled_rows_per_draw():
 # -------------------------------------------------------------------------------------- results_public equality
 def _edge_cases(con):
     """Duplicate-line forecasts with a forecast_at tie across apps (PrizePicks + Underdog at the same line, same
-    model, same run) are in the world already; add a market-only and a Scout forecast on a SHARED line whose newest
+    model, same run) are in the world already; add a market-only and a Grader forecast on a SHARED line whose newest
     revision is unresolved, and one forecast named by a settlement's affected ids."""
     from sports.tests import helpers as h
     rows = con.execute("SELECT record_id FROM records WHERE kind='offer' AND platform='prizepicks' AND "
@@ -187,7 +187,7 @@ def test_results_public_file_is_identical_to_the_old_build(season, monkeypatch):
 
 def _hand_rows(seed=3):
     """Hand-made rows (no store): equal forecast_at on one key, the same forecast id twice, void + unresolved, market
-    and Scout on shared lines, a closeness tie, a forecast with no mean, several stats and games."""
+    and Grader on shared lines, a closeness tie, a forecast with no mean, several stats and games."""
     base = dict(player_id="p", stat="points", mean=21.0, p_over=0.55, p_under=0.45, p_push=0.0, research_only=False,
                 actual=25.0, settled_at="2026-11-02T04:00:00Z", outcome="over", error=4.0, lean="over",
                 lean_result="win", lean_p=0.55)
@@ -245,7 +245,7 @@ def test_spill_build_equals_the_list_rules_with_the_audit_1121_rules_on(monkeypa
     rows = _hand_rows(seed)
     for i, r in enumerate(rows):                          # spread the runs so lines are superseded / moved
         r["forecast_at"] = f"2026-11-01T{i % 24:02d}:00:00Z"
-    # one prop whose PrizePicks line moved +1.0 toward the Over Scout graded A: mvlean-1 shows it as Lean on the board,
+    # one prop whose PrizePicks line moved +1.0 toward the Over Grader graded A: mvlean-1 shows it as Lean on the board,
     # so the record's Grades table AND its recent list must say Lean (both builds)
     base = dict(rows[0], event_id="nba:99", player_id="p-mv", stat="points", model="sm-1", platforms=["prizepicks"],
                 mean=24.0, p_over=0.66, p_under=0.34, research_only=True, status="settled", outcome="over",

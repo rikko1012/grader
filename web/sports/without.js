@@ -72,7 +72,7 @@
       .then(function (r) { return r.data; }, function (e) { delete CACHE[key]; throw e; }));
     load.then(function (idx) { draw(container, player, games, idx, opts); }, function (e) {
       container.querySelector(".gwx-panel").innerHTML = '<h2 id="gwx-h">Games without a teammate</h2><p class="sw-muted sw-small">' +
-        (e && e.status === 404 ? "No final games of this team are in Scout’s box scores yet." : e && e.status === 503 ? "The team index is still being built - try again in a few minutes." : "The team index could not be loaded.") + "</p>";
+        (e && e.status === 404 ? "No final games of this team are in Grader’s box scores yet." : e && e.status === 503 ? "The team index is still being built - try again in a few minutes." : "The team index could not be loaded.") + "</p>";
     });
   };
 
@@ -83,7 +83,7 @@
     var panel = container.querySelector(".gwx-panel");
     if (!mates.length || !stats.length) {
       panel.innerHTML = '<h2 id="gwx-h">Games without a teammate</h2><p class="sw-muted sw-small">' +
-        (stats.length ? "No teammate missed any of his games in Scout’s box scores and game logs." : "No current lines to compare.") + "</p>";
+        (stats.length ? "No teammate missed any of his games in Grader’s box scores and game logs." : "No current lines to compare.") + "</p>";
       return;
     }
     function curLine(m) { var q = (m.quotes || [])[0] || (m.alternates || [])[0]; return q ? q.line : null; }

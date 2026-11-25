@@ -183,7 +183,7 @@ def market_doc(age_built=0, owner=False, empty=False):
                    | {(l['book'], l['book_label']) for d in (cs2, nba, nfl) for r in d['arbitrage'] + d.get('flagged', []) for l in r['legs']})
     method = {'wide_overround': .08, 'arb_max_age_s': 300, 'ev_stale_s': 1800, 'fresh_filters': [[120, '2 min'], [600, '10 min'], [1800, '30 min']]}
     if owner:
-        method.update(ev='EV = p_cal x decimal odds - 1, push-adjusted (a push returns the stake)', p_cal='Scout chance or consensus.',
+        method.update(ev='EV = p_cal x decimal odds - 1, push-adjusted (a push returns the stake)', p_cal='Grader chance or consensus.',
                       arbitrage='stake share A = impA / (impA + impB); margin % = (1 / (impA + impB) - 1) x 100')
     return {'as_of': iso(now - age_built), 'owner': owner, 'sports': {'cs2': cs2, 'nba': nba, 'nfl': nfl},
             'books': [{'id': b, 'label': l} for b, l in books], 'method': method}

@@ -1,4 +1,4 @@
-"""Materialized player research for the shared Scout interface.
+"""Materialized player research for the shared Grader interface.
 
 Only the background history worker reads canonical databases. Member requests
 read a bounded file; no request fans out to providers or scans game history.

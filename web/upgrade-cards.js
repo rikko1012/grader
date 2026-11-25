@@ -206,7 +206,7 @@ export function panels(X) {
     return rows;
   }
   const REASONS = {market_only_baseline: 'Market-only: the chance comes from Kalshi prices for this player and stat, not from his own statistics.',
-    kalshi_quote_time_unknown: 'Kalshi does not timestamp its quotes; their age is measured from when Scout observed them.',
+    kalshi_quote_time_unknown: 'Kalshi does not timestamp its quotes; their age is measured from when Grader observed them.',
     between_rungs: 'The line sits between two Kalshi rungs; the chance blends the reading from both.', same_line: 'Kalshi lists this exact line.',
     one_sided_shift: 'Read from the nearest Kalshi rung on one side of the line, moved to this line with the stat’s measured spread.',
     line_gap_beyond_fitted_range: 'The nearest Kalshi rung is far from this line, so the reading leans on the fitted shape.',
@@ -242,7 +242,7 @@ export function panels(X) {
       const why = (fc.reasons || []).filter(c => !/^gp_band:/.test(c) && !/^gp:/.test(c)).map(c => REASONS[c] || c).filter(t => !HEDGE.test(t));
       if (why.length) h += `<p class="h-fx-lab">Why this number</p><ul class="h-fx-ul">${why.map(t => `<li>${esc(t)}</li>`).join('')}</ul>`;
       if ((fc.contributions || []).length) h += table(['Computed contribution', 'Effect'], fc.contributions.map(c => `<tr><td>${esc(c.label)}</td><td>${n(c.value, 2)}</td></tr>`));
-      out.push(sec('sp-forecast', 'Scout projection', h, true));
+      out.push(sec('sp-forecast', 'Grader projection', h, true));
     }
     if (games.length) {
       const seasons = games.filter(g => g.pl), season = seasons.length ? seasons[0].s : null, sg = games.filter(g => g.s === season);
@@ -260,7 +260,7 @@ export function panels(X) {
     const mu = (dv.length ? `<p class="h-fx-lab">${esc(opp || 'Opponent')} defense vs position</p><ul class="h-fx-ul">${dv.map(x => `<li>${esc(x.label)}: <b>${x.key === 'dvp' || x.key === 'opp_pos_allowed' ? n(x.value, 2) + '× the league average allowed' : /rank/.test(x.key) ? '#' + n(x.value, 0) : n(x.value, 1) + ' per game'}</b>${x.n ? ` <small>n=${esc(x.n)}</small>` : ''}</li>`).join('')}</ul>` : '')
       + (sm ? `<p class="h-fx-lab">${esc(r.player.name)} vs ${esc(opp)}</p>` + kv([['Games', `${sm.n} <small>${esc(sm.from || '')} – ${esc(sm.to || '')}</small>`], ['Average', `${n(sm.mean, 1)} ${stat.toLowerCase()} · median ${n(sm.median, 1)}`],
         [`At ${esc(r.offer.line)}`, `Over ${sm.over} · Under ${sm.under}${sm.push ? ` · Push ${sm.push}` : ''}${dec ? ` · Over hit rate ${pc0(sm.over / dec)} <small>(n = ${dec})</small>` : ''}`]]) : '');
-    if (mu) out.push(sec('sp-matchup', `Matchup · ${r.market.stat_label}`, mu + note('Descriptive: matchup numbers move the Scout projection only after a chronological test.')));
+    if (mu) out.push(sec('sp-matchup', `Matchup · ${r.market.stat_label}`, mu + note('Descriptive: matchup numbers move the Grader projection only after a chronological test.')));
     /* minutes / opportunity trend and the opportunity averages by window */
     const tr = part.slice(0, 20).reverse();
     let oh = '';
@@ -352,7 +352,7 @@ export function panels(X) {
     const ka = (doc?.sports_card?.kalshi || []);
     return `<section class="h-odds" aria-labelledby="hub-odds-h"><div class="h-sec-head"><h4 id="hub-odds-h">All odds for this prop</h4><small>${rows.length} ${rows.length === 1 ? 'line' : 'lines'}${apps ? ` · ${apps} pick’em` : ''}${kinds ? ` · ${kinds} sportsbook` : ''}</small></div>
       <div class="h-scroll-x"><table class="h-odds-table"><thead><tr><th>Book</th><th>Line</th><th>Over</th><th>Under</th><th class="h-odds-seen">Seen</th></tr></thead><tbody>${rows.map(x => `<tr class="${x.mine ? 'is-selected' : ''}"><th scope="row">${esc(x.label || x.platform)}${x.type ? ` <small>${esc(x.type)}</small>` : ''}${x.seen ? `<small class="h-odds-seen-m">Seen ${esc(ctx.age ? ctx.age(x.seen) : when(x.seen))}</small>` : ''}</th><td>${line(x)}</td>${cell(x, 'over', x === bo)}${cell(x, 'under', x === bu)}<td class="h-odds-seen">${x.seen ? `<time datetime="${esc(x.seen)}" title="${esc(when(x.seen))}">${esc(ctx.age ? ctx.age(x.seen) : when(x.seen))}</time>` : ''}</td></tr>`).join('')}</tbody></table></div>
-      <p class="h-history-note">Best = the Over’s lowest line and the Under’s highest; at the same line, the better price or payout. Sportsbook prices in ${pref === 'decimal' ? 'decimal (American beside it)' : 'American (decimal beside it)'}; pick’em apps show their payout modifier. Odds are shown for comparison: they never move Scout’s grade.</p>
+      <p class="h-history-note">Best = the Over’s lowest line and the Under’s highest; at the same line, the better price or payout. Sportsbook prices in ${pref === 'decimal' ? 'decimal (American beside it)' : 'American (decimal beside it)'}; pick’em apps show their payout modifier. Odds are shown for comparison: they never move Grader’s grade.</p>
       ${ka.length ? `<details class="h-fx-more"><summary>Kalshi ladder · ${ka.length} ${ka.length === 1 ? 'rung' : 'rungs'}</summary>${table(['Rung (Over)', 'YES bid', 'YES ask', 'Volume', 'Open interest', 'Seen'], ka.map(k => `<tr><td>${esc(k.line)}</td><td>${k.bid != null ? Math.round(k.bid * 100) + '¢' : '–'}</td><td>${k.ask != null ? Math.round(k.ask * 100) + '¢' : '–'}</td><td>${k.volume != null ? esc(Math.round(k.volume)) : '–'}</td><td>${k.oi != null ? esc(Math.round(k.oi)) : '–'}</td><td>${k.seen_at ? esc(ctx.age ? ctx.age(k.seen_at) : when(k.seen_at)) : ''}</td></tr>`))}</details>` : ''}</section>`;
   }
 
@@ -373,7 +373,7 @@ export function panels(X) {
     return `<span class="${up ? 'h-gi-up' : 'h-gi-dn'}"><span aria-hidden="true">${up ? '▲' : '▼'}</span> ${up ? '+' : '−'}${f.effect_unit === 'stat' ? a.toFixed(2) : a.toFixed(1) + '%'} <span class="h-gi-word">${up ? 'up' : 'down'}</span></span>`;
   }
   function gradeHtml(r, doc, cx) {
-    const g = doc?.grade_inputs, sc = r?.scout || {}, nf = !!cx?.notOffered;     /* bug 3: Scout's side not offered on this app */
+    const g = doc?.grade_inputs, sc = r?.scout || {}, nf = !!cx?.notOffered;     /* bug 3: Grader's side not offered on this app */
     if (!g || r.extra) return '';
     const near = (a, b) => (a == null && b == null) || (num(a) && num(b) && Math.abs(a - b) < 1e-9);
     const side = sc.side === 'over' || sc.side === 'under' ? sc.side : null;

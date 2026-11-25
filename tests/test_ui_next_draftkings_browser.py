@@ -92,7 +92,7 @@ def test_draftkings_uses_the_same_components_as_the_other_books(browser, dk, wid
         assert meta.startswith("DK ·"), meta
         txt = " ".join(row.text_content().split())
         assert "-117 / +105" in txt or "-110 / -110" in txt
-        # owner 2026-11-13: a DraftKings line carries Scout's saved grade at the exact same line (side, chance, letter), else the
+        # owner 2026-11-13: a DraftKings line carries Grader's saved grade at the exact same line (side, chance, letter), else the
         # shared reported-odds look (h-grade-text family)
         assert row.locator(".h-c-scout .h-direction").count() == 1 or row.locator(".h-c-scout .h-reported").count() == 1
         assert row.locator(".h-c-add button").get_attribute("class").split()[:2] == ["h-add", "h-add-info"]
@@ -112,8 +112,8 @@ def test_draftkings_uses_the_same_components_as_the_other_books(browser, dk, wid
 @pytest.mark.parametrize("width", (375, 1440))
 def test_draftkings_rows_carry_the_exact_line_grade_on_the_previous_design(browser, dk, monkeypatch, width):
     """owner 2026-11-13 ("draftking section should grades and look like the other sections"): on the previous design (the default)
-    every DraftKings row whose exact player / event / stat / period / line has a saved Scout grade shows that side, chance and letter
-    in the same Scout cell as the other books; nothing is stakeable or addable (view only); no letter is invented for other lines."""
+    every DraftKings row whose exact player / event / stat / period / line has a saved Grader grade shows that side, chance and letter
+    in the same Grader cell as the other books; nothing is stakeable or addable (view only); no letter is invented for other lines."""
     monkeypatch.delenv("UI_NEXT", raising=False)
     c, p = open_(browser, dk, width, "dark")
     try:

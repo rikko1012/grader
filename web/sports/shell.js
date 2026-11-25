@@ -1,4 +1,4 @@
-/* Scout member shell - the explicit interface Sports uses to sit inside the existing 1time / Scout member shell.
+/* Prop Grader member shell - the explicit interface Sports uses to sit inside the existing 1time / Prop Grader member shell.
    The esports pages (web/index.html, web/lol.html) are NOT changed or imported: this module re-creates the shared
    header (1time mark, product switch, member line) from one declared list, so the Sports page cannot alter them.
 
@@ -25,8 +25,8 @@
   function mount(el, opts) {
     var active = (opts && opts.active) || "sports";
     el.innerHTML =
-      '<a class="sw-brand" href="/sports" aria-label="1time Scout Sports home"><span class="sw-mark">' + MARK + '</span>' +
-      '<span class="sw-word">1time <em>Scout</em></span></a>' +
+      '<a class="sw-brand" href="/sports" aria-label="Prop Grader Sports home"><span class="sw-mark">' + MARK + '</span>' +
+      '<span class="sw-word">1time <em>Grader</em></span></a>' +
       '<nav class="sw-products" aria-label="Product">' + PRODUCTS.map(function (p) {
         var on = p.key === active;
         return '<a href="' + p.href + '"' + (on ? ' class="on" aria-current="page"' : "") + ">" + esc(p.label) + "</a>";
@@ -48,7 +48,7 @@
 
   function gate(el, info) {
     var up = info && info.upgrade;
-    el.innerHTML = '<section class="sw-gate" aria-labelledby="sw-gate-h"><h1 id="sw-gate-h">Scout Sports is for members</h1>' +
+    el.innerHTML = '<section class="sw-gate" aria-labelledby="sw-gate-h"><h1 id="sw-gate-h">Prop Grader Sports is for members</h1>' +
       "<p>Sign in with your 1time membership to open the NBA and NFL workspace.</p>" +
       '<p><a class="sw-btn sw-btn-primary" href="/auth/login">Sign in</a>' +
       (up ? ' <a class="sw-btn" href="' + esc(up) + '">Get membership</a>' : "") + "</p></section>";

@@ -222,7 +222,7 @@ def test_a_side_below_break_even_keeps_its_wording_and_says_so(ctx, env, monkeyp
     for i in range(rows.count()):
         r = rows.nth(i)
         edge = r.locator('td.h-c-edge .h-edge').text_content().strip() if r.locator('td.h-c-edge .h-edge').count() else '—'
-        chip = r.locator('.h-below:visible').count()      # the Edge cell's chip, or the Scout cell's where the Edge column is hidden
+        chip = r.locator('.h-below:visible').count()      # the Edge cell's chip, or the Grader cell's where the Edge column is hidden
         scout = r.locator('td.h-c-scout').inner_text()
         if edge.startswith('−'):
             below += 1
@@ -408,11 +408,11 @@ def test_sleeper_line_has_chance_hits_and_the_full_card(browser, setup, size):
         p.wait_for_function("""()=>{const r=[...document.querySelectorAll('#hub-rows tr.h-row[data-record]')].find(t=>t.innerText.includes('vargo'));
                                     return r&&!r.querySelector('.h-s-l5 .h-hit.empty')&&!r.querySelector('.h-s-l5 .h-hit-wait');}""", timeout=20000)
         vt = v.text_content()
-        assert 'Chance at this line' in vt and 'Lean' not in vt                # Scout's chance at 37.5, no letter
+        assert 'Chance at this line' in vt and 'Lean' not in vt                # Grader's chance at 37.5, no letter
         assert re.search(r'(?i)over\s*\d+\.\d%', v.locator('.h-c-scout').inner_text())
         lab = v.locator('.h-line-chance')
         assert lab.is_visible() and lab.evaluate('e => e.scrollWidth <= e.clientWidth + 1 && getComputedStyle(e).textOverflow !== "ellipsis"')
-        assert lab.get_attribute('title') == 'Scout’s chance at this line'
+        assert lab.get_attribute('title') == 'Grader’s chance at this line'
         assert p.locator('#hub-sort').input_value() == 'start' and p.locator('#hub-sort-note').inner_text().strip() == ''
         assert v.locator('.h-s-l5 .h-hit').inner_text() != '—' and v.locator('.h-s-l20 .h-hit').inner_text() != '—'
         assert b.locator('.h-s-l5 .h-hit').inner_text() != '—'
@@ -465,7 +465,7 @@ def test_prizepicks_goblin_keeps_its_letter_and_add(ctx, one, size):
 @pytest.mark.parametrize('width', [360, 390, 414])
 def test_phone_row_keeps_its_own_grid_with_the_edge_and_h2h_columns_on(ctx, env, width):
     """Found while porting test_sport_tag_stays_whole_under_the_edge_sort[390]: with SCOUT_BOARD_H2H on (production) the previous
-    design's five-column phone grid outranked the redesign's, so the line sat on Scout's side, names were cut to two letters and the
+    design's five-column phone grid outranked the redesign's, so the line sat on Grader's side, names were cut to two letters and the
     Lines button ran off the row. Every cell of a phone row is inside the row and none covers another; By player too."""
     p = board(ctx, env, {'width': width, 'height': 844})
     is_next(p)

@@ -377,7 +377,7 @@ def test_market_sheet_never_prices_dabble_as_decimal_odds(monkeypatch):
     now = time.time()
     s = snap([("p1", 20.5, [("fanduel", 2.10, 1.80, 30), ("betrivers", 1.95, 1.90, 40), ("oddsapi:draftkings", 2.25, 1.70, 20)])], now)
     monkeypatch.setattr(wb, "snap", lambda srv, sport: s if sport == "nba" else None)
-    monkeypatch.setattr(wm, "model_released", lambda sport, stat: True)            # a released Scout chance would price it
+    monkeypatch.setattr(wm, "model_released", lambda sport, stat: True)            # a released Grader chance would price it
     monkeypatch.setenv("SCOUT_BOOK_DABBLE", "1")
     o = dict(offer("Nba p1", "A", 20.5, "points", "game", now), sport="nba")
     o["over"]["price"], o["under"]["price"] = 2.01, 2.00

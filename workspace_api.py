@@ -270,7 +270,7 @@ def event_id(x):
 
 
 def read_rev(x):
-    """The identity of Scout's read as the slip shows it: side, chance and letter. Stake is left out: the same-match cap moves it
+    """The identity of Grader's read as the slip shows it: side, chance and letter. Stake is left out: the same-match cap moves it
     whenever another row in the group changes, and the slip does not show it."""
     fields = [_side(x), x.get("p"), _shown_grade(x)]
     return "r-" + hashlib.sha256(json.dumps(fields, default=str).encode()).hexdigest()[:16]
@@ -430,7 +430,7 @@ def record_of(x):
 
 def _feed_state(srv, book, payload, failed):
     if payload is None or failed:
-        return {"state": "failed", "at": _iso((payload or {}).get("updated")), "error": "Scout could not read this feed just now"}
+        return {"state": "failed", "at": _iso((payload or {}).get("updated")), "error": "Grader could not read this feed just now"}
     if book == "prizepicks" and payload.get("feed"):
         f = payload["feed"]
         return {"state": f.get("state") or "ok", "at": _iso(f.get("at") or payload.get("updated")), "error": f.get("error")}
@@ -537,7 +537,7 @@ def _same_stake_and_grade(x, fc):
 
 def forecast_problem(srv, x, leg, fc, lock):
     """None when the saved forecast belongs to this exact match, line and period, its pick is still open, the board copy is the
-    same forecast, and the leg shows what Scout says now: its side and chance change the pick the member is looking at."""
+    same forecast, and the leg shows what Grader says now: its side and chance change the pick the member is looking at."""
     def bad(code, text, **kw):
         return dict({"check": 2, "code": code, "text": text}, **kw)
     st = fc.get("state")
@@ -546,7 +546,7 @@ def forecast_problem(srv, x, leg, fc, lock):
     if st != "ok":
         return bad("forecast_pending", "The forecast for this line is still being saved.", retry=True)
     if fc.get("pick_status") != "open":
-        return bad("pick_closed", "This line is closed in Scout's pick log, so it cannot be tracked.")
+        return bad("pick_closed", "This line is closed in Grader's pick log, so it cannot be tracked.")
     logged, ok = _ts(fc.get("logged_at")), True
     try:
         same_line = float(fc["line"]) == float(x["line"]) == float(x["graded_line"])
@@ -564,7 +564,7 @@ def forecast_problem(srv, x, leg, fc, lock):
     now_side = _side(x)
     if leg.get("read_rev") != read_rev(x):
         now = SIDE_WORD.get(now_side)
-        return bad("display_mismatch", f"Scout's read changed: now {now} {x['p'] * 100:.1f}%." if now else "Scout's read on this line changed.", swap=True)
+        return bad("display_mismatch", f"Grader's read changed: now {now} {x['p'] * 100:.1f}%." if now else "Grader's read on this line changed.", swap=True)
     if side == now_side and (shown_p is None or abs(shown_p - x["p"]) > DISPLAY_MAX_GAP):
         return bad("display_mismatch", "The chance on your slip is out of date.", swap=True)
     if side != now_side and shown_p is not None:
@@ -629,7 +629,7 @@ def check_leg(srv, leg, snap, feeds, now):
     problems = []
     feed = (snap.get("feeds") or {}).get(book) or {}
     if feed.get("state") in ("failed", "stale") or now.timestamp() - snap["at"] > SNAP_MAX_AGE_S:
-        problems.append(_pr(1, "board_failed", f"Scout could not read the {label} board just now.", retry=True))
+        problems.append(_pr(1, "board_failed", f"Grader could not read the {label} board just now.", retry=True))
     lock = lock_time(x)
     if lock is None:
         problems.append(_pr(0, "start_unknown", "No start time on the feed for this line."))
@@ -649,7 +649,7 @@ def check_leg(srv, leg, snap, feeds, now):
             problems.append(_pr(1, "side", f"{SIDE_WORD[side]} is not offered on {label}."))
         elif code in ("retry", "regrade"):
             if not any(p["code"] == "board_failed" for p in problems):      # one outage, one sentence
-                problems.append(_pr(1, "retry", "Scout could not check this line just now.", retry=True))
+                problems.append(_pr(1, "retry", "Grader could not check this line just now.", retry=True))
         elif code == "moved" and not any(p["code"] == "moved" for p in problems):
             problems.append(_pr(1, "moved", str(c.get("reason") or "Line moved") + ".", swap=True))
         elif code == "gone":
@@ -740,7 +740,7 @@ def slip_header_v2_on(env):
 
 
 def _v2_leg(platform, r):
-    """One checked leg -> gradecore.slip_header's leg: the chance the board prints for this side (CS2 prints one for Scout's
+    """One checked leg -> gradecore.slip_header's leg: the chance the board prints for this side (CS2 prints one for Grader's
     side only), its match, and why the book prices this pick elsewhere (goblin / demon, an Underdog payout multiplier)."""
     x = r.get("_ev") or {}
     sport = x.get("sport") or "cs2"
@@ -841,7 +841,7 @@ def _check_one(srv, l, snap, feeds, now, allowed):
         return {"ok": False, "problems": [_pr(1, "gone", "This line is no longer on the board.")], "current": None}
     if l["sport"] == "cs2":
         if snap is None:
-            return {"ok": False, "problems": [_pr(1, "retry", "Scout could not check this line just now.", retry=True)], "current": None}
+            return {"ok": False, "problems": [_pr(1, "retry", "Grader could not check this line just now.", retry=True)], "current": None}
         return check_leg(srv, l, snap, feeds, now)
     if l["sport"] == "lol":
         return _adapter("lol").check_leg(srv, l, now)
@@ -1350,7 +1350,7 @@ def _parity_cells(srv, tags=None):
 
 def _parity_rated(x, rec, cells):
     """True only where the live slip check would rate this single CS2 leg (rules.leg_edge_ok: half-point line, saved chance
-    at 57%+ on Scout's side, a 1.0x pick, a chance band that passed the settled-results check) and its letter is not held."""
+    at 57%+ on Grader's side, a 1.0x pick, a chance band that passed the settled-results check) and its letter is not held."""
     if not cells or rec["scout"].get("letter_held") or not rec["scout"].get("side"):
         return False
     side = rec["scout"]["side"]
@@ -2251,7 +2251,7 @@ def _gen_opts(q, allowed):
     if mix == "mixed" and len(sports) < 2:
         return None, "Mixed sports needs at least two sports."
     if games == "stacks" and not sq.same_match_allowed(platform):
-        return None, "PrizePicks keeps its same-match limits in its app. Scout builds same-match legs on Underdog only."
+        return None, "PrizePicks keeps its same-match limits in its app. Grader builds same-match legs on Underdog only."
     exclude = tuple(sorted({x for x in (q.get("exclude") or "").split(",") if x}))
     if len(exclude) > EXCLUDE_MAX or any(len(x) > 200 or not _LEG_ID_RE.match(x) for x in exclude):
         return None, "Too many lines to leave out. Generate again."
@@ -2395,7 +2395,7 @@ def get_ev_slips(h, srv, q, member, scratch, name):
     try:
         st, body = srv.shared(key, lambda: _generate(srv,o,d), ttl=GEN_TTL)
     except Exception:
-        return h.send(503, {'error': 'Scout could not build slips just now. Try again.'})
+        return h.send(503, {'error': 'Grader could not build slips just now. Try again.'})
     return h.send(st, body)
 
 
@@ -2445,7 +2445,7 @@ def get_generate(h, srv, q, member, scratch, name):
     try:
         st_, body = srv.shared(key, lambda: _generate(srv, o), ttl=GEN_TTL)
     except Exception:
-        return h.send(503, {"error": "Scout could not build slips just now. Try again."})
+        return h.send(503, {"error": "Grader could not build slips just now. Try again."})
     return h.send(st_, body)
 
 
@@ -2466,7 +2466,7 @@ _LINE_TYPE_CACHE = {}
 
 def _line_types(srv, sport):
     """{(platform, offer_id): line_type} from the sport's shared board, rebuilt once per board build (same parse workspace_books
-    reads). The adder needs it for slip legs outside Scout's pool, so a goblin the member added still counts toward "at most 1 goblin"."""
+    reads). The adder needs it for slip legs outside Grader's pool, so a goblin the member added still counts toward "at most 1 goblin"."""
     try:
         import workspace_books
         recs, s = workspace_books.records(srv, sport)
@@ -2562,7 +2562,7 @@ def post_book_line(h, srv, q, member, scratch, name, n):
 
 
 def _payload(x, leg, res, e):
-    """What the member saw, frozen. grade, units and stake_reason are Scout's for scout_side, whatever side the member took. The
+    """What the member saw, frozen. grade, units and stake_reason are Grader's for scout_side, whatever side the member took. The
     forecast_* fields are the saved forecast itself, beside the board's copy: the same-match cap and display gd-1 can move the
     board's after logging, and a receipt keeps both."""
     rec = record_of(x)

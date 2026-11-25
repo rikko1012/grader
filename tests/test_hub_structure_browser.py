@@ -67,7 +67,7 @@ def test_desktop_first_row_high_on_the_screen_with_ten_rows_and_one_toolbar(ctx,
 def test_one_scout_cell_and_one_hit_strip_with_counts_in_tooltips(ctx, env):
     p = board(ctx, env)
     heads = p.locator('#hub-table thead th').all_text_contents()
-    assert [h.strip() for h in heads][:6] == ['Watch', 'Player', 'Market', 'Line', 'Proj.', 'Scout']
+    assert [h.strip() for h in heads][:6] == ['Watch', 'Player', 'Market', 'Line', 'Proj.', 'Grader']
     row = p.locator('#hub-rows tr[data-record]').first
     cells = row.locator('.h-strip .h-hit')
     assert cells.count() == 5                                     # L5 L10 L20 H2H SZN
@@ -123,10 +123,10 @@ def test_every_entry_point_opens_the_one_card_with_a_pinned_add(ctx, env, size):
     assert 'Seen' in p.locator('#hub-detail .h-line-shop thead').text_content()
     # 3) Ask is the Genie inside the card
     p.locator('#hub-detail [role=tab][data-id=ask]').click()
-    assert p.locator('#hub-ask-q').is_visible() and 'Scout evidence guide' in p.locator('#hub-detail').inner_text()
+    assert p.locator('#hub-ask-q').is_visible() and 'Grader evidence guide' in p.locator('#hub-detail').inner_text()
     p.keyboard.press('Escape')
     assert p.locator('#hub-card').is_hidden()
-    # 4) the Side button of a row without an offered Scout side, and 5) an alert notice, open the same card
+    # 4) the Side button of a row without an offered Grader side, and 5) an alert notice, open the same card
     p.evaluate("""(k) => { const b = document.querySelector(`#hub-rows .h-add[data-id="${CSS.escape(k)}"]`); b.dataset.hub = 'research'; b.click(); }""", k)
     p.wait_for_selector('#hub-card:not([hidden]) #hub-detail .h-decision')
     assert p.locator('#hub-rows tr.is-expanded').get_attribute('data-record') == k
@@ -402,7 +402,7 @@ def test_owner_tools_stay_hidden_from_members_and_no_letter_rows_render_cleanly(
             assert re.search(r'\d+\.\d%', t) and ('Lean Over' in t or 'Lean Under' in t or 'Over' in t), t
         p.locator('#hub-rows .h-player').first.click()
         p.wait_for_selector('#hub-detail .h-decision')
-        assert 'Lean' in p.locator('#hub-detail .h-dec-chance').inner_text() or 'Scout side' in p.locator('#hub-detail .h-dec-chance').inner_text()
+        assert 'Lean' in p.locator('#hub-detail .h-dec-chance').inner_text() or 'Grader side' in p.locator('#hub-detail .h-dec-chance').inner_text()
         assert not p.errors
     finally:
         c.close()

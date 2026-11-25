@@ -192,7 +192,7 @@ def test_results_public_counts_settled_props_against_the_gate(built):     # noqa
     assert nba["gate"]["text"] == "1 settled (minimum 300)" and not nba["gate"]["validated"]
     assert "gate F" in nba["gate"]["rule"] and not nba["gate"]["under_review"]
     assert out["nba"] == nba["gate"]["text"]
-    # the settled forecast is sharp-2 = a market-only record: no Scout lean (the board's rule)
+    # the settled forecast is sharp-2 = a market-only record: no Grader lean (the board's rule)
     assert nba["leans"]["n"] == 0 and nba["leans"]["hit_rate"] is None
     assert nba["projection"]["mae"] == 4.0 and nba["projection"]["bias"] == 4.0
     assert [b["label"] for b in nba["bands"]] == ["probability band"] * 4

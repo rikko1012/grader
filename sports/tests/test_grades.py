@@ -139,7 +139,7 @@ def test_same_letter_on_board_sheet_slip_and_tracked_pick(gw):
     got = {p["record_id"]: p for p in mine["picks"]}
     assert got[r1]["grade_shown"] == "A" and got[r1]["result"]["status"] == "win"
     G = {r["grade"]: r for r in mine["by_grade"]["rows"]}
-    assert list(G) == ["A", "B", "C", "Lean"] and mine["by_grade"]["label"].startswith("Scout grade:")
+    assert list(G) == ["A", "B", "C", "Lean"] and mine["by_grade"]["label"].startswith("Grader grade:")
     assert G["A"]["n"] == 1 and G["A"]["hit_rate"] == 1.0 and "hit_rate_ci95_games" in G["A"]
     assert mine["by_grade"]["ungraded"] == 1
     agg = picks.aggregate(picks.connect_ro())

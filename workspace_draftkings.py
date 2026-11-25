@@ -85,14 +85,14 @@ def build(srv, sport, now=None):
                          and b['offer'].get('line') == line), None)
             if same is not None:
                 # owner 2026-11-13 ("draftking section should grades and look like the other sections"): the exact same player, event,
-                # stat, period and line already has Scout's saved grade on the board; this DraftKings line shows it as every other
+                # stat, period and line already has Grader's saved grade on the board; this DraftKings line shows it as every other
                 # extra book does (side, chance, letter; no stake: stakes are set for that entry only). Nothing is graded here.
                 sc = copy.deepcopy(same['scout'])
                 sc.update(units=None, stake_reason=f"Same line and saved chance as {same['offer']['platform_label']}; stakes are set for that entry only.")
                 r['scout'] = sc
                 _cap_reported(r, p.get('reported_prices'))
             else:
-                # another line: Scout's projection only (no chance is read at a DraftKings-only line), as other books show it
+                # another line: Grader's projection only (no chance is read at a DraftKings-only line), as other books show it
                 r['scout'].update(grade=None, units=None, side=None, p_side=None, hold=None)
             r['market_chance'] = None
             r['market']['line_type'] = 'alternate' if p['kind'] == 'milestone' else 'book line'

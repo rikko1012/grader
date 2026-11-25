@@ -162,9 +162,9 @@ def check(slip, pool, mode="load", now=None, offer_lookup=None, live_current=Non
                 problems.append({"leg": i, "code": "stale", "text": f"{lab}: price not fresh (seen {int(age // 60)} min ago)"})
         if not eligible:
             if reason != "started / locked":
-                problems.append({"leg": i, "code": "policy", "text": f"{lab}: not a Scout slip pick now ({reason})"})
+                problems.append({"leg": i, "code": "policy", "text": f"{lab}: not a Grader slip pick now ({reason})"})
         elif cur["side"] != leg.get("side"):
-            problems.append({"leg": i, "code": "side", "text": f"{lab}: Scout's side is now {cur['side_word']}"})
+            problems.append({"leg": i, "code": "side", "text": f"{lab}: Grader's side is now {cur['side_word']}"})
         elif cur["forecast_id"] != leg.get("forecast_id"):
             problems.append({"leg": i, "code": "forecast", "text": f"{lab}: the forecast was updated - reconfirm"})
         current.append(builder.leg_view(cur) if cur else None)
@@ -212,7 +212,7 @@ def _stat_words(l):
 
 def copy_text(platform, entry_type, legs):
     words = rules.SIDE_WORD[platform]
-    lines = [f"{rules.LABEL[platform]} - {len(legs)}-pick {entry_type} - Scout Sports slip (not entered)"]
+    lines = [f"{rules.LABEL[platform]} - {len(legs)}-pick {entry_type} - Prop Grader Sports slip (not entered)"]
     for i, l in enumerate(legs, 1):
         lines.append(f"{i}. {l['player']} ({team_abbr(l.get('league'), l['team']) or l['team']}) - {l.get('event_ref') or ''} - {_et(l['start_utc'])} - "
                      f"{_stat_words(l)} {words[l['side']]} {l['line']}")

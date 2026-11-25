@@ -5,7 +5,7 @@ no grade, letter, chance, projection, stake or model change. Every row, name, te
 C2: Reset on a platform tab returns to the opening view on All Books (it kept PrizePicks: "19 of 108 lines"); Bets only stays
     the deliberate default (on since the 2026-10-06 review; the opening view is unchanged).
 C3: "Lines differ" on a one-platform view reads the other platform's lines too (it found nothing opened straight on PrizePicks);
-    "New <1h" and "Bumped" on PrizePicks use Scout's own first direct read of a line (time and line) when it is earlier than
+    "New <1h" and "Bumped" on PrizePicks use Grader's own first direct read of a line (time and line) when it is earlier than
     the scraper's hourly copy's (which had none for a fresh line, and missed a move before its first read).
     Unders on PrizePicks: no change - a Less pick is offered only where PrizePicks' feed offers it for that exact line
     (owner rule 2026-10-14, G8.9 (5)); the side filter itself is shared with Underdog."""
@@ -104,7 +104,7 @@ def test_unders_filter_on_prizepicks_shows_its_under_picks(tmp_path):
     assert out == ["1 of 3 lines", "2 of 3 lines"]
 
 
-# ------------------------------------------------------------------ C3: New <1h on PrizePicks (Scout's own first sighting)
+# ------------------------------------------------------------------ C3: New <1h on PrizePicks (Grader's own first sighting)
 def _direct_rec(lid, line=27.5, start=None):
     return {"line_id": lid, "player": "p" + lid, "team": "Alpha", "opponent": "Bravo", "start_time": start or NOW + timedelta(hours=5),
             "market": "kills", "maps": "1-2", "line": line, "odds_type": "standard", "higher": 1.0, "lower": 1.0, "stat": "MAPS 1-2 Kills",
@@ -119,9 +119,9 @@ def test_a_line_scout_read_directly_has_its_first_sighting(tmp_path, monkeypatch
     old_seen = NOW - timedelta(hours=3)
     rows = pp.rows_from([_direct_rec("1"), dict(_direct_rec("2"), first_seen=old_seen)])      # 2: the scraper saw it 3 h ago
     pp._first_seen(rows, t0)
-    assert pp._when(rows[0]["first_seen"]) == datetime.fromtimestamp(t0, timezone.utc).replace(microsecond=0)   # Scout's read: new
+    assert pp._when(rows[0]["first_seen"]) == datetime.fromtimestamp(t0, timezone.utc).replace(microsecond=0)   # Grader's read: new
     assert pp._when(rows[1]["first_seen"]) == old_seen                         # the scraper's earlier sighting wins
-    # 40 min later the scraper's hourly copy has line 1 at ITS read time: the row keeps Scout's earlier sighting
+    # 40 min later the scraper's hourly copy has line 1 at ITS read time: the row keeps Grader's earlier sighting
     later = pp.rows_from([dict(_direct_rec("1"), first_seen=NOW + timedelta(minutes=35))])
     pp._first_seen(later, t0 + 2400)
     assert pp._when(later[0]["first_seen"]) == datetime.fromtimestamp(t0, timezone.utc).replace(microsecond=0)
@@ -137,18 +137,18 @@ def test_a_line_scout_read_directly_has_its_first_sighting(tmp_path, monkeypatch
 
 def test_a_move_scout_read_before_the_scrapers_copy_is_a_bump(tmp_path, monkeypatch):
     """C3 "Bumped" on PrizePicks: the opening line came only from the scraper's hourly copy (by line id), so a line that
-    moved before the copy first read it was never bumped. Scout's own first direct read keeps its line; the earlier
+    moved before the copy first read it was never bumped. Grader's own first direct read keeps its line; the earlier
     sighting's opening wins."""
     monkeypatch.setattr(pp, "SNAPSHOT", tmp_path / "pp_last.json")
     monkeypatch.setattr(pp, "_FIRST", {"path": None, "by": {}})
     t0 = NOW.timestamp()
-    pp._first_seen(pp.rows_from([_direct_rec("1", line=27.5), _direct_rec("2", line=21.5)]), t0)      # Scout's first reads
+    pp._first_seen(pp.rows_from([_direct_rec("1", line=27.5), _direct_rec("2", line=21.5)]), t0)      # Grader's first reads
     # 20 min later PrizePicks moved both (same line ids). The copy first read line 1 AFTER the move (its opening = 28.5,
-    # first seen later than Scout's read); line 2 it read 2 h earlier at 20.5 (an older opening than Scout's)
+    # first seen later than Grader's read); line 2 it read 2 h earlier at 20.5 (an older opening than Grader's)
     later = pp.rows_from([dict(_direct_rec("1", line=28.5), open_line=28.5, first_seen=NOW + timedelta(minutes=15)),
                           dict(_direct_rec("2", line=22.5), open_line=20.5, first_seen=NOW - timedelta(hours=2))])
     pp._first_seen(later, t0 + 1200)
-    assert later[0]["open_line"] == 27.5 and later[0]["line"] == 28.5       # bumped up from Scout's opening read
+    assert later[0]["open_line"] == 27.5 and later[0]["line"] == 28.5       # bumped up from Grader's opening read
     assert later[1]["open_line"] == 20.5                                    # the copy's earlier opening stays
     assert pp._when(later[1]["first_seen"]) == NOW - timedelta(hours=2)
     # a line nobody saw move: opening = its line (never a bump)
@@ -173,7 +173,7 @@ def test_direct_read_marks_a_fresh_line_new_without_the_scrapers_copy(tmp_path, 
         pp._load()
         row = pp._S["rows"][0]
         assert row["first_seen"] and (datetime.now(timezone.utc) - pp._when(row["first_seen"])).total_seconds() < 120
-        assert row["open_line"] == row["line"] == 27.5                  # Scout's opening read (no move: never a bump)
+        assert row["open_line"] == row["line"] == 27.5                  # Grader's opening read (no move: never a bump)
         base = pp.rows_from([dict(rec)])[0]
         mine = ("first_seen", "open_line")
         assert {k: v for k, v in row.items() if k not in mine} == {k: v for k, v in base.items() if k not in mine}

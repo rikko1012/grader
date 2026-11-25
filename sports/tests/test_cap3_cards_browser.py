@@ -1,5 +1,5 @@
 """cap-3 review 2026-11-08, rendered: the classic board cards and the player page's forecast panel name the hold on a book /
-Polymarket line priced far from even ("Scout grades lines priced near even.") - no side, no letter, chances still shown -
+Polymarket line priced far from even ("Grader grades lines priced near even.") - no side, no letter, chances still shown -
 as the board table and Compare already did. Sanity holds get the same sentence (their own server text). ui_mock harness: no
 server, no network. Every name / number here is a TEST FIXTURE."""
 import copy
@@ -11,7 +11,7 @@ from sports.tests import test_ui_audit as A  # noqa: E402
 from sports.tests import test_ui_compare as C  # noqa: E402
 from sports.tests import test_ui_uifix as U  # noqa: E402
 
-TEXT = "Scout grades lines priced near even."
+TEXT = "Grader grades lines priced near even."
 CAP = {"b": "cap", "t": TEXT, "v": "cap-3"}
 browser = A.browser
 

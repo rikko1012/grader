@@ -115,7 +115,7 @@ def test_best_line_for_a_side(tmp_path):
     # offering the Over (Underdog 32.5); Under: the highest offering the Under (PrizePicks 33.0)
     assert out["bestOver"] == "ud-32" and out["bestUnder"] == "pp-33"
     assert out["one"] is None and out["none"] is None
-    # the row's mark follows the row line's Scout side (pp-29g leans Over)
+    # the row's mark follows the row line's Grader side (pp-29g leans Over)
     assert out["groups"][0]["best"] == "ud-32"
     # same line on two apps: nothing is priced on either, the first stays (no invented tie-break)
     assert out["groups"][3]["best"] in ("ud-j", "pp-j")

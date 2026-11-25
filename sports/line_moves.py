@@ -8,7 +8,7 @@ What is read (read-only, bounded):
     the archive's bounded LRU, the same read store.revisions makes) - at most REVS_MAX;
   - the canonical event's start (store.latest "event" / "espn": events are never archived, and a delayed game carries its new
     start), so the closing line is cut at the game's REAL start, never at a start a pick saved when it was tracked.
-Opening = the offer's first stored revision (revision 1, not late, known before the start): the first line Scout recorded
+Opening = the offer's first stored revision (revision 1, not late, known before the start): the first line Grader recorded
 for this offer. Closing = the last non-late revision known at or before the start. Nothing is said (None) when any of that is
 not known, when more revisions exist than were read, or when the offer shows a different line after the start (a live or
 late line on the same id: the close is then not certain). Behind a bounded per-process cache: an answer for a game that

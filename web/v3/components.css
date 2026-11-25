@@ -1,4 +1,4 @@
-/* 1time Scout components (v3). Needs tokens.css first. Plain class rules, no !important, no page-specific selectors.
+/* Prop Grader components (v3). Needs tokens.css first. Plain class rules, no !important, no page-specific selectors.
    Naming: .sc-<block>, .sc-<block>__<part>, modifiers .is-<state> / .sc-<block>--<variant>. Value inks: .sc-v-good/.sc-v-near/.sc-v-poor.
    Rules baked in: Outfit 400/500/600 only, tabular figures, hairlines + 1px specular top edge, no glows, one accent per surface. */
 
@@ -42,7 +42,7 @@
 
 /* ------------------------------------------------------------------ member shell: ONE header + ONE nav on every member page (r4, SHARED-1)
    Markup comes from system/shell.py (header(), tabbar()) so every group renders the same bytes.
-   Left: 1T tile + 'Scout' (never replaced by a page title; the title lives in the page hero).
+   Left: 1T tile + 'Grader' (never replaced by a page title; the title lives in the page hero).
    Desktop (>=1024): hub nav Board, Slips, EV, Arbitrage, Sportsbooks, My picks, Record, Tools; right slot search, Slip pill, theme.
    Phone: brand left, right slot search + theme; Slip lives ONLY in the bottom bar (Board, Slip, My picks, Record, More). */
 .sc-appbar{position:sticky;top:0;z-index:30;height:var(--sc-top-h);display:flex;align-items:center;gap:var(--sc-6);padding:0 var(--sc-6);
@@ -216,7 +216,7 @@
 /* book line freshness: 'Underdog · checked 9 min ago' */
 .sc-book{color:var(--sc-faint);font-size:var(--sc-fs-13);white-space:nowrap}
 
-/* tiny hit bars (last 10 vs the line); .on = went the Scout side, the dashed line is the line */
+/* tiny hit bars (last 10 vs the line); .on = went the Grader side, the dashed line is the line */
 .sc-spark{display:inline-flex;align-items:flex-end;gap:2px;height:22px;position:relative}
 .sc-spark i{display:block;width:3px;background:color-mix(in srgb,var(--sc-muted) 45%,transparent)}
 .sc-spark i.on{background:var(--sc-accent-fill)}
@@ -263,7 +263,7 @@
 .sc-tile b.is-pos>span{color:var(--sc-pos)} .sc-tile b.is-neg>span{color:var(--sc-neg)}
 .sc-tile span{color:var(--sc-muted);font-size:var(--sc-fs-12)}
 
-/* ------------------------------------------------------------------ Why Scout leans: each figure on a faint tint of its own ink */
+/* ------------------------------------------------------------------ Why Grader leans: each figure on a faint tint of its own ink */
 .sc-why{list-style:none;margin:0;padding:0}
 .sc-why li{display:grid;grid-template-columns:76px minmax(0,1fr);gap:var(--sc-3);align-items:start;padding:10px 0;border-top:1px solid var(--sc-hair);color:var(--sc-muted);font-size:var(--sc-fs-15)}
 .sc-why li b{color:var(--sc-text);font-weight:600}

@@ -1,6 +1,6 @@
 """os-1 (owner 2026-11-06, scope "Underdog only"), the main server's side: an Underdog LoL line listing one option, on every
 scope (Map 1, Maps 1-2, Maps 1-3), is shown with its line and price, reads "Over only" / "Under only" and is never graded,
-staked, put on a slip (generator, adder, recheck, track), priced for EV or shown with a Scout chance. A two-listed Underdog
+staked, put on a slip (generator, adder, recheck, track), priced for EV or shown with a Grader chance. A two-listed Underdog
 line whose other side is suspended right now keeps its grade. Every PrizePicks line (standard, goblin, demon - More only
 included) keeps today's behaviour. server.py and workspace_*.py import no lol / sports package. Real HTTP over
 server.Handler; every name is a TEST FIXTURE (tests/fixtures/workspace_lol_board.json)."""
@@ -13,7 +13,7 @@ import slip_quality as sq
 from tests.test_workspace_all_sports import env, recs, check, track, problems, fresh, get  # noqa: F401
 from tests.workspace_other_fixture import leg
 
-NOTE = "Over only: Scout grades lines that offer both sides."
+NOTE = "Over only: Grader grades lines that offer both sides."
 GOBLIN = {"basis": "adjusted-odds line, no allowed sides sent", "higher": {"offered": True}, "lower": {"offered": None}}
 
 
@@ -52,7 +52,7 @@ def test_underdog_one_option_on_every_scope_reads_over_only(env, scope):
 def test_suspended_side_on_a_two_listed_underdog_line_keeps_the_grade(env):
     fx = env
     s = fx.lol.rows[3]["sides"]
-    _rewrite(fx, 3, sides=dict(s, higher=dict(s["higher"], status="suspended")))   # Scout's side (Under) still open
+    _rewrite(fx, 3, sides=dict(s, higher=dict(s["higher"], status="suspended")))   # Grader's side (Under) still open
     r = recs(fx, "lol")[("Harky", "underdog")]
     assert r["scout"]["hold"] is None and r["scout"]["grade"] == "A-"
 
@@ -101,7 +101,7 @@ def test_member_board_labels_and_slip_reasons(env):
     assert server.lol_one_sided_label("prizepicks", GOBLIN) is None                          # PrizePicks: unchanged
     assert server.lol_one_sided_label("prizepicks", {"higher": {"offered": True}, "lower": {"offered": False}}, "over") is None
     out = server._lol_member_slips({"platforms": {"underdog": {"blocked_by": {
-        "the line offers one side only (Scout grades lines that offer both sides)": 3}, "upcoming_series": 2}}})
+        "the line offers one side only (Grader grades lines that offer both sides)": 3}, "upcoming_series": 2}}})
     assert any("one side only" in x["text"] for x in out["Underdog"]["why_none"])
 
 

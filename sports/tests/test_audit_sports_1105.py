@@ -90,7 +90,7 @@ def test_pick_refusal_uses_plain_member_words():
                       (["promotional line: never graded or mixed with ordinary lines"], "promotional"),
                       (["Combined stat: research only"], "does not track this stat")):
         t = picks.plain_gate_reason(why)
-        assert t.startswith("Scout can't track this pick: ") and part in t
+        assert t.startswith("Grader can't track this pick: ") and part in t
         assert "variant" not in t and "one_sided" not in t and "scope" not in t
 
 
@@ -185,7 +185,7 @@ def test_one_pick_per_player_stat_game():
     # pick'em before books / Kalshi; then the line closest to the projection (21.5 vs 22.0); the newest of that line
     assert by[("p1", "sm-1")] == "d" and by[("p1", "mc-1")] == "m1" and by[("p2", "sm-1")] == "x"
     one = results_public.one_per_prop(reps, pref=("sm-1", "mi-1"))
-    assert sorted(r["forecast_id"] for r in one) == ["d", "x"]                    # Scout before market-only
+    assert sorted(r["forecast_id"] for r in one) == ["d", "x"]                    # Grader before market-only
     s = results_public.summarize(one)
     assert s["settled"] == 2 and s["leans"]["n"] == 2 and s["props"] == 2
     raw = results_public.raw_counts(rows)

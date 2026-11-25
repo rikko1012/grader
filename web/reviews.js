@@ -118,12 +118,12 @@
     if (!me || !me.write_on) { box.hidden = true; return; }
     box.hidden = false;
     if (!me.signed_in) {
-      body.appendChild(el("p", { text: "Scout members: sign in to write a review." }));
+      body.appendChild(el("p", { text: "Grader members: sign in to write a review." }));
       body.appendChild(el("a", { class: "btn primary", href: me.sign_in, text: "Sign in with Whop" }));
       return;
     }
     if (!me.member) {
-      body.appendChild(el("p", { text: "Reviews are written by paying Scout members." }));
+      body.appendChild(el("p", { text: "Reviews are written by paying Grader members." }));
       body.appendChild(el("a", { class: "btn", href: me.join, text: "Join on Whop" }));
       return;
     }
@@ -149,7 +149,7 @@
     ta.addEventListener("input", counter);
     counter();
     f.appendChild(el("div", null, [el("label", { class: "lbl", for: "rv-body", text: "Your review" }), ta, count]));
-    var style = r ? r.name_style : "short", nm = me.names || { short: "Scout member", full: "Scout member" };
+    var style = r ? r.name_style : "short", nm = me.names || { short: "Prop Grader member", full: "Prop Grader member" };
     var namesBox = el("div", { class: "names" }, [["short", nm.short], ["full", nm.full]].filter(function (x, i, a) { return i === 0 || x[1] !== a[0][1]; }).map(function (x) {
       return el("label", null, [el("input", { type: "radio", name: "name_style", value: x[0], checked: style === x[0] || (x[0] === "short" && style !== "full") }), el("span", { text: x[1] })]);
     }));

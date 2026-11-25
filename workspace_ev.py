@@ -12,7 +12,7 @@ using the same underlying feed shouldn't count twice"):
     it settles the prop like the app does - gradecore.book_rules.for_pickem; a rule that is not confirmed = not used;
   - "books" counts pricing FAMILIES (gradecore.book_rules.FAMILY), so two sites on one feed are one; the default minimum is
     ev_board.MIN_BOOKS_DEFAULT (2). A member may lower it to 1; such rows carry one_book / the "1 book" label;
-  - every shared build's legs that beat the entry are queued for the record (workspace_ev_log), off the request path. The chance the board prints (Scout's model) is shown beside the market fair, never blended: no blend
+  - every shared build's legs that beat the entry are queued for the record (workspace_ev_log), off the request path. The chance the board prints (Grader's model) is shown beside the market fair, never blended: no blend
 weight is fitted and the calibration layers are off. CS2 / LoL lines (and NBA / NFL lines no book prices) are "model only"
 and ranked in their own list. A leg whose quotes are all stale / one-sided / wide gets no EV: it is hidden and counted.
 
@@ -386,7 +386,7 @@ def build(srv, p, allowed, now=None):
                                    for d in f["dropped"]]))
     key = lambda r: (r.get("ev") is None, -(r.get("ev") or 0.0))
     rows.sort(key=key)
-    # audit review 2026-11-07: the list is headed "ranked by Scout's chance", so every sport ranks by its chance (pushes off),
+    # audit review 2026-11-07: the list is headed "ranked by Grader's chance", so every sport ranks by its chance (pushes off),
     # whether or not it shows a return figure (T5 hid it on NBA / NFL, which had sorted them below every CS2 / LoL leg)
     model_rows = [r for _, r in sorted(model_rows, key=lambda t: (-t[0], t[1]["key"], t[1]["side"]))]
     used = sorted({s["book"] for r in rows for s in r["sources"]} | usable)

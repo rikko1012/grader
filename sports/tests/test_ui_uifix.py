@@ -140,7 +140,7 @@ def test_slip_studio_zero_picks_is_a_clear_locked_state(browser):
     assert box.is_visible()
     t = box.inner_text()
     assert "No pick can go into" in t and "1,027" in t and "Game in progress" in t
-    assert "No Scout projection for this exact line yet" in t
+    assert "No Grader projection for this exact line yet" in t
     assert page.locator("#ss-build").is_disabled()
     assert not page.locator("#ss-research").is_visible()
     assert not errors, errors
@@ -224,7 +224,7 @@ EV = {"event_id": "nba:espn:9001", "record_id": "event:espn:9001:r1:abc", "start
                                 "history": [["2029-12-30T19:00:00Z", -3.5], ["2029-12-31T19:00:00Z", -4.5]]},
                      "total": {"line": 221.5, "source_label": "ESPN (DraftKings)", "observed_at": "2029-12-31T19:00:00Z"},
                      "moneyline": {"home_p": 0.66, "away_p": 0.34, "source_label": "Kalshi", "observed_at": "2029-12-31T19:30:00Z"}},
-      "team_context": {"as_of": "2029-12-31T12:00:00Z", "source": "Scout game store (ESPN box scores)",
+      "team_context": {"as_of": "2029-12-31T12:00:00Z", "source": "Grader game store (ESPN box scores)",
                        "home": {"pace": {"value": 99.1, "rank": 12, "n": 20},
                                 "def_vs_pos": [{"pos": "G", "stat_label": "Points", "rank": 3, "allowed_pg": 41.2, "n": 20}]},
                        "away": {"pace": {"value": 96.4, "rank": 27, "n": 20}}}}
@@ -281,8 +281,8 @@ def test_slate_bettor_wording_details_toggle_lines_and_placeholder(browser):
     page.goto("/sports#/slate?lg=nba")
     page.wait_for_selector(".sw-game")
     body = page.locator("#sw-main").inner_text()
-    assert "core markets" not in body and "Scout chances" not in body
-    assert "154 props" in body and "75 with a Scout chance" in body
+    assert "core markets" not in body and "Grader chances" not in body
+    assert "154 props" in body and "75 with a Grader chance" in body
     # a started game leaves the main list: counted, and listed in the collapsed "Started or finished" section
     assert "1 upcoming game" in body and "1 started or finished" in body and "Started or finished (1)" in body
     assert page.locator(".sw-past .sw-game").count() == 1 and not page.locator(".sw-past .sw-game").is_visible()
@@ -314,7 +314,7 @@ def test_match_context_nav_state_and_team_context(browser):
     tc = tc.lower()
     assert "spread" in tc and "pace" in tc and "99.1" in tc and "#3" in tc and "41.2 per game" in tc
     body = page.locator("#sw-main").inner_text()
-    assert "75 with a Scout chance" in body and "Scout chances" not in body
+    assert "75 with a Grader chance" in body and "Grader chances" not in body
     assert "Out · Shoulder" in body
     assert not errors, errors
     ctx.close()
@@ -339,7 +339,7 @@ def test_footer_hides_builder_terms_behind_details(browser):
                         " o.querySelector('details').remove(); return o.textContent; }")
     for term in ("cap-1", "sc-1", "mkt-polymarket", "contracts", "capabilities"):
         assert term not in vis, term
-    assert "Scout projection" in vis and "Market (Polymarket)" in vis
+    assert "Grader projection" in vis and "Market (Polymarket)" in vis
     assert "cap-1" in page.locator("#sw-foot details details").text_content()
     assert not errors, errors
     ctx.close()

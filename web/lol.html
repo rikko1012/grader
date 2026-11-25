@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>1time Scout · LoL</title>
+<title>Prop Grader · LoL</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -268,7 +268,7 @@ body.ot-lol .intro {margin:0 0 24px}.ot-lol .intro h2 {font:700 34px var(--displ
 <link rel="stylesheet" href="/scout-ui.css?v=3">
 </head><body class="ot-lol"><a class="scout-skip" href="#app">Skip to content</a>
 <header><div class="logo">1T</div>
-<h1>1time <em>Scout</em></h1><nav class="sportsw" aria-label="Game"><a href="/">CS2</a><a href="/lol" class="on" aria-current="page">LoL</a></nav><span class="grow"></span><span id="who"></span></header>
+<h1>1time <em>Grader</em></h1><nav class="sportsw" aria-label="Game"><a href="/">CS2</a><a href="/lol" class="on" aria-current="page">LoL</a></nav><span class="grow"></span><span id="who"></span></header>
 <main class="wrap" id="app" tabindex="-1" aria-live="polite"><div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div></main>
 <div id="modal" role="dialog" aria-modal="true" aria-labelledby="cardtitle"><div class="sheet" id="card"></div></div>
 <div id="ctmodal" role="dialog" aria-modal="true" aria-label="Compare lines"><div class="sheet ctsheet" id="ctsheet"></div></div>
@@ -372,7 +372,7 @@ function quoteIssue(x) {
   return Date.now() - at > 15 * 60000 ? "The line has not been checked in the last 15 minutes." : null;
 }
 function playable(x) { return !whyNot(x); }
-function whyNot(x) { return x.one_sided ? x.stake_reason || `${x.one_sided}: Scout grades lines that offer both sides.` : !Number.isFinite(Date.parse(x.start || "")) ? "The match start time is missing." : started(x) ? "This match has started." : !x.pick_offered ? `${x.pick_side} is not offered on this line.` : quoteIssue(x); }
+function whyNot(x) { return x.one_sided ? x.stake_reason || `${x.one_sided}: Grader grades lines that offer both sides.` : !Number.isFinite(Date.parse(x.start || "")) ? "The match start time is missing." : started(x) ? "This match has started." : !x.pick_offered ? `${x.pick_side} is not offered on this line.` : quoteIssue(x); }
 function legOf(x) { return {key: x.key, platform: x.platform, platform_label: x.platform_label, player: x.player, team: x.team, opponent: x.opponent,
   stat: x.stat, stat_name: x.stat_name, scope: x.scope, line: x.line, side: x.pick_side, line_type: x.line_type, match_key: matchKey(x), start: x.start, grade: x.grade}; }
 function legText(l) { return `${l.player} (${l.team}) vs ${l.opponent} - ${l.stat_name}, ${l.scope} - ${l.platform_label}${l.line_type !== "Standard" ? " " + l.line_type : ""} - ${l.side} ${l.line}`; }

@@ -40,8 +40,8 @@ EV_MIN_CHANCE = 0.57                    # Results cover 57% and up (results_view
 EV_MIN_MATCHES = 300
 EV_MAX_GAP = 0.03
 EV_MAX_AGE_H = 24
-EV_NOT_VALIDATED = {"lol": "LoL chances have no settled record at real lines yet.", "nba": "Scout rates EV only on chances that passed its settled-results check; NBA chances have not.",
-                    "nfl": "Scout rates EV only on chances that passed its settled-results check; NFL chances have not."}
+EV_NOT_VALIDATED = {"lol": "LoL chances have no settled record at real lines yet.", "nba": "Grader rates EV only on chances that passed its settled-results check; NBA chances have not.",
+                    "nfl": "Grader rates EV only on chances that passed its settled-results check; NFL chances have not."}
 
 SPORT = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL"}
 LABEL = {"prizepicks": "PrizePicks", "underdog": "Underdog"}
@@ -55,47 +55,47 @@ def _rule(status, text, source=None, page_date=None, note=None):
 
 _PUBLISHED, _NOT, _SCOUT = "published", "not_published", "scout"
 # one row per combination. "published": the platform states the answer on the page named, and every such row names that page.
-# "not_published": no page answers it. "scout": a limit of Scout's own, which no platform page states, so it carries no source.
+# "not_published": no page answers it. "scout": a limit of Grader's own, which no platform page states, so it carries no source.
 TABLE = {
     "entry_size": {"label": "Entry size",
                    "prizepicks": _rule(_PUBLISHED, "2 to 6 picks", PP_PICKS, PP_PAGE,
-                                       "Colorado's minimum of 3 is not checked: Scout does not hold a member's state."),
+                                       "Colorado's minimum of 3 is not checked: Grader does not hold a member's state."),
                    "underdog": _rule(_PUBLISHED, "Standard 2 to 8 picks, flex 3 to 8 picks", UD_PAYOUTS, UD_PAYOUT_PAGE)},
     "two_teams": {"label": "Two or more teams",
                   "prizepicks": _rule(_PUBLISHED, "Required", PP_PICKS, PP_PAGE),
                   "underdog": _rule(_PUBLISHED, "Required", UD_LINEUP, None, "This rules page shows no date.")},
     "same_player": {"label": "Same player twice",
                     "prizepicks": _rule(_PUBLISHED, "A player counts once per lineup, unless Stacks are available for that player", PP_PICKS, PP_PAGE,
-                                        "The boards Scout reads carry no Stacks, so Scout refuses a repeat."),
+                                        "The boards Grader reads carry no Stacks, so Grader refuses a repeat."),
                     "underdog": _rule(_PUBLISHED, "Same side refused", UD_LINEUP)},
     "both_sides": {"label": "Both sides of one prop",
                    "prizepicks": _rule(_PUBLISHED, "Refused by the same-player rule", PP_PICKS, PP_PAGE),
-                   "underdog": _rule(_NOT, "Underdog publishes only the same-side example. Scout does not offer this")},
+                   "underdog": _rule(_NOT, "Underdog publishes only the same-side example. Grader does not offer this")},
     "mixed_sports": {"label": "Mixed sports",
                      "prizepicks": _rule(_PUBLISHED, "Allowed for the most part: selections can include different sports, and some sports "
                                                      "add their own limits", PP_PICKS, PP_PAGE, "Each sport's own chart is in the PrizePicks app."),
                      "underdog": _rule(_NOT, "Underdog does not publish this. Its rules page, help search and Pick'em page "
-                                             "were searched. Scout does not offer this")},
+                                             "were searched. Grader does not offer this")},
     "opposing_players": {"label": "Opposing players of one match",
                          "prizepicks": _rule(_NOT, "Each sport's chart is in the PrizePicks app, and its MLB example shows such limits "
-                                                   "exist. Scout does not offer this"),
+                                                   "exist. Grader does not offer this"),
                          "underdog": _rule(_PUBLISHED, "Allowed. The payout may shift", UD_CORRELATED, UD_CORRELATED_PAGE)},
     "teammates_plus_other": {"label": "Teammates plus another team",
                              "prizepicks": _rule(_PUBLISHED, "Allowed by the two-team rule", PP_PICKS, PP_PAGE),
                              "underdog": _rule(_PUBLISHED, "Allowed", UD_LINEUP)},
     "goblins_demons": {"label": "Goblins and demons",
                        "prizepicks": _rule(_PUBLISHED, "Allowed in any number", PP_PICKS, PP_PAGE,
-                                           "Scout's slip builder leaves goblins out unless you allow them in Slip Studio."),
-                       "underdog": _rule(_SCOUT, "Scout grades no Underdog alternate lines, so they never reach this board")},
+                                           "Grader's slip builder leaves goblins out unless you allow them in Slip Studio."),
+                       "underdog": _rule(_SCOUT, "Grader grades no Underdog alternate lines, so they never reach this board")},
     "league_limits": {"label": "League limits",
-                      "prizepicks": _rule(_SCOUT, "CS2, LoL, NBA and NFL charts are in the PrizePicks app. Scout applies the published limits above"),
+                      "prizepicks": _rule(_SCOUT, "CS2, LoL, NBA and NFL charts are in the PrizePicks app. Grader applies the published limits above"),
                       "underdog": _rule(_PUBLISHED, "Lineup rules apply to every sport", UD_LINEUP, None, "This rules page shows no date.")},
     "ties": {"label": "A pick that ties the line",
              "prizepicks": _rule(_PUBLISHED, "Not correct and not incorrect: the payout drops as for a DNP", PP_TIES, PP_PAGE),
              "underdog": _rule(_PUBLISHED, "Voided: the entry pays for the remaining picks", UD_TIES, UD_TIES_PAGE)},
     "two_platforms": {"label": "Two platforms in one entry",
-                      "prizepicks": _rule(_SCOUT, "Scout splits picks into one entry per platform"),
-                      "underdog": _rule(_SCOUT, "Scout splits picks into one entry per platform")},
+                      "prizepicks": _rule(_SCOUT, "Grader splits picks into one entry per platform"),
+                      "underdog": _rule(_SCOUT, "Grader splits picks into one entry per platform")},
 }
 
 
@@ -146,7 +146,7 @@ def entry_status(platform, legs, entry_type=None):
         name = str(platform or "This platform")
         return {"platform": platform, "sports": sports, "entry_type": entry_type, "status": STATUS_NOT_PUBLISHED, "ok": False,
                 "trackable": False, "rules": [], "rules_version": RULES_VERSION,
-                "problems": [_problem(STATUS_NOT_PUBLISHED, f"{name} entry rules are not on file. Scout does not offer this entry.")]}
+                "problems": [_problem(STATUS_NOT_PUBLISHED, f"{name} entry rules are not on file. Grader does not offer this entry.")]}
     label = LABEL[p]
     chk = platform_rules.entry_check([dict(l, book=p) for l in legs], p, entry_type)
     et = chk["entry_type"]
@@ -160,16 +160,16 @@ def entry_status(platform, legs, entry_type=None):
         used.append("two_platforms")
         refused.append(_problem("entry", "An entry is placed on one platform. Picks from another platform are on this entry."))
     if platform_rules.RULES[p]["entry_size"].get(et) is None:
-        unpublished.append(_problem(STATUS_NOT_PUBLISHED, f"{label} publishes no size for a {et} entry. Scout does not offer this entry."))
+        unpublished.append(_problem(STATUS_NOT_PUBLISHED, f"{label} publishes no size for a {et} entry. Grader does not offer this entry."))
     if any(not _norm(l.get("team")) for l in legs):
         unpublished.append(_problem(STATUS_NOT_PUBLISHED, "The feed gives no team for a pick here, so the two-team rule cannot be applied. "
-                                                          "Scout does not offer this entry."))
+                                                          "Grader does not offer this entry."))
     if len(sports) > 1:
         used.append("mixed_sports")
         if p == "underdog":
             named = _names(SPORT.get(s, s) for s in sports)
             unpublished.append(_problem(STATUS_NOT_PUBLISHED, f"Underdog does not publish whether one entry can hold {named} picks. "
-                                                              "Scout does not offer this entry."))
+                                                              "Grader does not offer this entry."))
     if p == "underdog":
         seen = {}
         for l in legs:
@@ -182,7 +182,7 @@ def entry_status(platform, legs, entry_type=None):
                 used.append("both_sides")
                 who = ls[0].get("nick") or ls[0].get("player")
                 unpublished.append(_problem(STATUS_NOT_PUBLISHED, f"{who} is on both sides. Underdog does not publish whether one entry "
-                                                                  "can hold that. Scout does not offer this entry."))
+                                                                  "can hold that. Grader does not offer this entry."))
     else:
         matches = {}
         for l in legs:
@@ -190,7 +190,7 @@ def entry_status(platform, legs, entry_type=None):
                 matches.setdefault(str(l["event"]), set()).add(_norm(l.get("team")))
         if any(len(t) > 1 for t in matches.values()):
             used.append("opposing_players")
-            unpublished.append(_problem(STATUS_NOT_PUBLISHED, "PrizePicks keeps its same-match limits in its app chart. Scout does not "
+            unpublished.append(_problem(STATUS_NOT_PUBLISHED, "PrizePicks keeps its same-match limits in its app chart. Grader does not "
                                                               "offer opposing players of one match on one PrizePicks entry."))
     problems = refused + unpublished
     status = STATUS_REFUSED if refused else STATUS_NOT_PUBLISHED if unpublished else STATUS_VALID

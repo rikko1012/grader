@@ -182,10 +182,10 @@ def clean_body(s):
 
 def names(whop_name):
     """-> {'short', 'full'} from the Whop session name. short = first name + last initial ("Sam K."); a one-word handle stays
-    as it is; empty or email-like -> "Scout member"."""
+    as it is; empty or email-like -> "Prop Grader member"."""
     n = clean_line(whop_name, 60)
     if not n or "@" in n:
-        return {"short": "Scout member", "full": "Scout member"}
+        return {"short": "Prop Grader member", "full": "Prop Grader member"}
     parts = n.split(" ")
     short = f"{parts[0][:30]} {parts[-1][0].upper()}." if len(parts) >= 2 else parts[0][:30]
     return {"short": short, "full": n}

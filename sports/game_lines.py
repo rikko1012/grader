@@ -11,7 +11,7 @@ View (field names are the UI contract, sports/UI.md "Game lines"):
   spread         HOME team's spread (negative = home favoured), total, home_ml / away_ml (American odds)
   open           {"spread", "total", "home_ml", "away_ml"} at the first pickcenter row we stored (our first look,
                  not necessarily the book's opening line), observed_at
-  observed_at    when Scout last saw the current pickcenter row (ESPN gives no update time; source_time_unknown True)
+  observed_at    when Grader last saw the current pickcenter row (ESPN gives no update time; source_time_unknown True)
   history        up to HISTORY_POINTS [{"t", "spread", "total", "home_ml", "away_ml"}] oldest first - a row is stored
                  only when the line changed, so the points are the line's moves
   kalshi         {"home_win", "home_margin", "total", "observed_at"} from the Kalshi ladders (mid prices), or None

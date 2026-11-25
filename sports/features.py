@@ -1,4 +1,4 @@
-"""Scout Sports feature registry fr-1 (owner brief 5 + the owner's NFL / NBA prop-factor list of 2026-10-23).
+"""Prop Grader Sports feature registry fr-1 (owner brief 5 + the owner's NFL / NBA prop-factor list of 2026-10-23).
 
 EVERY owner factor is listed. Each entry: id, sport, factor (owner's wording, shortened), definition, source (data we
 actually have), availability (when it is known relative to the forecast), missingness, hypothesis, treatment, status,

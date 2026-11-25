@@ -1,6 +1,6 @@
 """card-and-chips (2026-11-06) server side of the NBA / NFL research doc: the teammates-out row counts the definite outs over the WHOLE
 saved injury report (the listed rows stop at six) and never a hedge status; factor-engine rows (weight 0) are grouped as not part of
-Scout's forecast, never "Model inputs"; a Q1 / first-half line with no results at its own period carries the full-game log as
+Grader's forecast, never "Model inputs"; a Q1 / first-half line with no results at its own period carries the full-game log as
 context (same file, no extra read). No chance, letter or stake changes."""
 import json
 
@@ -24,7 +24,7 @@ def test_teammates_out_counts_the_whole_report_and_engine_rows_are_context():
     assert out["value"] == 5 and out["names"] == ["P0", "P2", "P4", "P6", "P7"]          # P6 / P7 are past the six listed rows
     assert [r["label"] for r in rows if r["label"][:2] in {f"P{i}" for i in range(8)}] == ["P0", "P1", "P2", "P3", "P4", "P5"]
     eng = [r for r in rows if r["label"] == "Receptions allowed to TE"]
-    assert eng and eng[0]["group"] == ws.ENGINE_GROUP and "not part of Scout" in ws.ENGINE_GROUP
+    assert eng and eng[0]["group"] == ws.ENGINE_GROUP and "not part of Grader" in ws.ENGINE_GROUP
     assert not any(r.get("group") == "Model inputs" for r in rows)
     # nobody definitely out: no row (questionable / day-to-day never counted)
     player["context"][0]["items"] = [{"player": "Q", "status": "questionable"}]

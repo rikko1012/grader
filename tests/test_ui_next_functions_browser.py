@@ -441,9 +441,9 @@ def test_underdog_link_opens_the_chosen_line_from_the_card(browser, live, size):
         assert not p.errors
 
 
-# --------------------------------------------- UI sweep 2026-11-12 #24: Scout's side not offered on the app (Over-only demon)
+# --------------------------------------------- UI sweep 2026-11-12 #24: Grader's side not offered on the app (Over-only demon)
 
-DEMON = "cs2|prizepicks|pp:7012"            # vargo's PrizePicks demon 42.5, Scout Under 61.1%; here PrizePicks offers only More
+DEMON = "cs2|prizepicks|pp:7012"            # vargo's PrizePicks demon 42.5, Grader Under 61.1%; here PrizePicks offers only More
 
 
 @pytest.fixture
@@ -500,7 +500,7 @@ def test_nfl_tab_survives_reload_back_forward_and_deep_links_with_matching_title
             p.wait_for_timeout(600)                       # the classic sports page under the hub has had its turn
             assert p.locator(f"#hub-sports [data-id={sport}]").get_attribute("aria-pressed") == "true", (sport, p.url, p.title())
             assert f"sport={sport}" in p.url and "lg=" not in p.url, p.url
-            assert p.title() == "1time Scout · " + sport.upper(), p.title()
+            assert p.title() == "Prop Grader · " + sport.upper(), p.title()
             assert all(x.startswith(sport + "|") for x in p.locator("#hub-rows tr[data-record]").evaluate_all("rs=>rs.map(r=>r.dataset.record)"))
 
         on("nfl")
@@ -516,10 +516,10 @@ def test_nfl_tab_survives_reload_back_forward_and_deep_links_with_matching_title
         p.wait_for_selector("#hub-rows tr[data-record]", timeout=20000)
         p.wait_for_timeout(600)
         assert p.locator("#hub-sports [data-id=nfl]").get_attribute("aria-pressed") == "true"
-        assert p.title() == "1time Scout · NFL"
+        assert p.title() == "Prop Grader · NFL"
         p.locator("#hub-sports [data-id=cs2]").click()
         p.wait_for_timeout(400)
-        assert p.title() == "1time Scout · CS2"
+        assert p.title() == "Prop Grader · CS2"
         assert not p.errors
     finally:
         c.close()
@@ -630,11 +630,11 @@ def test_no_empty_game_log_message_when_the_card_has_counts(browser, live, size)
         assert not p.errors
 
 
-# --------------------------- bug 3 (owner 2026-11-12, "Not offered"): NBA / NFL lines where the app does not offer Scout's side
+# --------------------------- bug 3 (owner 2026-11-12, "Not offered"): NBA / NFL lines where the app does not offer Grader's side
 
 def not_offered_board():
     """the fixture NBA board plus: Nora Offset rebounds, PrizePicks 8.5 Over only and Underdog 8.5 both sides (an exact-match line),
-    Scout Under 69.2% A on both; Nate Near assists, PrizePicks 4.5 Over only and Underdog 5.5 (a near line, never the alternate)."""
+    Grader Under 69.2% A on both; Nate Near assists, PrizePicks 4.5 Over only and Underdog 5.5 (a near line, never the alternate)."""
     from tests.workspace_other_fixture import market as mk, nba_board, quote as qt, forecast as fc
     doc, view = nba_board()
     x = {"v": "cf-2", "ln": "under", "pl": 0.692, "gr": "A", "e": 9.1, "g": 9.1, "c": 3, "cw": [], "s": 3.0}
@@ -670,7 +670,7 @@ def test_not_offered_side_shows_no_letter_edge_or_add_and_points_to_the_exact_ma
                 return None, p.locator(f'tr.h-ladder-row tr[data-line*="{platform}"]').first
             return row, None
 
-        # Nora: the PrizePicks line (Over only) - Scout's side, chance and projection stay; no letter, no edge, no add for Under
+        # Nora: the PrizePicks line (Over only) - Grader's side, chance and projection stay; no letter, no edge, no add for Under
         row, lad = line_row("Nora Offset", "prizepicks")
         p.locator("[data-hub=group-by][data-id=prop]").count()
         both = [x for x in (row, lad) if x is not None][0]
@@ -683,7 +683,7 @@ def test_not_offered_side_shows_no_letter_edge_or_add_and_points_to_the_exact_ma
             btn = row.locator("[data-hub=add-alt]")
             assert btn.count() == 1 and "underdog" in (btn.get_attribute("aria-label") or "").lower()
         fix_shot(p, f"not-offered-row-{size['width']}")
-        # the card opens on Scout's side, says Not offered, and adds the exact-match Underdog line, not the Over
+        # the card opens on Grader's side, says Not offered, and adds the exact-match Underdog line, not the Over
         (row.locator(".h-player") if row is not None else lad.locator(".h-ld-book")).click()
         p.wait_for_selector("#hub-detail .h-why", timeout=20000)
         p.wait_for_timeout(400)
@@ -763,11 +763,11 @@ def cs2_not_offered(live):
     from tests.workspace_fixture import row
     soon = iso(datetime.now(timezone.utc).replace(microsecond=0) + __import__("datetime").timedelta(hours=3))
     held = "Unavailable—side not offered"
-    # vargo: PrizePicks 40.5 Maps 1-2, Over only, Scout Under -> held by the grader; Underdog lists the exact 40.5 Maps 1-2 Under
+    # vargo: PrizePicks 40.5 Maps 1-2, Over only, Grader Under -> held by the grader; Underdog lists the exact 40.5 Maps 1-2 Under
     live.rows.append(row("pp:7401", "prizepicks", "vargo", "Halcyon", "Norrland", 40.5, "Less", 0.634, 900, live.rows[0]["start"], grade="B",
                          under_available=False, unavailable=held))
     live.rows.append(row("11111111-0000-4000-8000-0000000000c1", "underdog", "vargo", "Halcyon", "Norrland", 40.5, "Less", 0.634, 900, live.rows[0]["start"]))
-    # sable: PrizePicks 9.5 Headshots Map 1, Over only, Scout Under; Underdog's 9.5 is Maps 1-2 (another scope) -> never the alternate
+    # sable: PrizePicks 9.5 Headshots Map 1, Over only, Grader Under; Underdog's 9.5 is Maps 1-2 (another scope) -> never the alternate
     live.rows.append(row("pp:7402", "prizepicks", "sable", "Vanta", "Kestrel Five", 9.5, "Less", 0.6, 901, soon, prop="hs", scope="1",
                          under_available=False, unavailable=held))
     live.rows.append(row("11111111-0000-4000-8000-0000000000c2", "underdog", "sable", "Vanta", "Kestrel Five", 9.5, "Less", 0.6, 901, soon, prop="hs", scope="12"))
@@ -815,7 +815,7 @@ def test_cs2_not_offered_row_shows_and_points_to_the_exact_match_only(browser, c
 
 @SIZES
 def test_lol_not_offered_line_with_its_exact_underdog_line(browser, live, size):
-    """LoL follows the same rule: Harky PrizePicks 10.5 Maps 1-3 offers only the More; Scout leans Under (69.8%) -> Not offered, no
+    """LoL follows the same rule: Harky PrizePicks 10.5 Maps 1-3 offers only the More; Grader leans Under (69.8%) -> Not offered, no
     letter, no add for the Under there; Underdog's 10.5 Maps 1-3 Under is the exact match and adds from the card."""
     harky = next(r for r in live.lol.rows if r["player"] == "Harky" and r["platform"] == "prizepicks")
     harky["sides"] = {"basis": "allowed_wager_types", "higher": {"offered": True}, "lower": {"offered": False}}

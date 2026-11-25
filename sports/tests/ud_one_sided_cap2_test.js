@@ -29,11 +29,11 @@ ok(r.oneSided === "Under only", "labelled Under only");
 r = T.propRow(m, {r: "r2", p: "underdog", l: 20.5, v: "balanced", o: [1, 0], t: t, g: 1, f: "f1", x: x}, {fc: fc, view: {}, now: now});
 ok(!r.oneSided && r.scout && r.lean === "over" && r.grade === "B", "suspended side keeps grading " + JSON.stringify(r));
 
-// sheets: the type column reads "Over only" and the row carries no Scout chance
+// sheets: the type column reads "Over only" and the row carries no Grader chance
 const D = {league: "nba", events: {e1: {s: "2099-01-01T00:00:00Z", a: "LAL", h: "BOS"}}, fc: {}, view: {},
            markets: [{k: "e1|p1|points|full_game", e: "e1", pid: "p1", n: "Player One", st: "points", sl: "Points",
                       q: [{r: "r1", p: "underdog", l: 20.5, v: "one_sided", o: [1, 0], m: [0.86, null], t: t, g: 0}]}]};
 const rows = SH.buildRows(D, "underdog", now);
 ok(rows.length === 1 && SH.variantLabel(rows[0].variant) === "Over only", "sheet type Over only " + JSON.stringify(rows[0] && rows[0].variant));
-ok(!rows[0].scout && !rows[0].grade, "sheet row has no Scout chance or grade");
+ok(!rows[0].scout && !rows[0].grade, "sheet row has no Grader chance or grade");
 console.log("ok");

@@ -24,7 +24,7 @@ def test_one_sided_lol_line_never_shows_null_units(tmp_path):
     one = _lol_row("k-one", "Alpha", FUTURE, p_over=0.6)
     one.update(one_sided="Over only", grade=None, units=None, pick_offered=False,
                sides=[{"side": "Over", "offered": True}, {"side": "Under", "offered": False}],
-               stake_reason="Over only line - Scout grades lines that offer both sides.")
+               stake_reason="Over only line - Grader grades lines that offer both sides.")
     two = _lol_row("k-two", "Bravo", FUTURE, p_over=0.66)
     two.update(grade="B", units=1, team="GEN", opponent="T1", match="GEN vs T1")
     out = run(tmp_path, "lol.html", """(() => {

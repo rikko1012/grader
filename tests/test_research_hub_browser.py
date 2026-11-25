@@ -32,7 +32,7 @@ def open_filters(p):
 
 
 def add_first(p):
-    """+ Add on the first row not on the slip; a prop whose Scout side is not offered opens the ONE card, where the member picks a side."""
+    """+ Add on the first row not on the slip; a prop whose Grader side is not offered opens the ONE card, where the member picks a side."""
     p.locator('#hub-rows .h-add:not([disabled]):not(.is-on)').first.click()
     if p.locator('#hub-card').is_visible():
         p.locator('#hub-detail [data-hub=history-side][data-id=over]').click()
@@ -195,7 +195,7 @@ def test_all_four_real_boards_filters_research_and_original_navigation(ctx, env)
     p.wait_for_selector('#hub-detail .h-line-shop table')
     assert 'Seen' in p.locator('#hub-detail .h-line-shop thead').text_content()
     p.locator('#hub-detail [role=tab][data-id=ask]').click()
-    assert 'Scout evidence guide' in p.locator('#hub-detail').inner_text()
+    assert 'Grader evidence guide' in p.locator('#hub-detail').inner_text()
     assert not p.locator('#u-drawer').is_visible() and not p.locator('#u-tray').is_visible()
     p.locator('#hub-detail [data-hub=card-close]').click()
     assert p.locator('#hub-card').is_hidden()
@@ -211,7 +211,7 @@ def test_four_sport_prizepicks_slip_syncs_to_second_browser_context(ctx, env, br
     for i, sport in enumerate(('cs2','lol','nba','nfl')):
         p.locator('#hub-sports [data-id='+sport+']').click()
         assert p.locator('#hub-rows tr[data-record]').first.get_attribute('data-record').startswith(sport+'|'), p.locator('#hub-sports').inner_text()
-        add_first(p)            # a research-only offer can have no Scout side: the member explicitly chooses in the card
+        add_first(p)            # a research-only offer can have no Grader side: the member explicitly chooses in the card
         assert p.locator('#hub-slip-count').inner_text() == str(i+1), (sport,p.locator('#hub-rows').inner_text(),p.locator('#u-toast').inner_text(),p.errors)
     p.wait_for_function("document.querySelector('#hub-slip-count').textContent === '4'")
     saved = saved_state(p, lambda d: len((d.get('slip') or {}).get('legs', [])) == 4)
@@ -663,7 +663,7 @@ def test_board_rows_show_real_counts_placeholders_chips_and_compare(ctx, env, si
     assert l20.text_content() == '78%' and '7 Over of the last 9' in l20.get_attribute('title') and '(9 games on file)' in l20.get_attribute('title')
     assert 'h-few' in l20.get_attribute('class')
     assert '—' not in row.locator('.h-s-l5').inner_text()
-    assert row.locator('.h-c-scout .h-grade.h-grade-b').inner_text() == 'B'                 # side, chance and letter in one Scout cell
+    assert row.locator('.h-c-scout .h-grade.h-grade-b').inner_text() == 'B'                 # side, chance and letter in one Grader cell
     assert 'Over' in row.locator('.h-c-scout').inner_text()
     assert row.locator('.h-chevron').count() == 0
     assert row.locator('.h-prop-toggle').inner_text() == '+3'
@@ -679,7 +679,7 @@ def test_board_rows_show_real_counts_placeholders_chips_and_compare(ctx, env, si
     p.wait_for_selector('#hub-detail .h-stat-group h5', timeout=15000)
     assert p.locator('#hub-detail .h-full-research a').get_attribute('href').startswith('/sports?view=classic#/player/')
     heads = p.locator('#hub-detail .h-stat-group h5').all_inner_texts()
-    # card-and-chips 2026-11-06: factor-engine rows (weight 0) are headed as not part of Scout's forecast, never "Model inputs"
+    # card-and-chips 2026-11-06: factor-engine rows (weight 0) are headed as not part of Grader's forecast, never "Model inputs"
     assert {'MATCHUP', 'AVERAGES', "MATCHUP NUMBERS (NOT PART OF SCOUT'S FORECAST)"} <= {h.upper() for h in heads} and 'MODEL INPUTS' not in {h.upper() for h in heads}, heads
     no_h_scroll(p)
     assert not p.errors
@@ -911,7 +911,7 @@ def test_goblin_rule_defaults_to_no_goblins_is_saved_and_obeyed(ctx, env, browse
     sel = p.locator('#hub-generation-lines')
     assert sel.input_value() == 'no_goblins'
     assert sel.locator('option').all_text_contents() == ['No goblins', 'At most 1 goblin per slip', 'No goblins or demons', 'Any lines']
-    assert p.locator('#hub-generation-lines-help').inner_text() == 'Goblins are easier lines that pay less. Scout leaves them out unless you allow them.'
+    assert p.locator('#hub-generation-lines-help').inner_text() == 'Goblins are easier lines that pay less. Grader leaves them out unless you allow them.'
     assert 'Goblins (PrizePicks lines set below the standard line' in p.locator('.h-generator > details').text_content()
     if SHOTS_DIR:
         SHOTS_DIR.mkdir(parents=True, exist_ok=True)

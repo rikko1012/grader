@@ -87,7 +87,7 @@ def test_every_sport_card_opens_with_why_scout_leans_on_next(ctx, env, card_flag
 
     def why(p):
         w = real(p)
-        w['title'] = p.locator('#hub-detail .h-why h4').text_content()      # "Why Scout leans Over 38.5", painted upper-case
+        w['title'] = p.locator('#hub-detail .h-why h4').text_content()      # "Why Grader leans Over 38.5", painted upper-case
         assert p.locator('#hub-detail .h-why h4').inner_text().lower() == w['title'].lower()
         return w
     monkeypatch.setattr(cw, 'why', why)
@@ -195,7 +195,7 @@ CELLS = """() => [...document.querySelectorAll('#hub-rows tr[data-record]')].fil
 def check_phone_grid_next(p, where):
     cards = p.evaluate(CELLS)
     assert cards, where
-    for c in cards:                      # the card's own layout: the line never sits on the Scout side, Lines / Add stay on screen
+    for c in cards:                      # the card's own layout: the line never sits on the Grader side, Lines / Add stay on screen
         assert c['over'] == [] and c['out'] == [] and c['inner'] == [], (where, c)
     rows = p.evaluate(ph.GEOM)
     assert rows, where
@@ -226,8 +226,8 @@ def check_phone_grid_next(p, where):
 @pytest.mark.parametrize('size', PHONES, ids=lambda s: str(s['width']))
 def test_phone_rows_show_five_separated_windows_in_every_sport_and_book_on_next(browser, live, size):
     """legacy: test_phone_hit_chips_browser.py::test_phone_rows_show_five_separated_windows_in_every_sport_and_book[360|390|414].
-    Real bugs this proved on the redesign with the live flags on: the phone card's cells overlapped (line on the Scout side, Lines
-    button cut at the screen edge), the Season window was cut at 360px, and a row with no Scout side ("L5 O-U" labels) ran its H2H and
+    Real bugs this proved on the redesign with the live flags on: the phone card's cells overlapped (line on the Grader side, Lines
+    button cut at the screen edge), the Season window was cut at 360px, and a row with no Grader side ("L5 O-U" labels) ran its H2H and
     Season windows off the screen at every phone width. Sizes are the redesign's (the old 44px labelled boxes are old-layout-only)."""
     if size["width"] < 600:
         pytest.skip("phone simplification (owner 2026-11-12): the phone row no longer carries the L5-SZN windows; the card has it")
@@ -248,7 +248,7 @@ def test_phone_rows_show_five_separated_windows_in_every_sport_and_book_on_next(
             p.wait_for_function(f"[...document.querySelectorAll('#hub-rows tr[data-record]')].every(r => r.dataset.record.includes('|{b}|'))", timeout=20000)
             sides |= {r['side'] for r in check_phone_grid_next(p, b) if not r['nohits']}
             no_h_scroll(p)
-        assert sides == {True, False}                         # rows with a Scout side and rows that count Over-Under were both measured
+        assert sides == {True, False}                         # rows with a Grader side and rows that count Over-Under were both measured
         assert not p.errors
     finally:
         p.ctx.close()

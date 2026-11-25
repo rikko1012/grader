@@ -1,5 +1,5 @@
 """The factor data contract, version "sports-factors/1": every factor on the owner's NBA / NFL list, the ONE source each
-is taken from, and how. Other code (this branch's board and log, or a separate Scout implementation) reads factors by
+is taken from, and how. Other code (this branch's board and log, or a separate Grader implementation) reads factors by
 these keys and checks CONTRACT before using them; a changed meaning gets a new key or a new contract version, never a
 silent edit.
 

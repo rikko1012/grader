@@ -113,12 +113,12 @@ def test_moneylines_v3_view_reads_the_real_answers(browser, env, monkeypatch, si
         # soccer / tennis answer 404 here: their pills are hidden, as the classic tab hides them
         assert p.locator("[data-v3x-sport=soccer]").is_hidden() and p.locator("[data-v3x-sport=tennis]").is_hidden()
         assert p.locator("[data-v3x-sport=nba]").is_visible() and p.locator("[data-v3x-sport=cs2]").is_visible()
-        # NBA: DraftKings American odds as listed, the Scout pick and its factors
+        # NBA: DraftKings American odds as listed, the Grader pick and its factors
         nba = p.locator(".v3x-division[aria-label=NBA] .v3x-ml").first
         assert nba.locator("tbody th").first.inner_text().startswith("DraftKings")
         tds = nba.locator("tbody td").all_inner_texts()
         assert all(re.fullmatch(r"[+-]\d+|—", t) for t in tds), tds
-        assert "Scout pick" in nba.locator(".v3x-ml-pick").inner_text()
+        assert "Grader pick" in nba.locator(".v3x-ml-pick").inner_text()
         # CS2: Thunderpick first, price strings to 0.1%, the context and quote details one tap away
         shot(p, f"moneylines-{size['width']}-{theme}")
         cs = p.locator(".v3x-division[aria-label=CS2] .v3x-ml").first

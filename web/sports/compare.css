@@ -1,4 +1,4 @@
-/* Scout Sports - Compare (compare agent, cmp-1). Every rule is scoped .sw .sw-cmp-* (Sports page only). */
+/* Prop Grader Sports - Compare (compare agent, cmp-1). Every rule is scoped .sw .sw-cmp-* (Sports page only). */
 .sw .sw-cmp-n{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:5px;padding:0 5px;border-radius:9px;background:var(--accent-2);color:#10141b;font-size:11px;font-weight:700;vertical-align:1px}
 .sw .sw-cmp-n[hidden]{display:none}
 .sw .sw-cmp-add[aria-pressed="true"]{border-color:var(--accent-2);color:var(--accent-2)}

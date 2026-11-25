@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>1time Scout · Player props for CS2, LoL, NBA and NFL</title>
-<meta name="description" content="Get your player prop slips built for CS2, League of Legends, NBA and NFL: Scout grades every prop across PrizePicks, Underdog and 25+ more books, then builds your slips in one tap.">
+<title>Prop Grader · Player props for CS2, LoL, NBA and NFL</title>
+<meta name="description" content="Get your player prop slips built for CS2, League of Legends, NBA and NFL: Grader grades every prop across PrizePicks, Underdog and 25+ more books, then builds your slips in one tap.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -23,7 +23,7 @@
   --btn-2:#20344e; --btn-2-line:#4775aa; --btn-2-text:#dbeaff; --chip-line:#35465b; --chip-text:#c8d7e9; --bad:#ff8a8a;
   --font:'Outfit',system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:'DM Mono',ui-monospace,monospace;
 }
-/* Scout design system v4 (2026-11-16, landing below the hero): the line marker (a 2px blue rule with a mono value tag), the
+/* Grader design system v4 (2026-11-16, landing below the hero): the line marker (a 2px blue rule with a mono value tag), the
    scan grid, mono data with Outfit prose. Borders, not soft shadows. Existing app colours only. */
 :root{
   --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:72px; --s9:112px;
@@ -323,7 +323,7 @@ a.stat:hover{border-color:var(--sel-line)}
 .mq-pause .i-play,.mq-pause[aria-pressed=true] .i-pause{display:none}
 .mq-pause[aria-pressed=true] .i-play{display:block}
 
-/* 2. why Scout: copy and switch on the left, the seven rows on the right */
+/* 2. why Grader: copy and switch on the left, the seven rows on the right */
 .why{display:grid;grid-template-columns:minmax(0,.82fr) minmax(0,1.18fr);gap:var(--s5) var(--s8);align-items:start}
 .why-l{position:sticky;top:98px}
 .why-l .head{margin-bottom:var(--s5)}
@@ -696,9 +696,9 @@ footer.foot a:hover{color:#fff;background:#242d39}
 <a class="skip" href="#main">Skip to content</a>
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="/" aria-label="1time Scout"><span aria-hidden="true">1T</span><b>1TIME <em>SCOUT</em></b></a>
+    <a class="brand" href="/" aria-label="Prop Grader"><span aria-hidden="true">1T</span><b>1TIME <em>SCOUT</em></b></a>
     <span class="grow"></span>
-    <nav class="topnav" aria-label="Page sections"><a href="#why">Why Scout</a><a href="#demo">Try it</a><a href="#features">Features</a><a href="/record">Record</a><a href="/reviews">Reviews</a></nav>
+    <nav class="topnav" aria-label="Page sections"><a href="#why">Why Grader</a><a href="#demo">Try it</a><a href="#features">Features</a><a href="/record">Record</a><a href="/reviews">Reviews</a></nav>
     <a class="btn quiet" href="/auth/login">Sign in</a>
     <a class="btn primary" href="{{JOIN_URL}}">Join</a>
   </div>
@@ -723,23 +723,23 @@ footer.foot a:hover{color:#fff;background:#242d39}
             <a class="rvq-all" id="rvq-all" href="/reviews">All reviews</a>
           </div>
         </div>
-        <p class="lede">Every app's line in one place. Each prop gets a letter grade, Scout's chance for the Over and the Under at that exact line, and the reason in plain English.</p>
+        <p class="lede">Every app's line in one place. Each prop gets a letter grade, Grader's chance for the Over and the Under at that exact line, and the reason in plain English.</p>
         <div class="ctas">
           <a class="btn primary big" href="{{JOIN_URL}}">Join on Whop{{PRICE_LABEL}}</a>
           <a class="btn ghost big" href="#demo">Try the example board <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
         </div>
         <p class="member">Already a member? <a href="/auth/login">Sign in with Whop</a></p>
         <p class="err" id="signin-error" role="alert" hidden></p>
-        <ul class="trust" aria-label="Scout in numbers">
+        <ul class="trust" aria-label="Grader in numbers">
           <li><a href="/record"><b class="word" id="hero-rec-n">Public</b><span id="hero-rec-t">record, losses included</span></a></li>
           <li><div><b>4</b><span>sports, one board</span></div></li>
           <li><div><b id="hero-books">10</b><span>apps and books</span></div></li>
         </ul>
       </div>
       <div class="stage">
-        <div class="frame board-shot"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Scout · All sports</small></div>
-          <img src="/landing/board.webp" width="1140" height="855" alt="The Scout board: NFL and CS2 player props with Scout's chance, letter grade, projection and hit rates" fetchpriority="high"></div>
-        <div class="card-shot"><img src="/landing/card.webp" width="372" height="726" alt="A Scout player card: Scout's chance, the projection and why Scout leans Under"></div>
+        <div class="frame board-shot"><div class="bar" aria-hidden="true"><i></i><i></i><i></i><small>Grader · All sports</small></div>
+          <img src="/landing/board.webp" width="1140" height="855" alt="The Grader board: NFL and CS2 player props with Grader's chance, letter grade, projection and hit rates" fetchpriority="high"></div>
+        <div class="card-shot"><img src="/landing/card.webp" width="372" height="726" alt="A Grader player card: Grader's chance, the projection and why Grader leans Under"></div>
         <div class="hc" id="hc" role="region" aria-roledescription="carousel" aria-label="Example prop card">
           <div class="hc-top">
             <span class="tag" id="hc-sport">Example</span><span class="hc-src">Real board rows</span>
@@ -795,24 +795,24 @@ footer.foot a:hover{color:#fff;background:#242d39}
   </section>
  </div>
 
-  <!-- 2. why Scout -->
+  <!-- 2. why Grader -->
   <section class="band" id="why" aria-labelledby="why-title">
    <div class="wrap">
     <div class="why vs" data-mode="without">
       <div class="why-l">
-        <div class="head rv"><p class="mk"><span><b>01</b> · Why Scout</span></p><h2 id="why-title">Most prop tools stop at the grid. Scout shows its work.</h2>
+        <div class="head rv"><p class="mk"><span><b>01</b> · Why Grader</span></p><h2 id="why-title">Most prop tools stop at the grid. Grader shows its work.</h2>
           <p>You still get the hit counts. You also get the reason for each pick, the exact line it was graded at, and the slip already built.</p></div>
         <div class="rv" style="--i:1">
           <div class="seg" id="vs-seg" role="radiogroup" aria-label="Your prop night">
-            <button type="button" role="radio" aria-checked="true" tabindex="0" data-v="without">Without Scout</button>
-            <button type="button" role="radio" aria-checked="false" tabindex="-1" data-v="with">With Scout</button>
+            <button type="button" role="radio" aria-checked="true" tabindex="0" data-v="without">Without Grader</button>
+            <button type="button" role="radio" aria-checked="false" tabindex="-1" data-v="with">With Grader</button>
           </div>
           <p class="vs-sum" aria-live="polite"><span class="sum-no">Six apps, a stat site, a spreadsheet and a group chat.</span><span class="sum-yes">One board, one card, one slip.</span></p>
         </div>
       </div>
       <ul class="vs-list" id="vs-list">
         <li class="vrow rv" style="--i:0"><h3>Find the line</h3><div class="vtxt"><p class="no">Six apps open in six tabs</p><p class="yes">PrizePicks, Underdog, Sleeper, Dabble and the sportsbooks on one row per player, with a chip when two apps list different lines</p></div></li>
-        <li class="vrow rv" style="--i:1"><h3>Know why it's a pick</h3><div class="vtxt"><p class="no">A screenshot from a group chat</p><p class="yes">Why Scout leans Over or Under, in plain English: a letter grade, a chance at that exact line and the reason for its confidence</p></div></li>
+        <li class="vrow rv" style="--i:1"><h3>Know why it's a pick</h3><div class="vtxt"><p class="no">A screenshot from a group chat</p><p class="yes">Why Grader leans Over or Under, in plain English: a letter grade, a chance at that exact line and the reason for its confidence</p></div></li>
         <li class="vrow rv" style="--i:2"><h3>See how often he clears it</h3><div class="vtxt"><p class="no">A stat site and your own spreadsheet</p><p class="yes">L5, L10, L20, head-to-head and season, against this exact line, on the card</p></div></li>
         <li class="vrow rv" style="--i:3"><h3>Check he's actually playing</h3><div class="vtxt"><p class="no">Roster posts and socials</p><p class="yes">NBA and NFL games carry the ESPN injury report. CS2 lines count active players only, and stand-ins are flagged with their confidence capped</p></div></li>
         <li class="vrow rv" style="--i:4"><h3>Catch a moved line</h3><div class="vtxt"><p class="no">Refresh and try to remember</p><p class="yes">Line history from the opening line, with every move and when it happened</p></div></li>
@@ -828,7 +828,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
    <div class="gl" aria-hidden="true"></div>
    <div class="wrap">
     <div class="head c rv"><p class="mk"><span><b>02</b> · The board</span></p><h2 id="demo-title">Tap a prop. See why.</h2>
-      <p>Rows from real Scout boards for all four sports, as members saw them. Pick a sport, then a player, to open the card: the lean, the chance at that exact line, the projection and the hit rates.</p></div>
+      <p>Rows from real Grader boards for all four sports, as members saw them. Pick a sport, then a player, to open the card: the lean, the chance at that exact line, the projection and the hit rates.</p></div>
     <div class="rv" style="--i:1">
       <div class="bd-top">
         <div class="seg tabs" id="bd-tabs" role="tablist" aria-label="Sport">
@@ -837,7 +837,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
           <button type="button" role="tab" id="tab-cs2" aria-controls="bd-panel" aria-selected="false" tabindex="-1" data-v="cs2">CS2</button>
           <button type="button" role="tab" id="tab-lol" aria-controls="bd-panel" aria-selected="false" tabindex="-1" data-v="lol">League</button>
         </div>
-        <span class="tag">Example from a real Scout board</span>
+        <span class="tag">Example from a real Grader board</span>
       </div>
       <div class="bd" id="bd-panel" role="tabpanel" aria-labelledby="tab-nfl">
         <div class="bd-list"><ul id="bd-rows"></ul><p class="nojs">Turn on JavaScript to try the example board.</p></div>
@@ -853,13 +853,13 @@ footer.foot a:hover{color:#fff;background:#242d39}
   <section class="band" id="grade" aria-labelledby="grade-title">
    <div class="wrap gd-wrap">
     <div class="head rv"><p class="mk"><span><b>03</b> · The grade</span></p><h2 id="grade-title">Move the line. Watch the grade.</h2>
-      <p>This is Scout's CS2 kills formula running in your browser: a projection, Scout's spread around it, and the chance for each side at that exact line. A whole line can push, so the push is taken out before the chance is shown.</p></div>
+      <p>This is Grader's CS2 kills formula running in your browser: a projection, Grader's spread around it, and the chance for each side at that exact line. A whole line can push, so the push is taken out before the chance is shown.</p></div>
     <div class="demo spot gd-plot rv" style="--i:1">
       <div class="gd-top"><span class="tag">Example</span><span class="tag dim">CS2 · Kills</span></div>
-      <svg id="gd-svg" viewBox="0 0 640 250" role="img" aria-label="Scout's kills distribution with the line marked"></svg>
+      <svg id="gd-svg" viewBox="0 0 640 250" role="img" aria-label="Grader's kills distribution with the line marked"></svg>
       <div class="ctl"><label for="gd-line">Line <b id="gd-line-v" class="mono">27.5</b></label>
         <input type="range" id="gd-line" min="15.5" max="45.5" step="0.5" value="27.5"></div>
-      <div class="ctl"><label for="gd-proj">Scout's projection <b id="gd-proj-v" class="mono">30.0</b></label>
+      <div class="ctl"><label for="gd-proj">Grader's projection <b id="gd-proj-v" class="mono">30.0</b></label>
         <input type="range" id="gd-proj" min="20" max="40" step="0.1" value="30"></div>
       <p class="nojs">Turn on JavaScript to try the grading example.</p>
     </div>
@@ -877,9 +877,9 @@ footer.foot a:hover{color:#fff;background:#242d39}
   <section class="band scan" id="lines" aria-labelledby="lines-title">
    <div class="wrap">
     <div class="head rv"><p class="mk"><span><b>04</b> · Every book</span></p><h2 id="lines-title">Every book's line, side by side.</h2>
-      <p>Pick'em apps, sportsbooks and prediction markets on one row per player. Here is one NFL prop from a Scout board: the books did not agree on the line, and Scout's chance moves with the line you play.</p></div>
+      <p>Pick'em apps, sportsbooks and prediction markets on one row per player. Here is one NFL prop from a Grader board: the books did not agree on the line, and Grader's chance moves with the line you play.</p></div>
     <div class="demo spot rv" style="--i:1">
-      <div class="demo-bar"><div><b>Zay Flowers · Receiving yards</b><small>WR · LAC at BAL · board of Nov 12</small></div><span class="tag">Example from a real Scout board</span></div>
+      <div class="demo-bar"><div><b>Zay Flowers · Receiving yards</b><small>WR · LAC at BAL · board of Nov 12</small></div><span class="tag">Example from a real Grader board</span></div>
       <div class="lt">
         <div class="lt-chips" id="lt-chips"></div>
         <div class="trk2" id="lt-track" aria-hidden="true"></div>
@@ -898,9 +898,9 @@ footer.foot a:hover{color:#fff;background:#242d39}
     <div class="head rv"><p class="mk"><span><b>05</b> · Slip Studio</span></p><h2 id="slips-title">Slips built for you</h2>
       <p>Tell Slip Studio how many. Auto-build makes 1 to 12 PrizePicks or Underdog slips of 2 to 6 picks each from the lines open right now, and rechecks every line before you see them.</p></div>
     <div class="ss">
-      <figure class="ss-img rv"><a class="ss-zoom" id="ss-zoom" href="/landing/realslip-scout.webp" aria-label="Open the real Scout slip full size"><img src="/landing/realslip-scout.webp" width="600" height="1067" alt="A four-pick CS2 slip built by Scout Auto-build: oontoma, glowiing, Forester and flameZ, all Over" loading="lazy">
+      <figure class="ss-img rv"><a class="ss-zoom" id="ss-zoom" href="/landing/realslip-scout.webp" aria-label="Open the real Grader slip full size"><img src="/landing/realslip-scout.webp" width="600" height="1067" alt="A four-pick CS2 slip built by Grader Auto-build: oontoma, glowiing, Forester and flameZ, all Over" loading="lazy">
         <span class="zoom-hint" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M7 5v4M5 7h4"/></svg>Tap to enlarge</span></a>
-        <figcaption>A real slip from Scout Auto-build</figcaption></figure>
+        <figcaption>A real slip from Prop Grader Auto-build</figcaption></figure>
       <div>
         <ul class="ticks rv">
           <li>Each slip shows the chance every pick hits and the payout</li>
@@ -922,7 +922,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
           </div>
           <ol class="legs" id="sb-legs"></ol>
           <div aria-live="polite" id="sb-live"><div class="sb-out" id="sb-out"></div><p class="sb-flex" id="sb-flex" hidden></p><p class="sb-all" id="sb-all" hidden></p></div>
-          <p class="sb-note"><span class="tag dim">Example</span> Each app shows only legs it listed: the real slip and rows from real Scout boards, from different days. Payouts are each app's standard-line table; PrizePicks goblin and demon lines pay differently, and the app shows the final payout. In Scout, Slip Studio uses only lines open on the app you pick.</p>
+          <p class="sb-note"><span class="tag dim">Example</span> Each app shows only legs it listed: the real slip and rows from real Grader boards, from different days. Payouts are each app's standard-line table; PrizePicks goblin and demon lines pay differently, and the app shows the final payout. In Grader, Slip Studio uses only lines open on the app you pick.</p>
           <p class="nojs">Turn on JavaScript to try the slip example.</p>
         </div>
       </div>
@@ -930,8 +930,8 @@ footer.foot a:hover{color:#fff;background:#242d39}
    </div>
   </section>
   <dialog class="zoom" id="ss-dlg" aria-labelledby="ss-dlg-t">
-    <div class="zoom-bar"><p id="ss-dlg-t">A real slip from Scout Auto-build</p><button type="button" class="icon-btn" id="ss-close" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" stroke-width="1.8" fill="none"/></svg></button></div>
-    <img src="/landing/realslip-scout.webp" width="600" height="1067" alt="The same Scout slip at full size" loading="lazy">
+    <div class="zoom-bar"><p id="ss-dlg-t">A real slip from Prop Grader Auto-build</p><button type="button" class="icon-btn" id="ss-close" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" stroke-width="1.8" fill="none"/></svg></button></div>
+    <img src="/landing/realslip-scout.webp" width="600" height="1067" alt="The same Grader slip at full size" loading="lazy">
   </dialog>
 
   <!-- 7. features -->
@@ -970,7 +970,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
       <li class="rv" style="--i:2"><span class="n">03</span><h3>Get your slips</h3><p>Generate slips in one tap, or open the board and build your own.</p></li>
     </ol>
     <div class="record rv">
-      <p><b>The record is public.</b> Scout's forecasts are saved before each game and scored after it.</p>
+      <p><b>The record is public.</b> Grader's forecasts are saved before each game and scored after it.</p>
       <a class="btn second" href="/record">See the record</a>
       <a class="revlink" id="reviews-line" href="/reviews" hidden>Member reviews</a>
     </div>
@@ -989,7 +989,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
     </section>
 
     <footer class="foot">
-      <span>1time Scout</span>
+      <span>Prop Grader</span>
       <nav aria-label="Footer"><a href="/auth/login">Sign in</a><a href="{{JOIN_URL}}">Join on Whop</a><a href="/record">Record</a><a href="/reviews">Reviews</a></nav>
     </footer>
   </div>
@@ -1277,7 +1277,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
     watch([mq], function (n, vis) { n.classList.toggle("off", !vis); });
   });
 
-  /* ---------- 2. why Scout: opens on Without, turns to With once when the rows come into view ---------- */
+  /* ---------- 2. why Grader: opens on Without, turns to With once when the rows come into view ---------- */
   safe(function () {
     var vs = $(".vs"), touched = false, g;
     function apply(v) {
@@ -1298,16 +1298,16 @@ footer.foot a:hover{color:#fff;background:#242d39}
 
   /* ---------- 3. example board ---------- */
   var BOARD = {
-    nfl: { src: "NFL rows from a Scout board capture. Full game.", rows: [
+    nfl: { src: "NFL rows from a Grader board capture. Full game.", rows: [
       { player: "Matt Hibner", pos: "TE", match: "BAL vs LAC", stat: "Receptions", line: 1.5, book: "Underdog", side: "Under", chance: 88.1, letter: "A", proj: 0.7, hits: [["L5", 4, 5]] },
       { player: "Zay Flowers", pos: "WR", match: "BAL", stat: "Receptions", line: 6.5, book: "Polymarket", side: "Under", chance: 83.6, letter: "A", proj: 4.7, overHits: [3, 10], avg: 5.1, median: 5, range: [0, 8] },
       { player: "Josh Cuevas", pos: "TE", match: "BAL", stat: "Receptions", line: 0.5, book: "Underdog", side: "Over", chance: 76.4, letter: "A", proj: 1.1 }] },
-    nba: { src: "NBA rows from a Scout board snapshot, for the Nov 12 games.", rows: [
+    nba: { src: "NBA rows from a Grader board snapshot, for the Nov 12 games.", rows: [
       { player: "Paul Reed", pos: "C", match: "DET at WSH", stat: "Rebounds", line: 8.5, book: "PrizePicks / Underdog", side: "Under", chance: 75.3, letter: "A", proj: 6.6, median: 6, range: [3, 11] },
       { player: "Oso Ighodaro", pos: "C", match: "CHA at PHX", stat: "Rebounds", line: 6.5, book: "PrizePicks / Underdog", side: "Under", chance: 72.5, letter: "A", proj: 5.2, median: 5, range: [2, 9] },
       { player: "Zaccharie Risacher", pos: "SF", match: "DAL at MIN", stat: "Rebounds", line: 2.5, book: "PrizePicks / Underdog", side: "Over", chance: 70.2, letter: "A", proj: 3.9, median: 4, range: [1, 7] },
       { player: "Christian Anderson", pos: "PG", match: "CHA at PHX", stat: "3-pointers made", line: 1.5, book: "Underdog", side: "Under", chance: 70.2, letter: "A", proj: 0.6, median: 0, range: [0, 2] }] },
-    cs2: { src: "CS2 rows from a Scout board capture. Headshots and kills over two maps.", rows: [
+    cs2: { src: "CS2 rows from a Grader board capture. Headshots and kills over two maps.", rows: [
       { player: "whisper", pos: "Rifler", match: "BAKS vs MASONIC", stat: "Kills", scope: "Maps 1-2", line: 28.5, book: "Underdog", side: "Over", chance: 67.7, letter: "B+", proj: 32.4, hits: [["L5", 4, 5], ["L10", 6, 10], ["L20", 9, 20]] },
       { player: "danistzz", pos: "AWPer / Rifler", match: "BAKS vs MASONIC", stat: "Headshots", scope: "Maps 1-2", line: 10.5, book: "Underdog", side: "Over", chance: 69.8, letter: "A-", proj: 13.1, hits: [["L5", 4, 5], ["L10", 7, 10]] },
       { player: "tO0RO", pos: "Rifler", match: "Virtus.pro vs Aces", stat: "Headshots", scope: "Maps 1-2", line: 20.5, book: "PrizePicks", variant: "Demon", side: "Under", chance: 71.8, proj: 17.4 }] },
@@ -1339,7 +1339,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
       cur = sp;
       navBtns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-v") === sp ? "true" : "false"); });
       $("#hc-sport").textContent = NAMES[sp] + " · Example";
-      $("#hc-sr").textContent = NAMES[sp] + " example, a real Scout board row.";
+      $("#hc-sr").textContent = NAMES[sp] + " example, a real Grader board row.";
       $("#hc-av").textContent = initials(r.player);
       $("#hc-name").textContent = r.player;
       $("#hc-meta").textContent = r.pos + " · " + r.match;
@@ -1347,7 +1347,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
       chips.appendChild(el("span", "tag dim", r.stat + (r.scope ? " · " + r.scope : "")));
       chips.appendChild(el("span", "tag dim", r.book + (r.variant ? " · " + r.variant : "")));
       var side = $("#hc-side"); side.textContent = r.side + " " + r.line; side.className = "side " + (ov ? "ov" : "un");
-      $("#hc-why").textContent = "Scout's chance at exactly " + r.line;
+      $("#hc-why").textContent = "Grader's chance at exactly " + r.line;
       showPct(r.chance);
       fg.setAttribute("stroke-dashoffset", C * (1 - r.chance / 100));
       gradeE.textContent = ""; gradeE.appendChild(el("span", "sr", "Grade ")); gradeE.appendChild(document.createTextNode(r.letter));
@@ -1438,7 +1438,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
       fg.setAttribute("stroke-dashoffset", RM.matches ? C * (1 - r.chance / 100) : C);
       requestAnimationFrame(function () { fg.setAttribute("stroke-dashoffset", C * (1 - r.chance / 100)); });
       sideE.textContent = r.side + " " + r.line; sideE.className = "side " + (ov ? "ov" : "un");
-      pickP.textContent = r.stat + ". Scout's chance for the " + r.side + " at exactly " + r.line + ".";
+      pickP.textContent = r.stat + ". Grader's chance for the " + r.side + " at exactly " + r.line + ".";
       if (r.letter) {
         grade.hidden = false; grade.textContent = r.letter; grade.className = "big-grade" + (r.letter.charAt(0) === "A" ? "" : " b");
         if (lastLetter !== r.letter && !RM.matches) { void grade.offsetWidth; grade.classList.add("pop"); }
@@ -1499,7 +1499,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
     load("nfl");
   });
 
-  /* ---------- 4. grading: Scout's CS2 kills formula (grader.p_three + grade_from_p, live spread) ---------- */
+  /* ---------- 4. grading: Grader's CS2 kills formula (grader.p_three + grade_from_p, live spread) ---------- */
   function erf(x) {
     var s = x < 0 ? -1 : 1; x = Math.abs(x);
     if (x < 3) { var sum = x, term = x, x2 = x * x; for (var n = 1; n < 200; n++) { term *= -x2 / n; var t = term / (2 * n + 1); sum += t; if (Math.abs(t) < 1e-17) break; } return s * 2 / Math.sqrt(Math.PI) * sum; }
@@ -1584,7 +1584,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
       ladder.forEach(function (s, i) { s.classList.toggle("on", i === ci); });
       var rawCh = Math.max(r.raw, 1 - r.raw);
       noteE.textContent = r.capped ? "Kills chances are capped at 78% on either side, so this reads 78.0% (uncapped " + (rawCh >= 0.9995 ? "over 99.9%" : pct(rawCh)) + "). Example." :
-        "CS2 kills, Maps 1-2, with Scout's live spread. Letters use the cut points members see; under 55% it reads Lean " + r.side + ". Example.";
+        "CS2 kills, Maps 1-2, with Grader's live spread. Letters use the cut points members see; under 55% it reads Lean " + r.side + ". Example.";
       var vt = "Line " + line.toFixed(1) + ", projection " + lam.toFixed(1) + ", " + r.side + " " + f1(r.chance * 100) + " percent, " + (isLean ? r.letter : "grade " + r.letter) + ", Example";
       L.setAttribute("aria-valuetext", vt); P.setAttribute("aria-valuetext", vt);
     }
@@ -1600,16 +1600,16 @@ footer.foot a:hover{color:#fff;background:#242d39}
     onMM(small, function () { build(); draw(); });
   });
 
-  /* ---------- 5. line comparison: Zay Flowers receiving yards, Scout NFL board snapshot 2026-11-12 04:22 UTC ---------- */
+  /* ---------- 5. line comparison: Zay Flowers receiving yards, Grader NFL board snapshot 2026-11-12 04:22 UTC ---------- */
   safe(function () {
-    // seen = when the board last saw that quote (UTC). Scout = the Under chance and grade the board printed; note = the board's own text.
+    // seen = when the board last saw that quote (UTC). Grader = the Under chance and grade the board printed; note = the board's own text.
     var MAIN = [
       { b: "FanDuel", k: "FD", t: "Sportsbook", l: 64.5, seen: "Nov 11, 17:46 UTC" },
       { b: "BetRivers", k: "BR", t: "Sportsbook", l: 68.5, seen: "Nov 11, 22:16 UTC", c: 61.9, g: "A" },
       { b: "PrizePicks", k: "PP", t: "Pick'em · standard", l: 69.5, seen: "Nov 12, 04:10 UTC", c: 62.9, g: "A" },
       { b: "Underdog", k: "UD", t: "Pick'em", l: 69.5, seen: "Nov 12, 04:10 UTC", c: 62.9, g: "A" },
-      { b: "Polymarket", k: "PM", t: "Prediction market", l: 69.5, seen: "Nov 12, 04:10 UTC", note: "Scout grades lines priced near even." }];
-    var MORE = [29.5, 39.5, 49.5, 59.5, 79.5, 89.5, 99.5, 109.5].map(function (v) { return { b: "Polymarket", k: "PM", t: "Market ladder", l: v, seen: "Nov 12, 04:10 UTC", note: v === 59.5 ? null : "Scout grades lines priced near even.", small: true }; })
+      { b: "Polymarket", k: "PM", t: "Prediction market", l: 69.5, seen: "Nov 12, 04:10 UTC", note: "Grader grades lines priced near even." }];
+    var MORE = [29.5, 39.5, 49.5, 59.5, 79.5, 89.5, 99.5, 109.5].map(function (v) { return { b: "Polymarket", k: "PM", t: "Market ladder", l: v, seen: "Nov 12, 04:10 UTC", note: v === 59.5 ? null : "Grader grades lines priced near even.", small: true }; })
       .concat([29.5, 39.5].map(function (v) { return { b: "Kalshi", k: "KA", t: "Market ladder", l: v, seen: "Nov 12, 03:30 UTC", small: true }; }));
     var list = $("#lt-list"), trackE = $("#lt-track"), liveE = $("#lt-live"), more = $("#lt-more"), chipsE = $("#lt-chips");
     var all = false, sel = 2, rows = MAIN;
@@ -1663,7 +1663,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
       liveE.textContent = "";
       liveE.appendChild(el("b", null, s.b + " " + s.l + ": "));
       liveE.appendChild(document.createTextNode(parts.join(", ") + ". " +
-        (s.c != null ? "Scout's chance for the Under at " + s.l + ": " + f1(s.c) + "%, grade " + s.g + "." : (s.note ? s.note : "Scout printed no grade on this quote.")) + " Seen " + s.seen + ". Example."));
+        (s.c != null ? "Grader's chance for the Under at " + s.l + ": " + f1(s.c) + "%, grade " + s.g + "." : (s.note ? s.note : "Grader printed no grade on this quote.")) + " Seen " + s.seen + ". Example."));
     }
     function drawList() {
       list.textContent = "";
@@ -1766,7 +1766,7 @@ footer.foot a:hover{color:#fff;background:#242d39}
         fx.textContent = "Flex pays " + parts.join(" · ") + ". Example."; fx.hidden = false;
       } else fx.hidden = true;
       var all = $("#sb-all");
-      if (app === "prizepicks" && n === 4) { all.textContent = "These are the four legs of the real slip pictured here. Scout printed the chance all four hit as 6.6%."; all.hidden = false; }
+      if (app === "prizepicks" && n === 4) { all.textContent = "These are the four legs of the real slip pictured here. Grader printed the chance all four hit as 6.6%."; all.hidden = false; }
       else all.hidden = true;
     }
     var playG;

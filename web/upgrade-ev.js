@@ -150,7 +150,7 @@ function sourcesHtml(r) {
 function generatedHtml() {
   if (!generatedBatch) return '';
   const b=generatedBatch, app=b.options.platform==='prizepicks'?'PrizePicks':'Underdog';
-  return `<section class="ev-generated" aria-label="Generated EV slips"><header><h3>${b.slips.length} generated EV slips</h3><p>${esc(app)} · ${esc(b.options.entryType)} · ${b.options.size} picks each · ${esc(C.when(b.created_at))}</p><p>${esc(b.note||'Each entry was rechecked against current offers.')} Generated slips stay here during this visit. Displayed chances are Scout’s model chances.</p></header><div class="ev-generated-grid">${b.slips.map((s,i)=>`<article class="ev-generated-card"><h4>Slip ${i+1}</h4><ol>${s.legs.map(l=>`<li><strong>${esc(l.player)}</strong><span>${esc(side(l.side))} ${esc(l.line)} ${esc(l.stat_label)}</span><small>${esc(C.SPORTS[l.sport]||l.sport)} · ${esc(l.period_label)} · ${esc(l.event_label)}</small><small>Scout ${pct(l.shown_p)}</small></li>`).join('')}</ol><footer><button data-ev="copy-generated" data-id="${i}"${draftBusy?' disabled':''}>Recheck & copy</button>${C.bookLinks?`<button data-ev="open-generated" data-id="${i}"${draftBusy?' disabled':''}>Open in ${esc(app)}</button>`:''}</footer></article>`).join('')}</div><p role="status">${esc(draftMessage)}</p></section>`;
+  return `<section class="ev-generated" aria-label="Generated EV slips"><header><h3>${b.slips.length} generated EV slips</h3><p>${esc(app)} · ${esc(b.options.entryType)} · ${b.options.size} picks each · ${esc(C.when(b.created_at))}</p><p>${esc(b.note||'Each entry was rechecked against current offers.')} Generated slips stay here during this visit. Displayed chances are Grader’s model chances.</p></header><div class="ev-generated-grid">${b.slips.map((s,i)=>`<article class="ev-generated-card"><h4>Slip ${i+1}</h4><ol>${s.legs.map(l=>`<li><strong>${esc(l.player)}</strong><span>${esc(side(l.side))} ${esc(l.line)} ${esc(l.stat_label)}</span><small>${esc(C.SPORTS[l.sport]||l.sport)} · ${esc(l.period_label)} · ${esc(l.event_label)}</small><small>Grader ${pct(l.shown_p)}</small></li>`).join('')}</ol><footer><button data-ev="copy-generated" data-id="${i}"${draftBusy?' disabled':''}>Recheck & copy</button>${C.bookLinks?`<button data-ev="open-generated" data-id="${i}"${draftBusy?' disabled':''}>Open in ${esc(app)}</button>`:''}</footer></article>`).join('')}</div><p role="status">${esc(draftMessage)}</p></section>`;
 }
 function rowHtml(r, sports) {
   const id = r.key + '|' + r.side, open = S.open.has(id);
@@ -158,18 +158,18 @@ function rowHtml(r, sports) {
     + `<div class="ev-cell" data-label="App leg">${legOdds(r)}</div>`
     + `<div class="ev-cell ev-hit" data-label="To hit"><b>${pct(r.p_market)}</b></div>`
     + `<div class="ev-cell ev-ev${evClass(r.ev)}" data-label="Average return"><b>${evText(r.ev)}</b></div>`
-    + `<div class="ev-cell" data-label="Scout"><span>${pct(r.p_model)}</span></div>`
+    + `<div class="ev-cell" data-label="Grader"><span>${pct(r.p_model)}</span></div>`
     + `<div class="ev-cell" data-label="Market"><button class="ev-books" data-ev="books" data-id="${esc(id)}" aria-expanded="${open}">${esc(r.books_label || (r.books + (r.books === 1 ? ' book' : ' books')))} ${open ? '▴' : '▾'}</button></div>`
     + `<div class="ev-cell ev-act">${addBtn(r)}</div>${open ? sourcesHtml(r) : ''}</li>`;
 }
 function modelRowHtml(r, sports) {
   return `<li class="ev-row ev-model-row"><div class="ev-cell ev-play" data-label="Play">${play(r, sports)}</div>`
     + `<div class="ev-cell" data-label="App leg">${legOdds(r)}</div>`
-    + `<div class="ev-cell ev-hit" data-label="Scout"><b>${pct(r.p_model)}</b> <span class="ev-badge">No book price</span></div>`
+    + `<div class="ev-cell ev-hit" data-label="Grader"><b>${pct(r.p_model)}</b> <span class="ev-badge">No book price</span></div>`
     /* owner audit 2026-11-06 (T5): an NBA / NFL research chance has not held up on settled results (NFL 65%+ won 55.9%), so a leg
        with no book price shows no return figure there; the server sends none either (workspace_ev.build) */
     + (MODEL_EV_HIDDEN.includes(r.sport) || typeof r.ev_model !== 'number' ? '<div class="ev-cell ev-ev"></div>'
-      : `<div class="ev-cell ev-ev${evClass(r.ev_model)}" data-label="Average return on Scout's chance"><b>${evText(r.ev_model)}</b></div>`)
+      : `<div class="ev-cell ev-ev${evClass(r.ev_model)}" data-label="Average return on Grader's chance"><b>${evText(r.ev_model)}</b></div>`)
     + `<div class="ev-cell ev-act">${addBtn(r)}</div></li>`;
 }
 /* T3: every filter that differs from the defaults, as a chip above the list; the x removes that one filter */
@@ -262,8 +262,8 @@ function readyHtml(d) {
   const list = autoSlips(d), app = d.app_label || (d.app === 'prizepicks' ? 'PrizePicks' : 'Underdog');
   const ev = autoPart(), sports = (d.sports || []).length, at = ev && ev.as_of ? C.when(ev.as_of) : '';   /* the part's own build time */
   let body;
-  if (!A.doc) body = `<p class="ev-state" role="status">${A.error ? 'Ready slips could not be read. Scout tries again in a minute.' : 'Building ready slips from current prices…'}</p>`;
-  else if (!list) body = `<p class="ev-state" role="status">Ready slips could not be built just now. Scout tries again in a minute.</p>`;
+  if (!A.doc) body = `<p class="ev-state" role="status">${A.error ? 'Ready slips could not be read. Grader tries again in a minute.' : 'Building ready slips from current prices…'}</p>`;
+  else if (!list) body = `<p class="ev-state" role="status">Ready slips could not be built just now. Grader tries again in a minute.</p>`;
   else if (!list.length) body = `<p class="ev-state" role="status">No ${esc(app)} slip can be built right now from legs that beat each entry${S.f.sport !== 'all' ? ' in ' + esc(C.SPORTS[S.f.sport] || S.f.sport) : ''}. Checked ${ev.priced_legs || 0} priced legs${ev.books && ev.books.length ? ' at ' + esc(ev.books.join(', ')) : ''}${at ? ' · ' + esc(at) : ''}. New slips appear here as prices change.</p>`;
   else body = `<div class="ev-ready-grid">${list.map(({e, s, id, nth}) => {
     const m = A.msg[sigOf(s)] || '', busy = !!A.busy;
@@ -274,7 +274,7 @@ function readyHtml(d) {
       + `</div><p role="status">${esc(m)}</p></article>`;
   }).join('')}</div>`;
   return `<section class="ev-ready" aria-label="Ready slips"><div class="ev-ready-head"><h3>Ready slips <small>${esc(app)} · best first${at ? ' · built ' + esc(at) : ''}</small></h3>`
-    + `<p>Built for you from legs that beat each entry on at least two independent books at the app's exact line. Each slip is rechecked when you add, copy or open it. The chance beside each leg is the books' chance; Scout's own chance stays on the board.</p></div>${body}</section>`;
+    + `<p>Built for you from legs that beat each entry on at least two independent books at the app's exact line. Each slip is rechecked when you add, copy or open it. The chance beside each leg is the books' chance; Grader's own chance stays on the board.</p></div>${body}</section>`;
 }
 function autoFind(id) {
   const [ei, si] = String(id).split(':').map(Number), ev = autoPart(), e = ev && ev.entries[ei];
@@ -323,13 +323,13 @@ function paintBox() {
     + (d.payout && d.payout.text ? `<p class="ev-banner">${esc(d.payout.text)}</p>` : '') + filtersHtml(d) + chipsHtml(d) + banner
     + generatedHtml()
     + `<section aria-label="Market priced legs"><div class="ev-quick"><button data-ev="evonly" aria-pressed="${S.f.evOnly}">Only picks that beat the entry</button>${S.f.evOnly ? '<span>Turn off to explore every priced line.</span>' : '<span>All priced lines, including those below break-even.</span>'}</div><h3>Market priced <small>${rows.length} of ${d.rows_total} legs${S.f.evOnly ? ' · only picks that beat the entry' : ''}</small></h3>`
-    + (rows.length ? `<ol class="ev-list"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>To hit · need ${pct(d.break_even)}</span><span>Average return</span><span>Scout</span><span>Market</span><span></span></li>${rows.slice(marketPage * PAGE_SIZE, (marketPage + 1) * PAGE_SIZE).map(r => rowHtml(r, sports)).join('')}</ol>${pager('market', marketPage, rows.length)}`
+    + (rows.length ? `<ol class="ev-list"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>To hit · need ${pct(d.break_even)}</span><span>Average return</span><span>Grader</span><span>Market</span><span></span></li>${rows.slice(marketPage * PAGE_SIZE, (marketPage + 1) * PAGE_SIZE).map(r => rowHtml(r, sports)).join('')}</ol>${pager('market', marketPage, rows.length)}`
       : `<p class="ev-state">${d.rows_total ? (S.f.evOnly ? 'No leg beats the entry right now with these filters.' : 'No priced leg matches these filters.') : d.params.min_books > 1 ? `No pick'em leg has ${d.params.min_books} independent books on its exact line right now.` : 'No pick\'em leg has a current book price right now.'}${S.f.evOnly && d.rows_total ? ' <button class="ev-link" data-ev="evonly">Show every priced leg</button>' : ''}</p>`)
-    + `</section><section aria-label="Model only legs" class="ev-model"><h3>No book price <small>${model.length} legs · no book price to use on this exact line, ranked by Scout's chance</small></h3>`
-    + (model.length ? `<button class="ev-link" data-ev="model" aria-expanded="${S.showModel}">${S.showModel ? 'Hide' : 'Show'} legs with no book price</button>${S.showModel ? `<ol class="ev-list ev-list-model"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>Scout</span><span>Average return on Scout's chance</span><span></span></li>${model.slice(modelPage * PAGE_SIZE, (modelPage + 1) * PAGE_SIZE).map(r => modelRowHtml(r, sports)).join('')}</ol>${pager('model', modelPage, model.length)}` : ''}` : '<p class="ev-state">None right now.</p>')
+    + `</section><section aria-label="Model only legs" class="ev-model"><h3>No book price <small>${model.length} legs · no book price to use on this exact line, ranked by Grader's chance</small></h3>`
+    + (model.length ? `<button class="ev-link" data-ev="model" aria-expanded="${S.showModel}">${S.showModel ? 'Hide' : 'Show'} legs with no book price</button>${S.showModel ? `<ol class="ev-list ev-list-model"><li class="ev-head" aria-hidden="true"><span>Play</span><span>App leg</span><span>Grader</span><span>Average return on Grader's chance</span><span></span></li>${model.slice(modelPage * PAGE_SIZE, (modelPage + 1) * PAGE_SIZE).map(r => modelRowHtml(r, sports)).join('')}</ol>${pager('model', modelPage, model.length)}` : ''}` : '<p class="ev-state">None right now.</p>')
     + `</section><details class="ev-how"><summary>How this works</summary><p>To hit is the books' chance for this side at the app's exact line, with each book's cut taken out (the least favourable of three ways, so the chance is never flattered). A book counts only when it prices this exact line and settles a player who sits out the way the app does; nothing is moved over from another line. Exchange prices count only when buy and sell are within ${Math.round(d.options.max_spread * 100)}¢. Prices older than ${Math.round(d.options.freshness_s.sportsbook / 60)} minutes (exchanges ${Math.round(d.options.freshness_s.exchange / 60)}) are left out. Books that share one price feed count once, and by default a leg needs two independent books. Lower Fewest independent books to 1 to see legs that rest on a single book; they are marked 1 book.</p>`
-    + `<p>Average return is per pick on this entry: chance to hit ÷ chance needed − 1. Scout is Scout's own chance as the board shows it, beside the books' chance and never mixed into it.</p>`
-    + `<p>Payouts: ${esc(d.app_label)} table from ${d.payout_source.source ? `<a href="${esc(d.payout_source.source)}" target="_blank" rel="noopener">its help center</a>` : 'its help center'}, read ${esc(d.payout_source.read_at || '')}. The app's own entry screen is final. Scout links to the app and never places an entry.</p></details>`;
+    + `<p>Average return is per pick on this entry: chance to hit ÷ chance needed − 1. Grader is Grader's own chance as the board shows it, beside the books' chance and never mixed into it.</p>`
+    + `<p>Payouts: ${esc(d.app_label)} table from ${d.payout_source.source ? `<a href="${esc(d.payout_source.source)}" target="_blank" rel="noopener">its help center</a>` : 'its help center'}, read ${esc(d.payout_source.read_at || '')}. The app's own entry screen is final. Grader links to the app and never places an entry.</p></details>`;
 }
 function head() {
   const d = S.doc;

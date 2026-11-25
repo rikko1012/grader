@@ -1,4 +1,4 @@
-"""Scout Sports SHEETS (sh-1): the PrizePicks sheet, the Underdog sheet and the Most-consistent sheet - one dense row per
+"""Prop Grader Sports SHEETS (sh-1): the PrizePicks sheet, the Underdog sheet and the Most-consistent sheet - one dense row per
 current pick'em line, built in the WORKER from the UI snapshot files (sports/snapshots.py players/ + history/), never in
 a member request. Served by sports/api_sheets.py as plain JSON bytes.
 
@@ -9,12 +9,12 @@ Files: <snapshots>/<league>/sheets/prizepicks.json, underdog.json, consistent.js
 ROW SEMANTICS are the board's, not re-implemented here (sports/UI.md "Prop board table"): the platform files carry
 markets in the board's compact format (snapshots.compact_row / compact_quote / compact_forecasts) plus a bv-1 view
 (sports/board_view.row_summary), and the page builds every row with SportsRows.propRow (web/sports/table.js pr-1):
-lean, Scout chance, market chance at that line, edge (probability points), gap flag, L10 / L5, cf-1 confidence.
+lean, Grader chance, market chance at that line, edge (probability points), gap flag, L10 / L5, cf-1 confidence.
 What this module adds:
   lines       every OPEN line of that platform on a game that has not started: ordinary lines AND the platform's goblin /
               demon / alternate lines, each with its variant `v`. Promotional lines are left out. Kalshi and books are
               never rows (they are the market).
-  lr          a Scout line read at a line that has no Scout forecast of its own: the market's newest scout / informed
+  lr          a Grader line read at a line that has no Grader forecast of its own: the market's newest scout / informed
               forecast read at THAT line from its own distribution (stored line, its ladder, or its saved PMF) - the
               board's scout_line_reads rule extended to the ladder. Unreadable -> no lr, never a guess. Market-only
               forecasts are never read this way.
@@ -101,9 +101,9 @@ def _compact_fc(f):
 
 def sheet_markets(player_file, history_games, platform, events, now):
     """One player's markets for one platform in the BOARD's compact row format (snapshots.compact_row / compact_quote),
-    so the page builds every row with the shared SportsRows.propRow (web/sports/table.js, pr-1): lean, Scout chance,
+    so the page builds every row with the shared SportsRows.propRow (web/sports/table.js, pr-1): lean, Grader chance,
     market chance, edge, gap, confidence. Adds what the board does not carry: the platform's goblin / demon / alternate
-    lines (`v` = variant), a Scout line read `lr` at each such line from the market's ONE scout distribution (same
+    lines (`v` = variant), a Grader line read `lr` at each such line from the market's ONE scout distribution (same
     rule as snapshots.scout_line_reads, extended to the forecast's ladder), and the bv-1 hit counts at every line.
     -> (markets, fc, view)"""
     pf = player_file
@@ -262,10 +262,10 @@ def build(league, now=None, base=None):
     meta = {"version": VERSION, "league": league, "built_at": now_utc(), "as_of": now,
             "board_built_at": board.get("built_at"), "events": ev_view, "stats": board.get("stats") or {}}
     method = {"rows": "built in the page with the board's shared row (SportsRows.propRow, sports/UI.md 'Prop board "
-                      "table'): lean, Scout chance, market at this line, edge in probability points, L10 / L5, "
+                      "table'): lean, Grader chance, market at this line, edge in probability points, L10 / L5, "
                       "confidence - research until forward validation",
               "lines": "every open line of this platform, goblin / demon / alternate included (promotions left out)",
-              "scout_at_other_lines": "read from the market's own Scout distribution at that exact line (stored line, "
+              "scout_at_other_lines": "read from the market's own Grader distribution at that exact line (stored line, "
                                       "its ladder or its saved PMF); none when it cannot be read",
               "market": "market estimate at this line without this platform, only books with a usable price; none "
                         "for goblin / demon lines (books do not list them)"}

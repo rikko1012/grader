@@ -204,7 +204,7 @@ def test_check_route_gives_tracks_refusals(tw):
     con, legs = tw
     rid, f = legs["h1"]
     _, b = _call(_req("/api/sports/picks/check", {"picks": [_item(rid, f, shown={"p_over": 0.01, "p_under": 0.99, "p_push": 0.0})]}))
-    assert b["results"][0] == {"ok": False, "code": "display_mismatch", "text": "The chance shown differs from Scout's record - refresh", "record_id": rid, "side": "over"}
+    assert b["results"][0] == {"ok": False, "code": "display_mismatch", "text": "The chance shown differs from Grader's record - refresh", "record_id": rid, "side": "over"}
     code, b = _call(_req("/api/sports/picks/check", {"picks": []}))
     assert code == 400
     q = web.Request(path="/api/sports/picks/check", method="GET", query={"picks": "not json"}, body=b"", member="m_owner", role="member")

@@ -36,7 +36,7 @@ html[data-ui-v3] :focus-visible{outline-color:var(--sc-accent)}
 html[data-ui-v3] .skip{background:var(--sc-cta-bg);color:var(--sc-cta-ink)}
 html[data-ui-v3] .wrap{max-width:var(--sc-max)}
 
-/* ------------------------------------------------------------------ header: 1T tile + Scout, quiet nav, Sign in, Join (CTA) */
+/* ------------------------------------------------------------------ header: 1T tile + Grader, quiet nav, Sign in, Join (CTA) */
 html[data-ui-v3] header.top{background:color-mix(in srgb,var(--sc-bg) 92%,transparent);border-bottom:0;box-shadow:0 1px 0 var(--sc-hair);
   -webkit-backdrop-filter:saturate(1.2) blur(12px);backdrop-filter:saturate(1.2) blur(12px)}
 html[data-ui-v3] header.top .wrap{height:56px;gap:8px}
@@ -148,11 +148,11 @@ html[data-ui-v3] .hc-who b{font:600 22px/1.15 var(--sc-font);letter-spacing:-.02
 html[data-ui-v3] .hc-who small{font-size:13.5px;color:var(--sc-muted);margin-top:2px}
 html[data-ui-v3] .hc-chips{margin:12px 0 0}
 html[data-ui-v3] .hc-chips .tag,html[data-ui-v3] .tag.dim{border:0;background:none;color:var(--sc-muted);font:500 12px/1 var(--sc-font);letter-spacing:0;border-radius:var(--sc-r-sm);box-shadow:inset 0 0 0 1px var(--sc-edge)}
-/* the pick block: Scout side + line | chance to 0.1% over its meter + "Model estimate" | the grade */
+/* the pick block: Grader side + line | chance to 0.1% over its meter + "Model estimate" | the grade */
 html[data-ui-v3] .hc-main{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"pick ring grade";align-items:start;gap:12px 16px;
   margin:14px 0 0;padding:16px 18px 14px;border-radius:var(--sc-r-lg);background:color-mix(in srgb,var(--sc-s2) 55%,var(--sc-s1));box-shadow:var(--sc-ring)}
 html[data-ui-v3] .hc-pick{grid-area:pick}
-html[data-ui-v3] .hc-pick::before{content:"Scout";display:block;margin:0 0 4px;padding-left:11px;color:var(--sc-accent);font:500 12px/16px var(--sc-font);
+html[data-ui-v3] .hc-pick::before{content:"Grader";display:block;margin:0 0 4px;padding-left:11px;color:var(--sc-accent);font:500 12px/16px var(--sc-font);
   background:radial-gradient(circle at 3px 50%,var(--sc-accent-fill) 3px,transparent 3.6px) no-repeat}
 html[data-ui-v3] .hc-pick .side{font:600 24px/1.12 var(--sc-font);letter-spacing:-.02em;color:var(--sc-text)}
 html[data-ui-v3] .hc-pick p{font-size:13px;color:var(--sc-muted);margin-top:4px}
@@ -231,7 +231,7 @@ html[data-ui-v3] .books h2{font-weight:600}
 html[data-ui-v3] .books-l{font:500 11.5px/1.3 var(--sc-font);letter-spacing:.1em;color:var(--sc-faint)}
 html[data-ui-v3] .mq>span{font:600 15px var(--sc-font);color:var(--sc-text);letter-spacing:0}
 
-/* ------------------------------------------------------------------ 2. why Scout */
+/* ------------------------------------------------------------------ 2. why Grader */
 html[data-ui-v3] .vrow{border-radius:var(--sc-r-lg)}
 html[data-ui-v3] .vtxt .no::before{color:var(--sc-poor)}
 html[data-ui-v3] .vtxt .yes::before{color:var(--sc-accent)}

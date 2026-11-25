@@ -14,7 +14,7 @@ category keeps the three kinds of numbers apart (they are never mixed in one res
 Provenance rule (tested): every number sits in a dict that carries an id (record_id / agg_id / forecast_id) and an
 as_of time. record_id = the canonical store's record id (snapshot id for offers); agg_id = a deterministic hash of the
 aggregate's inputs, with source_record_ids listing them. as_of = the point in time the store was read at; known_at =
-when that record became known to Scout. Strings that came from a provider (names, labels) are data: control characters
+when that record became known to Prop Grader. Strings that came from a provider (names, labels) are data: control characters
 are stripped, length is capped and citation markers are neutralised so a page or feed cannot forge a citation.
 """
 from __future__ import annotations
@@ -170,7 +170,7 @@ SPECS = {
                                   "limit": {"type": "integer", "minimum": 1, "maximum": MAX_ROWS}}}},
     "forecasts": {
         "category": "forecasts",
-        "description": "Stored Scout forecasts: forecast id, forecast time, model / artifact / data / calibration "
+        "description": "Stored Grader forecasts: forecast id, forecast time, model / artifact / data / calibration "
                        "versions, projection, unconditional p_over / p_under / p_push, offered sides, and whether the "
                        "version is research-only (not validated for members).",
         "schema": {"type": "object", "additionalProperties": False, "required": ["league"],
@@ -188,7 +188,7 @@ SPECS = {
                                   "league": {"type": "string", "enum": LEAGUE_ENUM}}}},
     "factor_coverage": {
         "category": "reference",
-        "description": "Which prop factors Scout holds data for (and the tool / field that has it) and which are "
+        "description": "Which prop factors Grader holds data for (and the tool / field that has it) and which are "
                        "UNAVAILABLE. Call it before discussing matchups, usage, pace, coverage schemes etc.; never "
                        "describe an unavailable factor as if it were known.",
         "schema": {"type": "object", "additionalProperties": False, "required": ["league"],
@@ -228,7 +228,7 @@ FACTORS = {
         ("Market: prices across books, Kalshi bid / ask", _AV, "market_quotes sides (compare within compatible_group)", None),
         ("Market: line movement", _AV, "market_quotes line_history=true (stored offer revisions)", None),
         ("Market: de-vigged implied probability", _NA, "not computed by the assistant tools", None),
-        ("Scout projection / probabilities", _AV, "forecasts (research-only versions are labelled)", None),
+        ("Grader projection / probabilities", _AV, "forecasts (research-only versions are labelled)", None),
     ],
     "nfl": [
         ("Targets, receptions, carries, pass attempts per game", _AV, "player_game_log stats targets / rec / rush_att / "
@@ -253,7 +253,7 @@ FACTORS = {
          None),
         ("Market: line movement", _AV, "market_quotes line_history=true", None),
         ("Market: de-vigged implied probability", _NA, "not computed by the assistant tools", None),
-        ("Scout projection / probabilities", _AV, "forecasts", None),
+        ("Grader projection / probabilities", _AV, "forecasts", None),
     ],
 }
 
@@ -463,7 +463,7 @@ def t_market_quotes(ctx, a):
                                    if m["known_at"] <= ctx.now][-10:]
         rows.append(row)
     rows.sort(key=lambda r: (r["stat"] or "", r["platform"], r["line"]))
-    notes = ["prices are as the source lists them; observed_age_minutes = since Scout last read it (not the source's "
+    notes = ["prices are as the source lists them; observed_age_minutes = since Grader last read it (not the source's "
              "own freshness when source_time_unknown is true)",
              "compare prices only between rows with the same non-null compatible_group"]
     return _result(ctx, "market_quotes", a, rows[:lim], truncated=len(rows) > lim, notes=notes)
@@ -534,5 +534,5 @@ assert set(RUN) == set(SPECS)
 def run(ctx, name, args) -> dict:
     """Validate then run one tool. Unknown tool / bad arguments -> ToolError (the caller returns it as an error)."""
     if name not in SPECS:
-        raise ToolError(f"unknown tool '{clean(name, 40)}' - only read-only Scout tools exist")
+        raise ToolError(f"unknown tool '{clean(name, 40)}' - only read-only Grader tools exist")
     return RUN[name](ctx, validate(SPECS[name]["schema"], args))

@@ -311,13 +311,13 @@ def test_tab_title_follows_the_page(browser):
     ctx, page, errors = _page(browser, _board_api(C._fixture_board()), 1280, init=TABLE_VIEW)
     page.goto("/sports#/board?lg=nba")
     page.wait_for_selector(".sw-tb-row")
-    assert page.title() == "Prop board · NBA · 1time Scout Sports"
+    assert page.title() == "Prop board · NBA · Prop Grader Sports"
     page.goto("/sports#/slate?lg=nfl")
     page.wait_for_selector("#sw-sq")
-    assert page.title() == "Slate · NFL · 1time Scout Sports"
+    assert page.title() == "Slate · NFL · Prop Grader Sports"
     page.goto(f"/sports#/player/{U.PID}?lg=nba&stat=points")
     page.wait_for_selector(".sw-phead h1")
-    assert page.title() == "Test Wing · NBA · 1time Scout Sports"
+    assert page.title() == "Test Wing · NBA · Prop Grader Sports"
     assert not errors, errors
     ctx.close()
 

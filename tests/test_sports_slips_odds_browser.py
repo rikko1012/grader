@@ -1,5 +1,5 @@
 """Owner 2026-11-12 ("sports should be able to go in slips now", "make sure they all have grades and odds"), in a real browser against
-the real Handler and fixture data (no network): an NBA / NFL line with a letter adds to the slip from the board and passes Scout's own
+the real Handler and fixture data (no network): an NBA / NFL line with a letter adds to the slip from the board and passes Grader's own
 slip check; Auto-build with NBA / NFL ticked uses their legs (no opt-in, no research label); every NBA / NFL row
 shows a letter, a Lean or the plain reason it has none, and an odds line (the app's payout or needed price, and a sportsbook's price
 at that exact line or "No book odds at this line"). Display and slip pool only: no grade, chance, side or stake moves."""

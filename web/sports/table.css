@@ -1,4 +1,4 @@
-/* Scout Sports - Prop board table (board agent). Every rule is scoped .sw .sw-tb-* (Sports page only). */
+/* Prop Grader Sports - Prop board table (board agent). Every rule is scoped .sw .sw-tb-* (Sports page only). */
 .sw .sw-tb-bar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;margin:0 0 10px}
 .sw .sw-tb-valid{margin:0 0 10px;font-size:12.5px;color:var(--muted)}
 .sw .sw-tb-valid b{color:var(--text)}
@@ -69,10 +69,10 @@
   .sw .sw-tb-lean .sw-grade-tag,.sw .sw-tb-lean .sw-grade-nv{white-space:normal}
 }
 .sw .sw-tb .sw-p{white-space:nowrap}
-/* A8 (audit 2026-11-05): on phones the Scout and Market cells are about 100 px wide - the mean, Over and Under stack on
+/* A8 (audit 2026-11-05): on phones the Grader and Market cells are about 100 px wide - the mean, Over and Under stack on
    their own lines instead of running into the next column ("O 38.8%3%U 61...") */
 @media(max-width:760px){
-  .sw .sw-tb-scout::before{content:"Scout";display:block;color:var(--faint);font-size:11px}
+  .sw .sw-tb-scout::before{content:"Grader";display:block;color:var(--faint);font-size:11px}
   .sw .sw-tb-scout .sw-tb-mu,.sw .sw-tb-scout .sw-p{display:block;line-height:1.35}
   .sw .sw-tb-mkt::before,.sw .sw-tb-edge::before,.sw .sw-tb-hit::before,.sw .sw-tb-hit5::before{display:block}
   .sw .sw-tb-scout,.sw .sw-tb-mkt,.sw .sw-tb-edge{align-self:start}

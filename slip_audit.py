@@ -1,4 +1,4 @@
-"""Read-only, paged audit of every slip Scout generated, by size (owner 2026-11-16: "go over every 4 man ever generated through
+"""Read-only, paged audit of every slip Grader generated, by size (owner 2026-11-16: "go over every 4 man ever generated through
 scout"). Admin only (server.py /admin/slip_audit.json). Nothing here writes: SQLite stores open read-only (mode=ro), the JSONL logs
 are streamed line by line, and each page settles its own legs from the pick log (picklog.rows_for_matches - indexed, bounded)
 with the same rule slip history uses (slip_batches.leg_result_from_picks).

@@ -1,6 +1,6 @@
 """cap-3 (owner 2026-11-08): the hub board maps a near-even-price hold (q.x b "cap") to scout.hold with the fact
-"Scout grades lines priced near even." - no side, no letter, no stake, chances and projection still shown - and sorting by
-Scout chance never puts these rows above graded ones (they carry no p_side)."""
+"Grader grades lines priced near even." - no side, no letter, no stake, chances and projection still shown - and sorting by
+Grader chance never puts these rows above graded ones (they carry no p_side)."""
 import json
 import time
 from datetime import datetime, timezone
@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import workspace_books as wb
 import workspace_sports as ws
 
-TEXT = "Scout grades lines priced near even."
+TEXT = "Grader grades lines priced near even."
 
 
 def _rec(p, x, mk=None, po=0.19, pu=0.81, line=24.5, rid="offer:1"):
@@ -47,7 +47,7 @@ def test_board_quotes_to_hub_records():
     """The compact board quotes sports/snapshots.guard_row + compact_quote write for one row (asserted on the sports side in
     sports/tests/test_cap3_long_odds.py test_compact_board_row_carries_the_hold; this module may not import sports) ->
     hub records: long-odds Polymarket / BetRivers lines held with the fact, the near-even Polymarket rung and the pick'em
-    lines keep their letters; Scout-chance sorting puts the holds last."""
+    lines keep their letters; Grader-chance sorting puts the holds last."""
     cap = {"b": "cap", "t": TEXT, "v": "cap-3"}
     graded = {"ln": "under", "v": "cf-2", "n": 0, "c": 3, "cw": [], "pl": 0.81, "gr": "A", "gp": "sports-gp-1"}
     qs = [{"r": "pm245", "p": "polymarket", "l": 24.5, "v": "ladder_rung", "o": [1, 1], "f": "f245", "k": [0.19, 0.21], "x": cap},
@@ -171,7 +171,7 @@ def test_pickem_extra_book_is_never_capped():
 
 def test_extra_book_build_end_to_end_matches_the_hub_board(monkeypatch):
     """build() for FanDuel on NBA (sports_service): the long-odds FanDuel line is held exactly like the hub board's own FanDuel
-    record (record_of with the server's cap-3 hold), the near-even one keeps the board's read, and Scout-chance sorting puts
+    record (record_of with the server's cap-3 hold), the near-even one keeps the board's read, and Grader-chance sorting puts
     the held row last."""
     now = time.time()
     seen = datetime.fromtimestamp(now - 60, timezone.utc).isoformat(timespec="seconds")

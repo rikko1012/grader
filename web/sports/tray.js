@@ -1,4 +1,4 @@
-/* Scout Sports - persistent slip tray (ux agent). Classes "sw-tray-*" under body.sw.
+/* Prop Grader Sports - persistent slip tray (ux agent). Classes "sw-tray-*" under body.sw.
    The tray IS Slip Studio's draft: localStorage "ss:draft:<league>:<platform>" ({legs: [...]}, leg format in
    sports/slips/README.md) and "ss:ctx" ({league, platform, entry_type}). One platform per draft (the existing rule):
    adding a leg from another book switches the active draft to that book; the other draft is kept and offered as a
