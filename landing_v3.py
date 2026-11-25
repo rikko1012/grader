@@ -62,14 +62,26 @@ def story_enabled():
 
 
 # The feature sections (one member screen per section, web/v3/landing-features.*) replace the story page's tabbed
-# "feature theatre". Off by default until the owner has seen the preview: SCOUT_LANDING_FEATURES=1 switches them on,
-# and unsetting it restores the tabbed block at once. The saved examples in landing-features.js are typed in from the
+# "feature theatre" (see features_enabled for when). The saved examples in landing-features.js are typed in from the
 # member board of 2026-11-25 (see that file); nothing is read from the member API for them.
 FEAT_ASSETS = {"FEAT_CSS": ROOT / "web" / "v3" / "landing-features.css", "FEAT_JS": ROOT / "web" / "v3" / "landing-features.js"}
 
 
-def features_enabled():
-    return story_enabled() and os.environ.get("SCOUT_LANDING_FEATURES", "0").strip().lower() in ("1", "true", "on")
+# Owner approved publishing on 2026-11-25 ("publish it"). The saved examples are that day's board, and their matches start
+# by 2026-11-26 08:30 UTC, so with no setting the sections switch themselves on at that moment (never an open pick shown
+# for free). SCOUT_LANDING_FEATURES=1 forces them on, =0 restores the tabbed block.
+FEAT_LIVE_FROM = datetime(2026, 11, 26, 8, 30, tzinfo=timezone.utc)
+
+
+def features_enabled(now=None):
+    if not story_enabled():
+        return False
+    v = os.environ.get("SCOUT_LANDING_FEATURES", "").strip().lower()
+    if v in ("1", "true", "on"):
+        return True
+    if v in ("0", "false", "off"):
+        return False
+    return (now or datetime.now(timezone.utc)) >= FEAT_LIVE_FROM
 STALE_S = 900                      # a page not rebuilt for this long (no visitors) is rebuilt from cached bodies before serving
 REBUILD_S = 120                    # the page changes at most this often (frame rows, ledger, reviews)
 BOARD_READ = True                  # tests switch this off (no feed read from the background builder)

@@ -23,8 +23,17 @@ def page(srv, monkeypatch):
     landing_v3.reset()
 
 
-def test_off_by_default_keeps_the_tabbed_block(page, monkeypatch):
+def test_unset_switches_on_when_the_example_matches_have_started(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    monkeypatch.setenv("SCOUT_LANDING_STORY", "1")
     monkeypatch.delenv("SCOUT_LANDING_FEATURES", raising=False)
+    t = landing_v3.FEAT_LIVE_FROM
+    assert t == datetime(2026, 11, 26, 8, 30, tzinfo=timezone.utc)
+    assert not landing_v3.features_enabled(t - timedelta(seconds=1)) and landing_v3.features_enabled(t)
+
+
+def test_off_keeps_the_tabbed_block(page, monkeypatch):
+    monkeypatch.setenv("SCOUT_LANDING_FEATURES", "0")
     assert not landing_v3.features_enabled()
     s = render(page)
     assert "feature-theatre" in s and 'id="feature-tab-2"' in s

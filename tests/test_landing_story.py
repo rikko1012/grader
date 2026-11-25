@@ -20,6 +20,7 @@ from tests.test_landing_v3 import srv, seed, board, JOIN, WEEK, get, wait_builde
 @pytest.fixture
 def story(srv, monkeypatch):
     monkeypatch.setenv("SCOUT_LANDING_STORY", "1")
+    monkeypatch.setenv("SCOUT_LANDING_FEATURES", "0")      # this suite covers the tabbed block (the rollback layout)
     seed(srv, monkeypatch, board())
     landing_v3.reset()
     yield srv
