@@ -59,6 +59,17 @@ STORY_ASSETS = {"STORY_CSS": ROOT / "web" / "v3" / "landing-story.css",
 
 def story_enabled():
     return os.environ.get("SCOUT_LANDING_STORY", "1").strip().lower() not in ("0", "false", "off")
+
+
+# The feature sections (one member screen per section, web/v3/landing-features.*) replace the story page's tabbed
+# "feature theatre". Off by default until the owner has seen the preview: SCOUT_LANDING_FEATURES=1 switches them on,
+# and unsetting it restores the tabbed block at once. The saved examples in landing-features.js are typed in from the
+# member board of 2026-11-25 (see that file); nothing is read from the member API for them.
+FEAT_ASSETS = {"FEAT_CSS": ROOT / "web" / "v3" / "landing-features.css", "FEAT_JS": ROOT / "web" / "v3" / "landing-features.js"}
+
+
+def features_enabled():
+    return story_enabled() and os.environ.get("SCOUT_LANDING_FEATURES", "0").strip().lower() in ("1", "true", "on")
 STALE_S = 900                      # a page not rebuilt for this long (no visitors) is rebuilt from cached bodies before serving
 REBUILD_S = 120                    # the page changes at most this often (frame rows, ledger, reviews)
 BOARD_READ = True                  # tests switch this off (no feed read from the background builder)
@@ -122,7 +133,9 @@ def _mt():
             return None
     story = story_enabled()
     template, assets = (STORY_TEMPLATE, STORY_ASSETS) if story else (TEMPLATE, ASSETS)
-    return (story, template.stat().st_mtime) + tuple(f.stat().st_mtime for f in assets.values()) + (m(FALLBACK),)
+    feat = features_enabled()
+    return ((story, feat, template.stat().st_mtime) + tuple(f.stat().st_mtime for f in assets.values())
+            + (tuple(m(f) for f in FEAT_ASSETS.values()) if feat else ()) + (m(FALLBACK),))
 
 
 def _template():
@@ -131,6 +144,8 @@ def _template():
     if _TPL["mtime"] != mt:
         template, assets = (STORY_TEMPLATE, STORY_ASSETS) if story_enabled() else (TEMPLATE, ASSETS)
         text = template.read_text(encoding="utf-8")
+        if story_enabled() and features_enabled():
+            assets = {**assets, **FEAT_ASSETS}
         for k, f in assets.items():
             body = f.read_text(encoding="utf-8")
             if f.suffix == ".css":              # source comments are for the repo, not view-source (tokens.css names the old brand)
@@ -1008,7 +1023,8 @@ def build(srv, join_url, fetch=True):
     # optional blocks: <!--if:NAME--> ... <!--/if:NAME--> kept only when NAME has content
     for name, on in (("FRAME", bool(pick)), ("PHONE", bool(ph)), ("GAP", bool(gp)), ("POOL", bool(pm)), ("SLIP", bool(real)),
                      ("LEDGER", bool(rows)), ("TOTAL", bool(total)), ("REVIEWS", bool(nrv)), ("RVCARDS", bool(cards)),
-                     ("BASE", bool(base)), ("INSIDE", bool(gp or pm)), ("FMORE", bool(more_n > 0))):
+                     ("BASE", bool(base)), ("INSIDE", bool(gp or pm)), ("FMORE", bool(more_n > 0)),
+                     ("FEAT", features_enabled()), ("OLDFEAT", not features_enabled())):
         out = re.sub(rf"<!--if:{name}-->(.*?)<!--/if:{name}-->", (lambda m: m.group(1)) if on else "", out, flags=re.S)
     out = re.sub(r"\{\{([A-Z_0-9]+)\}\}", lambda m: fill.get(m.group(1), ""), out)
     return out.encode("utf-8")
