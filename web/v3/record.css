@@ -117,7 +117,7 @@ html[data-ui-v3][data-v3-page="record"] main>footer{margin-top:48px;border-top:1
   html[data-ui-v3][data-v3-page="record"] .table-wrap{padding:2px 10px}
   html[data-ui-v3][data-v3-page="record"] .calendar{gap:4px}
   html[data-ui-v3][data-v3-page="record"] .calendar b{font-size:13.5px}}
-/* polish1: the same "Prop Grader" header as the member pages; the page's own "1TIME SCOUT" text stays for screen readers only */
+/* polish1: the same "Prop Grader" header as the member pages; the page's own "PROP GRADER" text stays for screen readers only */
 html[data-ui-v3][data-v3-page="record"] main>header a.v3-brand{display:inline-flex;align-items:center;font-size:0!important;letter-spacing:0!important}
 html[data-ui-v3][data-v3-page="record"] main>header a.v3-brand b{font-size:0!important}
 html[data-ui-v3][data-v3-page="record"] main>header a.v3-brand .v3-brand-word{font:600 19px/1 var(--sc-font);letter-spacing:-.01em;color:var(--sc-text)}

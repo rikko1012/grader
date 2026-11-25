@@ -2404,8 +2404,8 @@ export function mount(C) {
   const NAV=[['board','Board'],['studio','Slips'],...(EV_ON?[['ev','EV']]:[]),...(ARB_ON?[['arb','Arbitrage']]:[]),...(BOOKS_ON?[['books','Sportsbooks']]:[]),['picks','My picks'],['record','Record'],['tools','Tools']];
   const pickStatus=[['all','All outcomes'],['pending','Pending'],['hit','Won'],['miss','Lost'],['push','Pushed'],['void','Void']];
   document.body.insertAdjacentHTML('beforeend',`<section id="u-hub" class="scout-hub" aria-label="All sports research" hidden>
-    <aside class="h-sidebar"><a class="h-brand" href="/"><span>1T</span><b>1TIME <em>SCOUT</em></b></a><nav aria-label="Research hub">${NAV.map(([id,label])=>`<button data-hub="section" data-id="${id}">${label}${id==='tools'?' <span id="hub-alert-count" aria-label="New filter matches"></span>':''}</button>`).join('')}</nav><div class="h-sidebar-foot"><button data-hub="close">Classic board ↗</button></div></aside>
-    <div class="h-center" id="hub-center"><header class="h-top"><div><span class="h-eyebrow">1TIME SCOUT / RESEARCH</span><h1 id="hub-title">Player props</h1></div><div class="h-top-actions"></div></header>
+    <aside class="h-sidebar"><a class="h-brand" href="/"><span>1T</span><b>PROP <em>GRADER</em></b></a><nav aria-label="Research hub">${NAV.map(([id,label])=>`<button data-hub="section" data-id="${id}">${label}${id==='tools'?' <span id="hub-alert-count" aria-label="New filter matches"></span>':''}</button>`).join('')}</nav><div class="h-sidebar-foot"><button data-hub="close">Classic board ↗</button></div></aside>
+    <div class="h-center" id="hub-center"><header class="h-top"><div><span class="h-eyebrow">PROP GRADER / RESEARCH</span><h1 id="hub-title">Player props</h1></div><div class="h-top-actions"></div></header>
       <section id="hub-board-section">
         <div class="h-toolbar" aria-label="Board controls" role="group">
           <div id="hub-sports" class="h-sports" role="group" aria-label="Sport"></div>

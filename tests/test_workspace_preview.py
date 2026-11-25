@@ -108,7 +108,7 @@ def test_no_path_reaches_the_file_reader(srv, monkeypatch):
 
 def test_owner_can_open_it_with_the_flag_off(srv, monkeypatch):
     st, _, body = get(srv, f"/preview/workspace?token={ADMIN}")
-    assert st == 200 and b"1TIME SCOUT" in body
+    assert st == 200 and b"PROP GRADER" in body
     assert get(srv, "/preview/workspace", {"X-Admin-Token": ADMIN})[0] == 200
     # the page's scripts and styles carry no token: they are authorised from the page URL in their Referer
     for path in ASSETS:

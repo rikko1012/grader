@@ -6803,7 +6803,7 @@ def unsubscribe_page(member, token, confirm=False):
     import workspace_alerts, workspace_api
     esc = htmllib.escape
     shell = ("<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-             "<title>Grader alerts</title><style>body{background:#000;color:#eee;font:16px/1.5 system-ui,sans-serif;margin:0;padding:24px;max-width:520px}"
+             "<title>Prop Grader alerts</title><style>body{background:#000;color:#eee;font:16px/1.5 system-ui,sans-serif;margin:0;padding:24px;max-width:520px}"
              "button{min-height:44px;padding:0 18px;border-radius:8px;border:1px solid #f5c842;background:#f5c842;color:#000;font-weight:600}"
              "p{color:#bbb}</style>__NEXT__</head><body><h1>Grader alerts</h1>{}</body></html>")
     shell = shell.replace("__NEXT__", "<style>" + web_file("public-next.css").decode("utf-8") + "body{padding:24px;max-width:520px}</style>" if ui_next_default() else "")

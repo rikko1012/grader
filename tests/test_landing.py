@@ -173,7 +173,7 @@ def test_landing_uses_the_member_app_design():
     assert "'outfit'" in css and "'dm mono'" in css
     font = re.search(r'<link href="(https://fonts\.googleapis\.com/[^"]+)" rel="stylesheet">', s).group(1)
     assert font in (server.WEB / "index.html").read_text(encoding="utf-8")   # the font request the member page already makes
-    assert '<span aria-hidden="true">1T</span><b>1TIME <em>SCOUT</em></b>' in s
+    assert '<span aria-hidden="true">1T</span><b>PROP <em>GRADER</em></b>' in s
 
 
 @pytest.fixture

@@ -123,7 +123,7 @@
       return;
     }
     if (!me.member) {
-      body.appendChild(el("p", { text: "Reviews are written by paying Grader members." }));
+      body.appendChild(el("p", { text: "Reviews are written by paying Prop Grader members." }));
       body.appendChild(el("a", { class: "btn", href: me.join, text: "Join on Whop" }));
       return;
     }

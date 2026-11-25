@@ -640,7 +640,7 @@
        does not share with this page, leaves the initials circle. Esports legs are drawn as before. */
     const loadImg=url=>!url?Promise.resolve(null):new Promise(res=>{const im=new Image();let done=false;const end=v=>{if(!done){done=true;res(v);}};im.crossOrigin='anonymous';im.referrerPolicy='no-referrer';im.onload=()=>end(im);im.onerror=()=>end(null);setTimeout(()=>end(null),2500);im.src=url;});
     const faces=await Promise.all(legs.map(l=>{if(!FACE_LG[l.sport])return null;const r=R.boards[l.sport].recs.get(offerKey(l.book,l.row_id));return Promise.all([loadImg(headshotUrl(l.sport,r&&r.player.id,l.player_key)),loadImg(logoUrl(l.sport,(r&&r.player.team_abbr)||l.team))]);}));
-    text('1TIME SCOUT',74,34);text(`${list[0].label} · ${legs.length} picks · ${typeOf(list[0])}`,126,25,'#bbcee8');
+    text('PROP GRADER',74,34);text(`${list[0].label} · ${legs.length} picks · ${typeOf(list[0])}`,126,25,'#bbcee8');
     text('RESEARCH LINEUP',166,18,'#94a7bf');
     legs.forEach((l,i)=>{const y=220+i*140,f=faces[i],x=f?170:60;g.strokeStyle='#344153';g.beginPath();g.moveTo(60,y-22);g.lineTo(1020,y-22);g.stroke();
       if(f){const cx=105,cy=y+40,rad=44;g.save();g.beginPath();g.arc(cx,cy,rad,0,Math.PI*2);g.fillStyle='#1d242e';g.fill();g.clip();

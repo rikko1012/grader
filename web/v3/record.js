@@ -5,7 +5,7 @@
    controls only (no mock data, no new API).
 
    Display only. web/record.js keeps loading, switching and painting the record; this file adds, after each paint:
-   - the brand mark beside the page's own "1TIME SCOUT" link, and the title's second line set in the muted ink (a span);
+   - the brand mark beside the page's own "PROP GRADER" link, and the title's second line set in the muted ink (a span);
    - under "Actual hit rate" the gap to the "Average stated chance" shown beside it (both on screen, so it always reconciles;
      no delta when either is "\u2014");
    - each calendar day marked against that average stated chance (at or above / within 3 pts / further below), as on the

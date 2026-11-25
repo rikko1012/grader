@@ -26,7 +26,7 @@
     var active = (opts && opts.active) || "sports";
     el.innerHTML =
       '<a class="sw-brand" href="/sports" aria-label="Prop Grader Sports home"><span class="sw-mark">' + MARK + '</span>' +
-      '<span class="sw-word">1time <em>Grader</em></span></a>' +
+      '<span class="sw-word">Prop <em>Grader</em></span></a>' +
       '<nav class="sw-products" aria-label="Product">' + PRODUCTS.map(function (p) {
         var on = p.key === active;
         return '<a href="' + p.href + '"' + (on ? ' class="on" aria-current="page"' : "") + ">" + esc(p.label) + "</a>";
@@ -49,7 +49,7 @@
   function gate(el, info) {
     var up = info && info.upgrade;
     el.innerHTML = '<section class="sw-gate" aria-labelledby="sw-gate-h"><h1 id="sw-gate-h">Prop Grader Sports is for members</h1>' +
-      "<p>Sign in with your 1time membership to open the NBA and NFL workspace.</p>" +
+      "<p>Sign in with your Prop Grader membership to open the NBA and NFL workspace.</p>" +
       '<p><a class="sw-btn sw-btn-primary" href="/auth/login">Sign in</a>' +
       (up ? ' <a class="sw-btn" href="' + esc(up) + '">Get membership</a>' : "") + "</p></section>";
   }
