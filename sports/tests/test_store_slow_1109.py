@@ -256,7 +256,7 @@ def test_model_forward_writes_identical_forecasts_with_and_without_the_new_index
     assert len(new_rows) > 20 and [tuple(r) for r in new_rows] == [tuple(r) for r in old_rows]
     models = {store._rec(r).model_version for r in new_rows}
     assert {"sm-1", "mkt-fanduel"} <= models, models
-    drop = ("elapsed_s", "rss_mb", "peak_rss_mb", "ran_s", "at", "finished_at", "started_at")
+    drop = ("elapsed_s", "rss_mb", "peak_rss_mb", "ran_s", "at", "finished_at", "started_at", "seconds")   # seconds: wall-clock time of a step, not a forecast
 
     def strip(x):
         if isinstance(x, dict):
