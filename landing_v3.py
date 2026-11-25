@@ -68,9 +68,8 @@ FEAT_ASSETS = {"FEAT_CSS": ROOT / "web" / "v3" / "landing-features.css", "FEAT_J
 
 
 # Owner approved publishing on 2026-11-25 ("publish it"). The saved examples are that day's board, and their matches start
-# by 2026-11-26 08:30 UTC, so with no setting the sections switch themselves on at that moment (never an open pick shown
-# for free). SCOUT_LANDING_FEATURES=1 forces them on, =0 restores the tabbed block.
-FEAT_LIVE_FROM = datetime(2026, 11, 26, 8, 30, tzinfo=timezone.utc)
+# by 2026-11-26 08:30 UTC; the owner then chose to go live at once. On by default; SCOUT_LANDING_FEATURES=0 restores the
+# tabbed block.
 
 
 def features_enabled(now=None):
@@ -81,7 +80,7 @@ def features_enabled(now=None):
         return True
     if v in ("0", "false", "off"):
         return False
-    return (now or datetime.now(timezone.utc)) >= FEAT_LIVE_FROM
+    return True                                       # owner 2026-11-25, after the timed plan: "make it live right now"
 STALE_S = 900                      # a page not rebuilt for this long (no visitors) is rebuilt from cached bodies before serving
 REBUILD_S = 120                    # the page changes at most this often (frame rows, ledger, reviews)
 BOARD_READ = True                  # tests switch this off (no feed read from the background builder)

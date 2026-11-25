@@ -58,7 +58,7 @@
   const av = n => `<span class="fx-av" aria-hidden="true">${esc(n[0].toUpperCase())}</span>`;
   const hitCls = r => r >= 0.6 ? 'good' : r < 0.4 ? 'poor' : 'mid';
   const ln = v => String(v);
-  const appbar = on => `<div class="fx-bar" aria-hidden="true"><span class="fx-brand"><i>1T</i>Scout</span><nav>${['Board', 'Slips', 'My picks', 'Record', 'Tools'].map(n => `<span${n === on ? ' class="on"' : ''}>${n}</span>`).join('')}</nav><span class="fx-ex">Saved example</span><span class="fx-slipbtn">Slip <b class="fx-cnt">0</b></span></div>`;
+  const appbar = on => `<div class="fx-bar" aria-hidden="true"><span class="fx-brand"><i>1T</i>Prop Grader</span><nav>${['Board', 'Slips', 'My picks', 'Record', 'Tools'].map(n => `<span${n === on ? ' class="on"' : ''}>${n}</span>`).join('')}</nav><span class="fx-ex">Saved example</span><span class="fx-slipbtn">Slip <b class="fx-cnt">0</b></span></div>`;
   const PLUS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path class="p" d="M8 3v10M3 8h10"/><path class="c" d="M3.5 8.5l3 3 6-7"/></svg>';
   function toaster(el) {
     let t = null;
@@ -168,7 +168,7 @@
       <div class="fx-tools"><div class="fx-chips" role="group" aria-label="App"><button type="button" class="fx-chip" data-app="all" aria-pressed="true">All</button><button type="button" class="fx-chip" data-app="pp" aria-pressed="false">PP <i>6</i></button><button type="button" class="fx-chip" data-app="ud" aria-pressed="false">UD <i>6</i></button></div>
       ${views ? `<div class="fx-vwrap"><button type="button" class="fx-vbtn" aria-haspopup="true" aria-expanded="false"><span>Views</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg></button><div class="fx-vmenu" role="menu" hidden>${Object.entries(VIEW).map(([k, v]) => `<button type="button" role="menuitemradio" data-view="${k}" aria-checked="${k === 'all'}">${v[0]}</button>`).join('')}</div></div>` : ''}
       <span class="fx-sort">Sort <b>Start time</b></span></div>${views ? '<p class="fx-vdesc" hidden></p>' : ''}
-      <div class="fx-tbl" role="table" aria-label="Saved example of the CS2 board"><div class="fx-th" role="row"><span role="columnheader">Player</span><span role="columnheader">Market</span><span role="columnheader">Line</span><span role="columnheader">Proj.</span><span role="columnheader">Scout</span><span role="columnheader">L10</span><span role="columnheader">Edge<small>vs break-even</small></span><span role="columnheader">Compare</span><span role="columnheader"></span></div>
+      <div class="fx-tbl" role="table" aria-label="Saved example of the CS2 board"><div class="fx-th" role="row"><span role="columnheader">Player</span><span role="columnheader">Market</span><span role="columnheader">Line</span><span role="columnheader">Proj.</span><span role="columnheader">Grader</span><span role="columnheader">L10</span><span role="columnheader">Edge<small>vs break-even</small></span><span role="columnheader">Compare</span><span role="columnheader"></span></div>
       ${ROWS.map((r, i) => `<div class="fx-row" role="row" style="--i:${i}"><span class="fx-pl" role="cell">${av(r.name)}<span><b>${esc(r.name)}</b><small>${esc(r.match)}</small></span></span>
         <span class="fx-mk" role="cell"><b>Kills</b><small>Maps 1-2</small><em class="fx-neq" hidden></em></span><span class="fx-ln" role="cell"><b></b><small></small></span><span class="fx-pj" role="cell">${f1(r.proj)}</span>
         <span class="fx-md" role="cell"><span class="fx-sd"></span><b class="fx-pc" data-v="50">50.0%</b><span class="fx-gr"></span></span>
@@ -203,7 +203,7 @@
       $('.fx-pline', el).textContent = ln(o.line);
       $('.fx-psel', el).innerHTML = `${APP[book]} ${ln(o.line)}${o.from ? ` <s>${ln(o.from)}</s>` : ''}`;
       $('.fx-pseen', el).textContent = `${APP[book]} · Standard line${o.from ? ' · opened ' + ln(o.from) : ''}`;
-      $$('.fx-sides span', el).forEach((sp, i) => { sp.innerHTML = `${i ? 'Under' : 'Over'} ${ln(o.line)}${i ? ' <i>Scout</i>' : ''}`; });
+      $$('.fx-sides span', el).forEach((sp, i) => { sp.innerHTML = `${i ? 'Under' : 'Over'} ${ln(o.line)}${i ? ' <i>Grader</i>' : ''}`; });
       tween($('.fx-big', el), o.p, 1, '%', 800);
       $('.fx-pg', el).innerHTML = letter(o);
       $('.fx-pu', el).textContent = o.u + 'U';
@@ -216,10 +216,10 @@
     function right() {
       const o = T[book], gap = Math.abs(o.line - T.proj).toFixed(1), u10 = tally(o.line, 10);
       $$('.fx-tabs button', el).forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
-      $('.fx-tp', el).innerHTML = tab === 'overview' ? `<div class="fx-ins"><small>Key insights</small><h4>Why Scout leans Under ${ln(o.line)}</h4><p class="fx-dot on">Scout projects <b>${f1(T.proj)} Kills</b>, ${gap} below the ${ln(o.line)} line · <b>${f1(o.p)}%</b> chance Under</p>
+      $('.fx-tp', el).innerHTML = tab === 'overview' ? `<div class="fx-ins"><small>Key insights</small><h4>Why Grader leans Under ${ln(o.line)}</h4><p class="fx-dot on">Grader projects <b>${f1(T.proj)} Kills</b>, ${gap} below the ${ln(o.line)} line · <b>${f1(o.p)}%</b> chance Under</p>
           <div class="fx-tiles"><div><small>Under ${ln(o.line)}</small><b>${u10}<i>/10</i></b><small>Last 10 results</small></div><div><small>Over ${ln(o.line)}</small><b>${10 - u10}<i>/10</i></b><small>0 pushes kept separate</small></div><div><small>Average / median</small><b>27.7 / 25</b><small>Maps 1-2</small></div><div><small>Recent range</small><b>12–47</b><small>Observed results, not a forecast</small></div></div>
           <small class="fx-sub">Other numbers that point to Under</small><p class="fx-dot">Went Under in <b>${u10}</b> of the last <b>10</b> at ${ln(o.line)} <i>(L5 ${tally(o.line, 5)}/5 · L20 ${tally(o.line, 20)}/20)</i></p><p class="fx-dot">Against HEROIC’s current core: <b>28, 23, 25</b> in 3 meetings, all Under</p></div>`
-        : tab === 'lines' ? `<div class="fx-ins"><div class="fx-th2"><h4>Books and lines</h4><small>Same event · stat · period</small></div><div class="fx-bl" role="table"><div class="fx-blh" role="row"><span>Book / line</span><span></span><span>Over</span><span>Under</span><span>Scout</span></div>
+        : tab === 'lines' ? `<div class="fx-ins"><div class="fx-th2"><h4>Books and lines</h4><small>Same event · stat · period</small></div><div class="fx-bl" role="table"><div class="fx-blh" role="row"><span>Book / line</span><span></span><span>Over</span><span>Under</span><span>Grader</span></div>
           ${['ud', 'pp'].map(k => { const x = T[k]; return `<button type="button" class="fx-blr" data-book="${k}" aria-pressed="${k === book}"><span><b>${APP[k]}</b> <i>Standard</i></span><span class="fx-bll">${ln(x.line)}${x.from ? ` <s>${ln(x.from)}</s>` : ''}</span><span>${k === 'ud' ? '1.90' : 'Standard'}</span><span>${k === 'ud' ? '1.90' : 'Standard'}</span><span>${x.g ? `<b>${x.g}</b> ` : 'Lean '}Under <b>${f1(x.p)}%</b></span></button>`; }).join('')}</div>
           <p class="fx-note">Choose a line to recount its past results. Each line is its own pick with its own forecast; payouts and availability differ.</p></div>`
         : `<div class="fx-ins"><div class="fx-th2"><h4>Every factor</h4><small>projection ${f1(T.proj)}</small></div><div class="fx-ft" role="table"><div class="fx-blh" role="row"><span>Factor</span><span>Value</span><span>In this grade</span></div>${FACTORS.map(f => `<div role="row"><span>${esc(f[0])}</span><span>${f[1]}</span><span class="${f[2] ? 'used' : ''}">${f[2] ? 'Used' : 'Weight 0'}</span></div>`).join('')}</div>
