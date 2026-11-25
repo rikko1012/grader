@@ -69,3 +69,57 @@ def test_demo_is_saved_examples_only_and_safe():
 def test_old_script_survives_without_the_tabbed_block():
     js = landing_v3.STORY_ASSETS["STORY_JS"].read_text(encoding="utf-8")
     assert "if(demoFeature){" in js and "if (!$('#feature-panel'))" in js
+
+
+# ---- in a real browser, flag on: the controls work and reduced motion shows finished frames ----
+from tests.test_upgrade_browser import browser  # noqa: E402,F401
+
+
+@pytest.fixture
+def live(page, monkeypatch):
+    import threading
+    from http.server import ThreadingHTTPServer
+    monkeypatch.setenv("SCOUT_LANDING_FEATURES", "1")
+    landing_v3.reset()
+    import server
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
+    httpd.daemon_threads = True
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{httpd.server_address[1]}/"
+    httpd.shutdown(); httpd.server_close()
+
+
+@pytest.mark.parametrize("size", [(390, 844), (1440, 900)])
+def test_controls_work_and_nothing_overflows(browser, live, size):
+    c = browser.new_context(viewport={"width": size[0], "height": size[1]}, reduced_motion="reduce")
+    p = c.new_page(); errs = []
+    p.on("pageerror", lambda e: errs.append(str(e)))
+    p.goto(live); p.wait_for_selector("#fx-slip .fx-legs li")
+    assert p.evaluate("document.documentElement.scrollWidth") <= size[0]
+    # reduced motion: every stage is in its finished frame, no cursor, no hidden rows
+    assert p.locator("#fx-slip .fx-legs li[data-id]").count() == 3 and "6×" in p.inner_text("#fx-slip .fx-pay")
+    assert p.locator("#fx-maps .fx-map[aria-pressed=true]").count() == 2 and "14.84" in p.inner_text("#fx-maps .fx-comb")
+    assert p.locator(".fx-cur").count() == 0
+    assert p.evaluate("[...document.querySelectorAll('.fx-row:not([hidden])')].every(r => getComputedStyle(r).opacity === '1')")
+    # the board follows the app
+    assert "53.8%" in p.inner_text("#fx-board .fx-row >> nth=0")
+    p.click("#fx-board [data-app=pp]")
+    assert "58.8%" in p.inner_text("#fx-board .fx-row >> nth=0") and "30.5" in p.inner_text("#fx-board .fx-row >> nth=0")
+    p.click("#fx-board .fx-add >> nth=0"); assert p.inner_text("#fx-board .fx-cnt") == "1"
+    # the card recounts for the chosen line
+    p.click("#fx-card [data-tab=lines]"); p.click("#fx-card [data-book=ud]")
+    assert "53.8%" in p.inner_text("#fx-card .fx-dp") and "29.5" in p.inner_text("#fx-card .fx-pline")
+    p.click("#fx-card [data-tab=stats]"); assert "Weight 0" in p.inner_text("#fx-card .fx-tp")
+    # maps: a third pick replaces the first; clear empties it
+    p.click("#fx-maps [data-k=nuke]"); assert "15.38" in p.inner_text("#fx-maps .fx-comb")
+    p.click("#fx-maps .fx-clear"); assert p.locator("#fx-maps .fx-map[aria-pressed=true]").count() == 0
+    # views filter the board
+    p.click("#fx-lines .fx-vbtn"); p.click("#fx-lines [data-view=moved]")
+    assert p.locator("#fx-lines .fx-row:not([hidden])").count() == 3
+    # the slip prices what is in it
+    p.click("#fx-slip .fx-add[data-id=twi]"); assert "10×" in p.inner_text("#fx-slip .fx-pay") and p.inner_text("#fx-slip .fx-cnt2") == "4"
+    p.click("#fx-slip [data-e=flex]"); assert "6×" in p.inner_text("#fx-slip .fx-pay") and "1.5×" in p.inner_text("#fx-slip .fx-pay")
+    for _ in range(3): p.click("#fx-slip .fx-rm >> nth=0")
+    assert "Add 1 more" in p.inner_text("#fx-slip .fx-pay")
+    assert not errs, errs
+    c.close()

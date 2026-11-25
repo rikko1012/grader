@@ -33,13 +33,15 @@
     {name: 'FL1T', role: 'Lurker', team: 'PARIVISION', match: 'Lynn Vision vs PARIVISION', proj: 27.5,
       ud: {line: 29.5, from: 28.5, side: 'Under', p: 60.0, g: 'B', u: 0.5, hit: 6, edge: 6.5}, pp: {line: 30, side: 'Under', p: 63.1, g: 'B+', u: 1, hit: 6, edge: 5.4}}
   ];
-  const SERIES = [['Oct 21', 'HEROIC', 23], ['Oct 22', 'BC.Game', 34], ['Oct 27', 'Alliance', 12], ['Oct 27', 'K27', 47], ['Oct 29', 'GamerLegion', 41],
-    ['Oct 29', 'B8', 27], ['Nov 2', 'FURIA', 23], ['Nov 3', 'Falcons', 20], ['Nov 15', 'fnatic', 26], ['Nov 15', 'HEROIC', 28]];
-  const H2H = [['Feb 14', 'HEROIC', 25], ['Oct 21', 'HEROIC', 23], ['Nov 15', 'HEROIC', 28]];
-  const FACTORS = [['Kills per round, adjusted for opponents faced', '0.703', 17.5], ['Kills per round, all maps', '0.684', -7.9],
-    ['Tonight’s opponent, kills given up', '−6.3%', -7.0], ['Kills per round, LAN maps', '0.698', 3.8], ['Rounds in his sample', '1,488', 1.7]];
-  const MAPS = [['ancient', 'Ancient', 37, 538], ['mirage', 'Mirage', 37, 560], ['nuke', 'Nuke', 35, 547], ['dust2', 'Dust 2', 36, 555],
-    ['anubis', 'Anubis', 17, 245], ['inferno', 'Inferno', 13, 199], ['cache', 'Cache', 12, 196]];
+  /* Twistzz card, PrizePicks 30.5 (forecast 211105): last 20 Maps 1-2 totals, newest first; saved factors; HLTV 12-month map totals */
+  const LAST20 = [28, 26, 20, 23, 27, 41, 47, 12, 34, 23, 23, 34, 32, 25, 38, 43, 39, 35, 39, 37];
+  const FACTORS = [['Kills per round, adjusted for the opponents he faced', '0.703', 1], ['Kills per round, all maps', '0.684', 1], ['Kills per round, LAN maps', '0.698', 1],
+    ['Tonight’s opponent, kills given up', '−6.3%', 1], ['Tonight’s setting', 'LAN', 1], ['Opponent Elo', '1699', 1], ['Rounds per map, his team', '22.1', 1],
+    ['Rating', '1.11', 0], ['KAST', '74.9%', 0], ['Team win chance, betting markets', '46.2%', 0]];
+  /* key, name, maps, kills, rounds, deaths */
+  const MAPS = [['ancient', 'Ancient', 37, 538, 796, 517], ['mirage', 'Mirage', 37, 560, 813, 521], ['nuke', 'Nuke', 35, 547, 786, 502], ['dust2', 'Dust 2', 36, 555, 791, 536],
+    ['anubis', 'Anubis', 17, 245, 358, 242], ['inferno', 'Inferno', 13, 199, 273, 176], ['cache', 'Cache', 12, 196, 258, 166]];
+  const ALL = {maps: 198, kills: 3017, rounds: 4323, deaths: 2834};
   const VETO = {ancient: 'Map 1', mirage: 'Map 2', nuke: 'Decider'};
   const LEGS = [
     {id: 'emi', sport: 'CS2', name: 'EmiliaQAQ', sub: 'Lynn Vision vs PARIVISION', side: 'Over', line: 24.5, stat: 'Kills', per: 'Maps 1-2', p: 57.6, g: 'B'},
@@ -51,10 +53,17 @@
   const POWER = {2: 3, 3: 6, 4: 10}, FLEX = {3: [3, 1], 4: [6, 1.5]};
 
   const grade = g => g ? `<span class="fx-g${/^A|B\+/.test(g) ? ' hi' : ''}">${g.replace('-', '−')}</span>` : '';
+  const letter = o => o.g ? grade(o.g) : `<span class="fx-lean">Lean ${o.side}</span>`;
   const sideTag = s => `<span class="fx-side ${s === 'Over' ? 'ov' : 'un'}"><i aria-hidden="true"></i>${s}</span>`;
   const av = n => `<span class="fx-av" aria-hidden="true">${esc(n[0].toUpperCase())}</span>`;
   const hitCls = r => r >= 0.6 ? 'good' : r < 0.4 ? 'poor' : 'mid';
-  const appbar = on => `<div class="fx-bar" aria-hidden="true"><span class="fx-brand"><i>1T</i>Scout</span><nav>${['Board', 'Slips', 'My picks', 'Record', 'Tools'].map(n => `<span${n === on ? ' class="on"' : ''}>${n}</span>`).join('')}</nav><span class="fx-ex">Saved example</span></div>`;
+  const ln = v => String(v);
+  const appbar = on => `<div class="fx-bar" aria-hidden="true"><span class="fx-brand"><i>1T</i>Scout</span><nav>${['Board', 'Slips', 'My picks', 'Record', 'Tools'].map(n => `<span${n === on ? ' class="on"' : ''}>${n}</span>`).join('')}</nav><span class="fx-ex">Saved example</span><span class="fx-slipbtn">Slip <b class="fx-cnt">0</b></span></div>`;
+  const PLUS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path class="p" d="M8 3v10M3 8h10"/><path class="c" d="M3.5 8.5l3 3 6-7"/></svg>';
+  function toaster(el) {
+    let t = null;
+    return msg => { const b = $('.fx-toast', el); b.innerHTML = `<i aria-hidden="true"></i><span>${esc(msg)}</span><em>Undo</em>`; b.classList.add('on'); clearTimeout(t); t = setTimeout(() => b.classList.remove('on'), 2000); };
+  }
 
   /* ---- motion kit: abortable sequences, a cursor that drives real controls, number tweens ---- */
   class Stop extends Error {}
@@ -118,137 +127,189 @@
   }
   const act = (el, sel, fn) => { const h = e => { const t = e.target.closest(sel); if (t && el.contains(t)) fn(t, e); }; el.addEventListener('click', h); el.addEventListener('fx-act', h); };
 
-  /* ---- 1. The board ---- */
-  stage('fx-board', el => {
-    let app = 'ud';
-    const cell = (r, a) => { const o = r[a]; return {o, rate: o.hit / 10}; };
+  /* ---- the member board (web/v3/board.js layout): shared by 1 (grades) and 4 (the Views: Lines differ, Line moved) ---- */
+  function board(el, views) {
+    let app = 'all', view = 'all', picked = [];
+    const toast = toaster(el);
+    const cur = r => r[app === 'pp' ? 'pp' : 'ud'], oth = r => r[app === 'pp' ? 'ud' : 'pp'];
+    const VIEW = {all: ['All props', ''], differ: ['Lines differ', 'Another book lists a different line for the same player, stat and maps. For an Over the lower line is the easier one, for an Under the higher one; payouts can differ.'],
+      moved: ['Line moved', 'Lines that moved from where they opened; each row shows the line it moved from.']};
+    const show = r => view === 'differ' ? r.ud.line !== r.pp.line : view === 'moved' ? !!cur(r).from : true;
     function paint(first) {
+      const a = app === 'pp' ? 'pp' : 'ud';
       $$('.fx-chip', el).forEach(c => c.setAttribute('aria-pressed', String(c.dataset.app === app)));
+      let n = 0;
       $$('.fx-row', el).forEach((tr, i) => {
-        const r = ROWS[i], {o, rate} = cell(r, app);
-        $('.fx-ln b', tr).textContent = o.line % 1 ? o.line : o.line + '';
-        $('.fx-ln small', tr).innerHTML = `${APP[app]}${o.from ? ` <s>${o.from}</s>` : ''}`;
+        const r = ROWS[i], o = cur(r), x = oth(r), on = show(r), diff = o.line !== x.line;
+        tr.hidden = !on; if (on) tr.style.setProperty('--i', n++);
+        $('.fx-neq', tr).innerHTML = diff ? `≠ ${APP[a === 'pp' ? 'ud' : 'pp']} ${ln(x.line)}` : ''; $('.fx-neq', tr).hidden = !diff;
+        $('.fx-ln b', tr).innerHTML = ln(o.line) + (o.from ? ` <s>${ln(o.from)}</s>` : '');
+        $('.fx-ln small', tr).textContent = APP[a];
         $('.fx-sd', tr).innerHTML = sideTag(o.side);
         tween($('.fx-pc', tr), o.p, 1, '%', first ? 900 : 520);
-        $('.fx-mt i', tr).style.transform = `scaleX(${Math.max(0, Math.min(1, (o.p - 50) / 15))})`;
-        $('.fx-gr', tr).innerHTML = o.g ? grade(o.g) + `<small>Stake <b>${o.u}U</b></small>` : `<span class="fx-lean">Lean ${o.side}</span><small>Stake <b>0U</b></small>`;
-        const h = $('.fx-hit', tr); h.textContent = Math.round(rate * 100) + '%'; h.className = 'fx-hit ' + hitCls(rate);
+        $('.fx-gr', tr).innerHTML = letter(o) + `<small>Stake <b>${o.u}U</b></small>`;
+        const h = $('.fx-hit', tr); h.innerHTML = `<b>${o.hit}</b>/10`; h.className = 'fx-hit ' + hitCls(o.hit / 10);
         const ed = $('.fx-ed', tr); ed.innerHTML = `<b>${sgn(o.edge)}</b> pts`; ed.className = 'fx-ed ' + (o.edge > 0 ? 'pos' : 'neg');
-        tr.classList.toggle('moved', !!o.from);
+        $('.fx-cmp', tr).innerHTML = diff ? `<b>2 lines</b><small>${ln(Math.min(o.line, x.line))}–${ln(Math.max(o.line, x.line))}</small>` : `<b>2 books</b><small>at ${ln(o.line)}</small>`;
+        $('.fx-cmp', tr).classList.toggle('diff', diff);
+        const b = $('.fx-add', tr), sel = picked.includes(i); b.setAttribute('aria-pressed', String(sel)); b.setAttribute('aria-label', `${sel ? 'Remove' : 'Add'} ${r.name}`); tr.classList.toggle('picked', sel);
       });
-      $('.fx-legend', el).textContent = `Edge: the model estimate minus the per-pick break-even of a ${app === 'ud' ? 'Underdog standard' : 'PrizePicks Power'} 2-pick entry (${BE[app]}%), in points.`;
+      $('.fx-cnt', el).textContent = picked.length;
+      $('.fx-count', el).textContent = view === 'all' ? '6 players · 12 lines' : `${n} player${n === 1 ? '' : 's'} · ${VIEW[view][0].toLowerCase()}`;
+      $('.fx-legend', el).textContent = `Edge: the model estimate minus the per-pick break-even of ${a === 'ud' ? 'an Underdog standard' : 'a PrizePicks Power'} 2-pick entry (${BE[a]}%), in points.`;
+      if (views) {
+        $('.fx-vbtn span', el).textContent = view === 'all' ? 'Views' : VIEW[view][0];
+        $$('.fx-vmenu button', el).forEach(b => b.setAttribute('aria-checked', String(b.dataset.view === view)));
+        const d = $('.fx-vdesc', el); d.textContent = VIEW[view][1]; d.hidden = view === 'all';
+      }
     }
-    el.innerHTML = appbar('Board') + `<div class="fx-pad"><div class="fx-hd"><div><h3>CS2 player props</h3><p>6 players · 12 lines</p></div>
-      <div class="fx-chips" role="group" aria-label="App"><button type="button" class="fx-chip" data-app="ud" aria-pressed="true">Underdog</button><button type="button" class="fx-chip" data-app="pp" aria-pressed="false">PrizePicks</button></div></div>
-      <div class="fx-tbl" role="table" aria-label="Saved example of the CS2 board"><div class="fx-th" role="row"><span role="columnheader">Player</span><span role="columnheader">Market</span><span role="columnheader">Line</span><span role="columnheader">Proj.</span><span role="columnheader">Model</span><span role="columnheader">L10</span><span role="columnheader">Edge</span></div>
+    const menu = open => { const m = $('.fx-vmenu', el); if (m) { m.hidden = !open; $('.fx-vbtn', el).setAttribute('aria-expanded', String(open)); } };
+    el.innerHTML = appbar('Board') + `<div class="fx-pad"><div class="fx-hd"><div><h3>CS2 player props</h3><p class="fx-count"></p></div></div>
+      <div class="fx-tools"><div class="fx-chips" role="group" aria-label="App"><button type="button" class="fx-chip" data-app="all" aria-pressed="true">All</button><button type="button" class="fx-chip" data-app="pp" aria-pressed="false">PP <i>6</i></button><button type="button" class="fx-chip" data-app="ud" aria-pressed="false">UD <i>6</i></button></div>
+      ${views ? `<div class="fx-vwrap"><button type="button" class="fx-vbtn" aria-haspopup="true" aria-expanded="false"><span>Views</span><svg viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4"/></svg></button><div class="fx-vmenu" role="menu" hidden>${Object.entries(VIEW).map(([k, v]) => `<button type="button" role="menuitemradio" data-view="${k}" aria-checked="${k === 'all'}">${v[0]}</button>`).join('')}</div></div>` : ''}
+      <span class="fx-sort">Sort <b>Start time</b></span></div>${views ? '<p class="fx-vdesc" hidden></p>' : ''}
+      <div class="fx-tbl" role="table" aria-label="Saved example of the CS2 board"><div class="fx-th" role="row"><span role="columnheader">Player</span><span role="columnheader">Market</span><span role="columnheader">Line</span><span role="columnheader">Proj.</span><span role="columnheader">Scout</span><span role="columnheader">L10</span><span role="columnheader">Edge<small>vs break-even</small></span><span role="columnheader">Compare</span><span role="columnheader"></span></div>
       ${ROWS.map((r, i) => `<div class="fx-row" role="row" style="--i:${i}"><span class="fx-pl" role="cell">${av(r.name)}<span><b>${esc(r.name)}</b><small>${esc(r.match)}</small></span></span>
-        <span class="fx-mk" role="cell"><b>Kills</b><small>Maps 1-2</small></span><span class="fx-ln" role="cell"><b></b><small></small></span><span class="fx-pj" role="cell">${f1(r.proj)}</span>
-        <span class="fx-md" role="cell"><span class="fx-sd"></span><b class="fx-pc" data-v="50">50.0%</b><span class="fx-mt"><i></i></span><span class="fx-gr"></span></span>
-        <span class="fx-hit" role="cell"></span><span class="fx-ed" role="cell"></span></div>`).join('')}</div>
-      <p class="fx-legend"></p></div>`;
-    act(el, '.fx-chip', c => { app = c.dataset.app; paint(false); });
+        <span class="fx-mk" role="cell"><b>Kills</b><small>Maps 1-2</small><em class="fx-neq" hidden></em></span><span class="fx-ln" role="cell"><b></b><small></small></span><span class="fx-pj" role="cell">${f1(r.proj)}</span>
+        <span class="fx-md" role="cell"><span class="fx-sd"></span><b class="fx-pc" data-v="50">50.0%</b><span class="fx-gr"></span></span>
+        <span class="fx-hit" role="cell"></span><span class="fx-ed" role="cell"></span><span class="fx-cmp" role="cell"></span><span class="fx-ac" role="cell"><button type="button" class="fx-add" data-i="${i}" aria-pressed="false">${PLUS}</button></span></div>`).join('')}</div>
+      <p class="fx-legend"></p><div class="fx-toast" role="status"></div></div>`;
+    act(el, '.fx-chip', c => { app = c.dataset.app; menu(false); paint(false); });
+    act(el, '.fx-add', b => { const i = +b.dataset.i, k = picked.indexOf(i), r = ROWS[i], o = cur(r); if (k >= 0) { picked.splice(k, 1); toast(`Removed ${r.name} from your slip.`); } else { picked.push(i); toast(`Added ${r.name} ${o.side} ${ln(o.line)} to your slip.`); } paint(false); });
+    act(el, '.fx-vbtn', () => menu($('.fx-vmenu', el).hidden));
+    act(el, '.fx-vmenu button', b => { view = b.dataset.view; menu(false); paint(false); });
     return {
-      reset() { app = 'ud'; $$('.fx-pc', el).forEach(p => { p.dataset.v = 50; }); paint(true); },
-      final() { paint(false); },
-      async auto(k) { await k.wait(1900); await k.click($('[data-app="pp"]', el)); await k.wait(2100); await k.to($$('.fx-row', el)[5], 700); await k.wait(900); await k.click($('[data-app="ud"]', el)); await k.wait(600); }
+      set(a, v) { app = a; view = v; picked = []; menu(false); },
+      paint,
+      reset() { app = 'all'; view = 'all'; picked = []; menu(false); $$('.fx-pc', el).forEach(p => { p.dataset.v = 50; }); paint(true); }
+    };
+  }
+  stage('fx-board', el => {
+    const b = board(el, false);
+    return {
+      reset: b.reset,
+      final() { b.set('all', 'all'); b.paint(false); },
+      async auto(k) { await k.wait(1900); await k.click($('[data-app="pp"]', el)); await k.wait(2200); await k.click($$('.fx-add', el)[5]); await k.wait(1900); await k.click($('[data-app="all"]', el)); await k.wait(600); }
     };
   });
 
-  /* ---- 2. The player card ---- */
+  /* ---- 2. The player card (web/v3/player.js layout): the decision panel + Overview / Lines / Stats ---- */
   stage('fx-card', el => {
-    let win = 'l10';
-    const LINE = 30.5, MAX = 50;
-    function chart() {
-      const s = win === 'l10' ? SERIES : H2H, under = s.filter(x => x[2] < LINE).length;
-      $('.fx-bars', el).innerHTML = s.map((x, i) => `<button type="button" class="fx-bw ${x[2] < LINE ? 'hit' : 'miss'}" style="--h:${x[2] / MAX};--i:${i}" aria-label="${x[0]} vs ${esc(x[1])}: ${x[2]} kills, ${x[2] < LINE ? 'Under' : 'Over'}"><span class="fx-tip"><b>${x[2]}</b> kills<br>${x[0]} · ${esc(x[1])}</span><i></i><em>${x[2]}</em></button>`).join('') + `<span class="fx-lline" style="--h:${LINE / MAX}"><b>${LINE}</b></span>`;
-      $('.fx-tally', el).innerHTML = `<b>${under} of ${s.length}</b> Under ${LINE}${win === 'h2h' ? ' against HEROIC’s current core' : ''}`;
-      $$('.fx-seg button', el).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.win === win)));
+    let book = 'pp', tab = 'overview', added = false;
+    const T = ROWS[0], toast = toaster(el);
+    const tally = (line, n) => LAST20.slice(0, n).filter(v => v < line).length;
+    function panel() {
+      const o = T[book], gap = Math.abs(o.line - T.proj);
+      $('.fx-pline', el).textContent = ln(o.line);
+      $('.fx-psel', el).innerHTML = `${APP[book]} ${ln(o.line)}${o.from ? ` <s>${ln(o.from)}</s>` : ''}`;
+      $('.fx-pseen', el).textContent = `${APP[book]} · Standard line${o.from ? ' · opened ' + ln(o.from) : ''}`;
+      $$('.fx-sides span', el).forEach((sp, i) => { sp.innerHTML = `${i ? 'Under' : 'Over'} ${ln(o.line)}${i ? ' <i>Scout</i>' : ''}`; });
+      tween($('.fx-big', el), o.p, 1, '%', 800);
+      $('.fx-pg', el).innerHTML = letter(o);
+      $('.fx-pu', el).textContent = o.u + 'U';
+      $('.fx-pgap', el).innerHTML = `<b>−${gap.toFixed(1)}</b><small>below the line</small>`;
+      $('.fx-pmk', el).innerHTML = book === 'ud' ? '<small>Market chance</small><b>50.0%</b><small>From Underdog prices</small>' : '<small>Market chance</small><b>—</b><small>No prices on PrizePicks</small>';
+      $('.fx-padd', el).textContent = added ? `Added Under ${ln(o.line)}` : `Add Under ${ln(o.line)}`; $('.fx-padd', el).classList.toggle('done', added);
+      $('.fx-cnt', el).textContent = added ? 1 : 0;
+      $('.fx-ptal', el).innerHTML = [5, 10, 20].map(n => `<div><b>${tally(o.line, n)}<i>/${n}</i></b><small>L${n}, Under ${ln(o.line)}</small></div>`).join('');
     }
-    el.innerHTML = appbar('Board') + `<div class="fx-pad"><div class="fx-id">${av('Twistzz')}<div><h3>Twistzz</h3><p>FaZe · IGL · Rifler</p></div><div class="fx-mt2"><b>FaZe</b><small>VRS #27</small><span>Best of 3</span><b>HEROIC</b><small>VRS #21</small></div></div>
-      <div class="fx-stats">${[['Maps', '150'], ['Kills/map', '15.3'], ['HS/map', '9.5'], ['KPR', '0.716'], ['Rating', '1.11'], ['KAST', '74.9%']].map(s => `<div><small>${s[0]}</small><b>${s[1]}</b></div>`).join('')}</div>
-      <div class="fx-dec"><div><small>PrizePicks · Kills · Maps 1-2</small><strong>Under 30.5</strong></div><div class="fx-est"><b class="fx-big" data-v="50">50.0%</b><span class="fx-mt"><i></i></span><small>Model estimate</small></div>${grade('B')}<small class="fx-stk">Stake <b>0.5U</b></small></div>
-      <div class="fx-two"><div class="fx-panel"><div class="fx-ph"><h4>Results at this line</h4><div class="fx-seg" role="group" aria-label="Sample"><button type="button" data-win="l10" aria-pressed="true">Last 10</button><button type="button" data-win="h2h" aria-pressed="false">vs HEROIC</button></div></div><div class="fx-bars"></div><p class="fx-tally"></p></div>
-      <div class="fx-panel"><div class="fx-ph"><h4>Behind the grade</h4><small>projection 28.8</small></div><ul class="fx-fac">${FACTORS.map((f, i) => `<li style="--i:${i}"><span>${esc(f[0])}<small>${f[1]}</small></span><span class="fx-fb ${f[2] > 0 ? 'up' : 'dn'}"><i style="--w:${Math.abs(f[2]) / 17.5}"></i></span><b>${sgn(f[2])}%</b></li>`).join('')}</ul></div></div></div>`;
-    act(el, '.fx-seg button', b => { win = b.dataset.win; chart(); });
-    const est = () => { tween($('.fx-big', el), 58.8, 1, '%', 1100); $('.fx-est .fx-mt i', el).style.transform = `scaleX(${(58.8 - 50) / 15})`; };
+    function right() {
+      const o = T[book], gap = Math.abs(o.line - T.proj).toFixed(1), u10 = tally(o.line, 10);
+      $$('.fx-tabs button', el).forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+      $('.fx-tp', el).innerHTML = tab === 'overview' ? `<div class="fx-ins"><small>Key insights</small><h4>Why Scout leans Under ${ln(o.line)}</h4><p class="fx-dot on">Scout projects <b>${f1(T.proj)} Kills</b>, ${gap} below the ${ln(o.line)} line · <b>${f1(o.p)}%</b> chance Under</p>
+          <div class="fx-tiles"><div><small>Under ${ln(o.line)}</small><b>${u10}<i>/10</i></b><small>Last 10 results</small></div><div><small>Over ${ln(o.line)}</small><b>${10 - u10}<i>/10</i></b><small>0 pushes kept separate</small></div><div><small>Average / median</small><b>27.7 / 25</b><small>Maps 1-2</small></div><div><small>Recent range</small><b>12–47</b><small>Observed results, not a forecast</small></div></div>
+          <small class="fx-sub">Other numbers that point to Under</small><p class="fx-dot">Went Under in <b>${u10}</b> of the last <b>10</b> at ${ln(o.line)} <i>(L5 ${tally(o.line, 5)}/5 · L20 ${tally(o.line, 20)}/20)</i></p><p class="fx-dot">Against HEROIC’s current core: <b>28, 23, 25</b> in 3 meetings, all Under</p></div>`
+        : tab === 'lines' ? `<div class="fx-ins"><div class="fx-th2"><h4>Books and lines</h4><small>Same event · stat · period</small></div><div class="fx-bl" role="table"><div class="fx-blh" role="row"><span>Book / line</span><span></span><span>Over</span><span>Under</span><span>Scout</span></div>
+          ${['ud', 'pp'].map(k => { const x = T[k]; return `<button type="button" class="fx-blr" data-book="${k}" aria-pressed="${k === book}"><span><b>${APP[k]}</b> <i>Standard</i></span><span class="fx-bll">${ln(x.line)}${x.from ? ` <s>${ln(x.from)}</s>` : ''}</span><span>${k === 'ud' ? '1.90' : 'Standard'}</span><span>${k === 'ud' ? '1.90' : 'Standard'}</span><span>${x.g ? `<b>${x.g}</b> ` : 'Lean '}Under <b>${f1(x.p)}%</b></span></button>`; }).join('')}</div>
+          <p class="fx-note">Choose a line to recount its past results. Each line is its own pick with its own forecast; payouts and availability differ.</p></div>`
+        : `<div class="fx-ins"><div class="fx-th2"><h4>Every factor</h4><small>projection ${f1(T.proj)}</small></div><div class="fx-ft" role="table"><div class="fx-blh" role="row"><span>Factor</span><span>Value</span><span>In this grade</span></div>${FACTORS.map(f => `<div role="row"><span>${esc(f[0])}</span><span>${f[1]}</span><span class="${f[2] ? 'used' : ''}">${f[2] ? 'Used' : 'Weight 0'}</span></div>`).join('')}</div>
+          <p class="fx-note">Used = it moves this projection. Weight 0 = shown for context: a factor moves grades only after a chronological test.</p></div>`;
+    }
+    el.innerHTML = appbar('Board') + `<div class="fx-pad"><div class="fx-id">${av('Twistzz')}<div><h3>Twistzz</h3><p>FaZe · IGL · Rifler</p></div></div>
+      <div class="fx-match"><div><b>FaZe</b><small>VRS #27</small></div><div><small>PGL Major Singapore 2026</small><b>Best of 3</b></div><div><b>HEROIC</b><small>VRS #21</small></div></div>
+      <div class="fx-cols"><div class="fx-dp"><div class="fx-dph"><div><small>Kills, Maps 1-2</small><b class="fx-pline"></b></div><span class="fx-psel"></span></div><small class="fx-pseen"></small>
+        <div class="fx-sides"><span></span><span class="on"></span></div>
+        <div class="fx-dpg"><div><small>Chance Under</small><b class="fx-big" data-v="50">50.0%</b><small>Model estimate</small></div><div><small>Grade</small><span class="fx-pg"></span></div><div><small>Stake</small><b class="fx-pu"></b></div></div>
+        <div class="fx-dpg sm"><div><small>Projection</small><b>${f1(T.proj)}</b><small>Maps 1-2</small></div><div><small>Gap to line</small><span class="fx-pgap"></span></div><div class="fx-pmk"></div></div>
+        <button type="button" class="fx-padd"></button><div class="fx-ptal"></div></div>
+      <div class="fx-rt"><div class="fx-tabs" role="tablist">${[['overview', 'Overview'], ['lines', 'Lines'], ['stats', 'Stats']].map(t => `<button type="button" role="tab" data-tab="${t[0]}" aria-selected="${t[0] === tab}">${t[1]}</button>`).join('')}</div><div class="fx-tp" role="tabpanel"></div></div></div>
+      <div class="fx-toast" role="status"></div></div>`;
+    act(el, '.fx-tabs button', b => { tab = b.dataset.tab; right(); });
+    act(el, '.fx-blr', b => { book = b.dataset.book; added = false; panel(); right(); });
+    act(el, '.fx-padd', () => { added = !added; panel(); toast(added ? `Added Twistzz Under ${ln(T[book].line)} to your slip.` : 'Removed Twistzz from your slip.'); });
     return {
-      reset() { win = 'l10'; $('.fx-big', el).dataset.v = 50; chart(); est(); },
-      final() { chart(); est(); },
-      async auto(k) { await k.wait(2300); await k.to($$('.fx-bw', el)[3], 700); await k.wait(1100); await k.click($('[data-win="h2h"]', el)); await k.wait(2000); await k.click($('[data-win="l10"]', el)); await k.wait(500); }
+      reset() { book = 'pp'; tab = 'overview'; added = false; $('.fx-big', el).dataset.v = 50; panel(); right(); },
+      final() { book = 'pp'; tab = 'overview'; added = false; panel(); right(); },
+      async auto(k) { await k.wait(2400); await k.click($('[data-tab="lines"]', el)); await k.wait(1300); await k.click($('[data-book="ud"]', el)); await k.wait(2300); await k.click($('[data-book="pp"]', el)); await k.wait(1700); await k.click($('[data-tab="stats"]', el)); await k.wait(2400); await k.click($('[data-tab="overview"]', el)); await k.wait(500); }
     };
   });
 
-  /* ---- 3. The map picker (HLTV totals summed, then divided: the member card's own maths) ---- */
+  /* ---- 3. The map picker (the card's Maps block: HLTV totals summed, then divided) ---- */
   stage('fx-maps', el => {
     let sel = [];
-    const PACE = 15.25;
+    const PACE = 15.25, BASE = ALL.kills / ALL.maps;
+    const dl = (d, dec) => `<i class="${d > 0 ? 'up' : d < 0 ? 'dn' : ''}">${sgn(d, dec)}</i>`;
     function paint() {
       $$('.fx-map', el).forEach(b => { const i = sel.indexOf(b.dataset.k); b.setAttribute('aria-pressed', String(i >= 0)); $('.fx-n', b).textContent = i >= 0 ? i + 1 : ''; });
-      const out = $('.fx-comb', el), m = sel.map(k => MAPS.find(x => x[0] === k));
       $('.fx-mh span', el).textContent = sel.length === 2 ? '2 maps combined · a third pick replaces the first' : sel.length === 1 ? '1 of 2 picked' : 'Pick 2 to combine';
-      if (m.length < 2) { out.className = 'fx-comb empty'; out.innerHTML = `<p>${m.length ? esc(m[0][1]) + ' picked. Pick one more map.' : 'Pick two maps to see his combined kills a map.'}</p>`; return; }
-      const v = (m[0][3] + m[1][3]) / (m[0][2] + m[1][2]), d = v - PACE;
-      out.className = 'fx-comb ' + (d < 0 ? 'under' : 'over');
-      out.innerHTML = `<div><small>${esc(m[0][1])} + ${esc(m[1][1])}</small><strong><b class="fx-cv" data-v="${PACE}">${PACE.toFixed(2)}</b> kills a map</strong></div><div class="fx-dl"><b>${sgn(d, 2)}</b><small>vs line pace ${PACE}</small></div><div class="fx-pace"><i style="--x:${Math.max(0.04, Math.min(0.96, 0.5 + d / 2))}"></i><span></span></div><p>${m[0][2] + m[1][2]} maps in the last 12 months (HLTV). ${d < 0 ? 'Below' : 'Above'} the pace Under 30.5 needs.</p>`;
+      const out = $('.fx-comb', el), m = sel.map(k => MAPS.find(x => x[0] === k));
+      if (m.length < 2) { out.className = 'fx-comb empty'; out.innerHTML = `<p>${m.length ? esc(m[0][1]) + ' picked. Pick one more map.' : 'Pick 2 maps to combine his numbers.'}</p>`; return; }
+      const n = m[0][2] + m[1][2], kills = m[0][3] + m[1][3], v = kills / n, d = v - PACE, pct = d / PACE * 100;
+      out.className = 'fx-comb';
+      out.innerHTML = `<div class="fx-ct"><b class="fx-cv" data-v="${PACE}">${PACE.toFixed(2)}</b><p><b class="${d < 0 ? 'dn' : 'up'}">${sgn(d, 2)}</b> vs line pace <b>${PACE}</b><br><b>${sgn(pct)}%</b> ${d < 0 ? 'below' : 'above'} pace</p></div>
+        <div class="fx-pace"><i style="transform:scaleX(${Math.min(1, v / (PACE * 1.25)).toFixed(3)})"></i><span></span><em>pace ${PACE}</em></div>
+        <div class="fx-cs"><div><small>Kills/map</small><b>${v.toFixed(1)}</b></div><div><small>KPR</small><b>${(kills / (m[0][4] + m[1][4])).toFixed(2)}</b></div><div><small>K/D</small><b>${(kills / (m[0][5] + m[1][5])).toFixed(2)}</b></div></div>
+        <p class="fx-note">${esc(m[0][1])} + ${esc(m[1][1])} · ${n} maps, HLTV last 12 months · kills a map</p><button type="button" class="fx-clear">Clear maps</button>`;
       tween($('.fx-cv', out), Number(v.toFixed(2)), 2, '', 650);
     }
-    el.innerHTML = appbar('Board') + `<div class="fx-pad"><div class="fx-id sm">${av('Twistzz')}<div><h3>Twistzz · Under 30.5 Kills</h3><p>Maps 1-2 · line pace 15.25 kills a map</p></div></div>
-      <div class="fx-veto"><small>Most likely veto</small>${Object.entries(VETO).map(([k, s]) => `<span><i>${s}</i>${MAPS.find(m => m[0] === k)[1]}</span>`).join('')}<em>HEROIC picked Ancient in 4 of its last 8 vetoes · FaZe picked Mirage in 4 of 8</em></div>
+    el.innerHTML = appbar('Board') + `<div class="fx-pad"><div class="fx-id sm">${av('Twistzz')}<div><h3>Twistzz · Under 30.5 Kills</h3><p>Maps 1-2 · FaZe vs HEROIC · line pace 15.25 kills a map</p></div></div>
+      <div class="fx-st2"><div><small>Maps</small><b>${ALL.maps}</b></div><div><small>Kills/map</small><b>${BASE.toFixed(1)}</b></div><div><small>KPR</small><b>${(ALL.kills / ALL.rounds).toFixed(2)}</b></div><div><small>K/D</small><b>${(ALL.kills / ALL.deaths).toFixed(2)}</b></div><div><small>Likely veto</small><b class="t">Ancient · Mirage · Nuke</b></div></div>
       <div class="fx-mh"><h4>Maps</h4><span></span></div>
-      <div class="fx-mgrid">${MAPS.map((m, i) => `<button type="button" class="fx-map m-${m[0]}" data-k="${m[0]}" aria-pressed="false" style="--i:${i}"><span class="fx-n" aria-hidden="true"></span><b>${m[1]}</b><span class="fx-kpm">${(m[3] / m[2]).toFixed(2)}<small>kills/map</small></span><small>${m[2]} maps${VETO[m[0]] ? ' · ' + VETO[m[0]] : ''}</small></button>`).join('')}</div>
-      <div class="fx-comb empty" aria-live="polite"></div></div>`;
+      <div class="fx-mcols"><div class="fx-mlist">${MAPS.map((m, i) => `<button type="button" class="fx-map m-${m[0]}" data-k="${m[0]}" aria-pressed="false" style="--i:${i}"><span class="fx-n" aria-hidden="true"></span><span class="fx-mn"><b>${m[1]}</b><small>${m[2]} maps${VETO[m[0]] ? ' · likely ' + VETO[m[0]] : ''}</small></span><span class="fx-mv2"><small>Kills/map</small><b>${(m[3] / m[2]).toFixed(1)}</b>${dl(m[3] / m[2] - BASE, 1)}</span><span class="fx-mv2"><small>KPR</small><b>${(m[3] / m[4]).toFixed(2)}</b></span><span class="fx-mv2"><small>K/D</small><b>${(m[3] / m[5]).toFixed(2)}</b></span></button>`).join('')}</div>
+      <div class="fx-comb empty" aria-live="polite"></div></div>
+      <p class="fx-legend">HLTV, last 12 months, every map he played; change vs his all-map kills a map (${BASE.toFixed(1)}).</p></div>`;
     act(el, '.fx-map', b => { const k = b.dataset.k, i = sel.indexOf(k); if (i >= 0) sel.splice(i, 1); else { sel.push(k); if (sel.length > 2) sel.shift(); } paint(); });
+    act(el, '.fx-clear', () => { sel = []; paint(); });
     return {
       reset() { sel = []; paint(); },
       final() { sel = ['ancient', 'mirage']; paint(); },
-      async auto(k) { await k.wait(1200); await k.click($('[data-k="ancient"]', el)); await k.wait(500); await k.click($('[data-k="mirage"]', el)); await k.wait(2600); await k.click($('[data-k="nuke"]', el)); await k.wait(900); }
+      async auto(k) { await k.wait(1300); await k.click($('[data-k="nuke"]', el)); await k.wait(500); await k.click($('[data-k="dust2"]', el)); await k.wait(2500); await k.click($('[data-k="ancient"]', el)); await k.wait(2300); await k.click($('[data-k="mirage"]', el)); await k.wait(700); }
     };
   });
 
-  /* ---- 4. Line comparison and line moves ---- */
+  /* ---- 4. Views: Lines differ and Line moved (the board's own filters) ---- */
   stage('fx-lines', el => {
-    let app = 'ud';
-    const T = ROWS[0], LO = 27.5, HI = 31.5, x = v => ((v - LO) / (HI - LO)) * 100;
-    function paint() {
-      const o = T[app];
-      $$('.fx-book', el).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.app === app)));
-      $('.fx-sel', el).style.left = x(o.line) + '%';
-      tween($('.fx-lp', el), o.p, 1, '%', 600);
-      $('.fx-lgr', el).innerHTML = o.g ? grade(o.g) : '<span class="fx-lean">Lean Under</span>';
-      $('.fx-lw', el).textContent = `Under ${o.line} on ${APP[app]}`;
-      $('.fx-facts', el).innerHTML = [['Gap to projection', f1(o.line - 28.75) + ' kills'], ['Break-even per pick', BE[app] + '%'], ['Entry', app === 'ud' ? 'Standard 2-pick' : 'Power 2-pick'], ['Edge', sgn(o.edge) + ' pts']].map(f => `<div><small>${f[0]}</small><b>${f[1]}</b></div>`).join('');
-    }
-    el.innerHTML = appbar('Tools') + `<div class="fx-pad"><div class="fx-id sm">${av('Twistzz')}<div><h3>Twistzz · Kills · Maps 1-2</h3><p>FaZe vs HEROIC · one projection, two lines</p></div><span class="fx-flag">Lines differ · 1.0</span></div>
-      <div class="fx-books"><button type="button" class="fx-book" data-app="ud" aria-pressed="true"><small>Underdog</small><strong>29.5</strong><span class="fx-mv"><svg viewBox="0 0 120 34" aria-hidden="true"><path class="fx-step" d="M2 8H52V26H118"/><circle cx="2" cy="8" r="2.5"/><circle class="fx-now" cx="118" cy="26" r="3"/></svg><em>Opened 30.5 · moved to 29.5 after 15 min</em></span></button>
-      <button type="button" class="fx-book" data-app="pp" aria-pressed="false"><small>PrizePicks</small><strong>30.5</strong><span class="fx-mv"><svg viewBox="0 0 120 34" aria-hidden="true"><path class="fx-step" d="M2 8H118"/><circle cx="2" cy="8" r="2.5"/><circle class="fx-now" cx="118" cy="8" r="3"/></svg><em>Opened 30.5 · has not moved</em></span></button></div>
-      <div class="fx-track" aria-hidden="true"><span class="fx-proj" style="left:${x(28.75)}%"><b>28.8</b><small>projection</small></span><span class="fx-tk" style="left:${x(29.5)}%"><i></i>29.5</span><span class="fx-tk" style="left:${x(30.5)}%"><i></i>30.5</span><span class="fx-sel"></span></div>
-      <div class="fx-res"><div><small class="fx-lw"></small><b class="fx-lp" data-v="53.8">53.8%</b><small>Model estimate</small></div><span class="fx-lgr"></span></div>
-      <div class="fx-facts"></div></div>`;
-    act(el, '.fx-book', b => { app = b.dataset.app; paint(); });
+    const b = board(el, true);
     return {
-      reset() { app = 'ud'; paint(); },
-      final() { app = 'pp'; paint(); },
-      async auto(k) { await k.wait(2200); await k.click($('[data-app="pp"]', el)); await k.wait(2600); await k.click($('[data-app="ud"]', el)); await k.wait(2200); await k.click($('[data-app="pp"]', el)); await k.wait(500); }
+      reset: b.reset,
+      final() { b.set('all', 'differ'); b.paint(false); },
+      async auto(k) {
+        await k.wait(1800); await k.click($('.fx-vbtn', el)); await k.wait(500); await k.click($('[data-view="differ"]', el)); await k.wait(2400);
+        await k.click($('[data-app="pp"]', el)); await k.wait(2400); await k.click($('[data-app="all"]', el)); await k.wait(700);
+        await k.click($('.fx-vbtn', el)); await k.wait(500); await k.click($('[data-view="moved"]', el)); await k.wait(2600);
+        await k.click($('.fx-vbtn', el)); await k.wait(500); await k.click($('[data-view="differ"]', el)); await k.wait(500);
+      }
     };
   });
 
   /* ---- 5. Slip Studio: + on a board row, the toast, the leg lands in the slip, Power / Flex, the payout ---- */
   stage('fx-slip', el => {
-    let legs = [], entry = 'power', toastT = null;
+    let legs = [], entry = 'power';
+    const toast = toaster(el);
     const leg = id => LEGS.find(l => l.id === id);
     function panel() {
       const n = legs.length, ok = n >= 2, flexOk = !!FLEX[n];
       if (!flexOk) entry = 'power';
       $('.fx-cnt', el).textContent = n; $('.fx-cnt2', el).textContent = n;
+      const sp = [...new Set(legs.map(id => leg(id).sport))]; $('.fx-app', el).innerHTML = `PrizePicks <small>${n ? sp.join(' · ') + ' · ' : ''}${n} pick${n === 1 ? '' : 's'}</small>`;
       $$('.fx-add', el).forEach(b => { const on = legs.includes(b.dataset.id); b.setAttribute('aria-pressed', String(on)); b.setAttribute('aria-label', `${on ? 'Remove' : 'Add'} ${leg(b.dataset.id).name}`); b.closest('.fx-srow').classList.toggle('picked', on); });
       $('.fx-legs', el).innerHTML = n ? legs.map(id => { const l = leg(id); return `<li data-id="${id}">${av(l.name)}<div><b>${esc(l.name)} <i>${l.sport}</i></b><span>${l.side} <b>${l.line}</b> ${esc(l.stat)} · ${l.per}</span><small><b>${f1(l.p)}%</b> Model estimate</small></div>${grade(l.g)}<button type="button" class="fx-rm" data-id="${id}" aria-label="Remove ${esc(l.name)}">×</button></li>`; }).join('') : '<li class="fx-none">Add props from the board. Your slip builds here.</li>';
       $$('.fx-ent button', el).forEach(b => { b.setAttribute('aria-pressed', String(b.dataset.e === entry)); b.disabled = b.dataset.e === 'flex' && !flexOk; });
       const pay = $('.fx-pay', el), st = $('.fx-st', el);
-      if (!ok) { pay.innerHTML = `<b>—</b><small>Add ${2 - n} more to price the entry</small>`; st.className = 'fx-st'; st.innerHTML = '<i></i>Building…'; return; }
-      pay.innerHTML = entry === 'power' ? `<b>${POWER[n]}×</b><small>All ${n} hit · PrizePicks Power ${n}-pick</small>` : `<b>${FLEX[n][0]}×</b><small>All ${n} hit · <b>${FLEX[n][1]}×</b> with one miss · Flex ${n}-pick</small>`;
-      st.className = 'fx-st ok'; st.innerHTML = '<i></i>1 of 1 entry ready · every leg rechecked';
+      if (!ok) { pay.innerHTML = `<b>—</b><small>Add ${2 - n} more to price the entry</small>`; st.className = 'fx-st'; st.innerHTML = n ? '<i></i>Add one more pick' : '<i></i>No picks yet'; return; }
+      pay.innerHTML = entry === 'power' ? `<b>${POWER[n]}×</b><small>All-hit payout · Power ${n}-pick</small>` : `<b>${FLEX[n][0]}×</b><small>All-hit payout · <b>${FLEX[n][1]}×</b> with one miss · Flex ${n}-pick</small>`;
+      st.className = 'fx-st ok'; st.innerHTML = '<i></i>1 of 1 entry ready';
     }
-    function toast(msg) { const t = $('.fx-toast', el); t.innerHTML = `<i aria-hidden="true"></i>${esc(msg)}`; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1900); }
     function fly(btn, id) {
       if (RM) return;
       const row = btn.closest('.fx-srow'), tgt = $(`.fx-legs li[data-id="${id}"]`, el); if (!tgt) return;
@@ -259,12 +320,12 @@
       g.animate([{transform: 'none', opacity: 1}, {transform: `translate(${(t.left - r.left) * 0.55}px,${(t.top - r.top) * 0.5 - 26}px) scale(${Math.max(0.5, t.width / r.width * 1.05)}) rotate(-2deg)`, opacity: 1, offset: 0.55},
         {transform: `translate(${t.left - r.left}px,${t.top - r.top}px) scale(${t.width / r.width},${t.height / r.height})`, opacity: 0.2}], {duration: 620, easing: 'cubic-bezier(.6,0,.2,1)'}).onfinish = () => { g.remove(); tgt.classList.remove('landing'); tgt.classList.add('landed'); };
     }
-    el.innerHTML = appbar('Slips') + `<div class="fx-split"><div class="fx-pad fx-sboard"><div class="fx-hd"><div><h3>All sports · PrizePicks</h3><p>Graded lines you can add</p></div><span class="fx-slipbtn">Slip <b class="fx-cnt">0</b></span></div>
-      ${LEGS.map((l, i) => `<div class="fx-srow" style="--i:${i}">${av(l.name)}<span class="fx-pl2"><b>${esc(l.name)} <i>${l.sport}</i></b><small data-pick="${l.side} ${l.line} ${esc(l.stat)}">${esc(l.sub)}</small></span><span class="fx-mk"><b>${l.side} ${l.line}</b><small>${esc(l.stat)}</small></span><span class="fx-md2"><b>${f1(l.p)}%</b>${grade(l.g)}</span><button type="button" class="fx-add" data-id="${l.id}" aria-pressed="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="p" d="M8 3v10M3 8h10"/><path class="c" d="M3.5 8.5l3 3 6-7"/></svg></button></div>`).join('')}
+    el.innerHTML = appbar('Slips') + `<div class="fx-split"><div class="fx-pad fx-sboard"><div class="fx-hd"><div><h3>Player props</h3><p>All sports · PrizePicks lines</p></div></div>
+      ${LEGS.map((l, i) => `<div class="fx-srow" style="--i:${i}">${av(l.name)}<span class="fx-pl2"><b>${esc(l.name)} <i>${l.sport}</i></b><small data-pick="${l.side} ${l.line} ${esc(l.stat)}">${esc(l.sub)}</small></span><span class="fx-mk"><b>${l.side} ${l.line}</b><small>${esc(l.stat)}</small></span><span class="fx-md2"><b>${f1(l.p)}%</b>${grade(l.g)}</span><button type="button" class="fx-add" data-id="${l.id}" aria-pressed="false">${PLUS}</button></div>`).join('')}
       <div class="fx-toast" role="status"></div></div>
-      <aside class="fx-panel2" aria-label="Slip"><div class="fx-sh"><h4>Slip <b class="fx-cnt2">0</b></h4><span class="fx-st"><i></i>Building…</span></div><div class="fx-app">PrizePicks <small>one entry per app</small></div>
+      <aside class="fx-panel2" aria-label="Slip"><div class="fx-sh"><h4>Slip <b class="fx-cnt2">0</b></h4><span class="fx-st"><i></i>No picks yet</span></div><div class="fx-app"></div>
       <div class="fx-ent" role="group" aria-label="Entry type"><button type="button" data-e="power" aria-pressed="true">Power</button><button type="button" data-e="flex" aria-pressed="false">Flex</button></div>
-      <ul class="fx-legs"></ul><div class="fx-pay"></div><a class="fx-go" href="${esc($('.fx').dataset.trial || '#pricing')}">Build yours free for 1 day</a></aside></div>`;
+      <ul class="fx-legs"></ul><div class="fx-pay"></div><p class="fx-note">One entry per app. The member slip rechecks every leg against current offers before you track it.</p><a class="fx-go" href="${esc($('.fx').dataset.trial || '#pricing')}">Build yours free for 1 day</a></aside></div>`;
     act(el, '.fx-add', b => { const id = b.dataset.id, i = legs.indexOf(id); if (i >= 0) { legs.splice(i, 1); panel(); toast(`Removed ${leg(id).name} from your slip.`); } else { legs.push(id); panel(); fly(b, id); const l = leg(id); toast(`Added ${l.name} ${l.side} ${l.line} to your slip.`); } });
     act(el, '.fx-rm', b => { legs = legs.filter(x => x !== b.dataset.id); panel(); });
     act(el, '.fx-ent button', b => { if (!b.disabled) { entry = b.dataset.e; panel(); } });
