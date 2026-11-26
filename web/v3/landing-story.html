@@ -43,8 +43,8 @@
 <div class="real-heading"><p class="real-eyebrow">{{SPORT_PILL}}</p>
 <h1>Every player prop.<br><span>One board.</span></h1>
 <!--if:HERO--><p>See the projection, grade and reasoning on every prop before you open PrizePicks or Underdog.</p><!--/if:HERO--><!--if:OLDHERO--><p>The line is only half the story. See the projection, grade and reasoning behind your next pick—then compare the apps before you build your slip.</p><!--/if:OLDHERO-->
-<div class="real-actions"><a class="btn btn-lg" href="{{TRIAL_URL}}">Try Prop Grader free <span aria-hidden="true">↗</span></a><a class="hero-secondary" href="#inside">Explore the product <span aria-hidden="true">↓</span></a></div>
-<small>1 day free. Then {{PRICE_M}}/month. Cancel anytime.</small>
+<div class="real-actions"><!--if:HERO--><a class="btn btn-lg hx-go" href="{{TRIAL_URL}}">Try free for 1&nbsp;day <span aria-hidden="true">→</span></a><!--/if:HERO--><!--if:OLDHERO--><a class="btn btn-lg" href="{{TRIAL_URL}}">Try Prop Grader free <span aria-hidden="true">↗</span></a><!--/if:OLDHERO--><a class="hero-secondary" href="#inside">Explore the product <span aria-hidden="true">↓</span></a></div>
+<!--if:HERO--><small>Then {{PRICE_M}}/month · Cancel anytime · Secure checkout on Whop</small><!--/if:HERO--><!--if:OLDHERO--><small>1 day free. Then {{PRICE_M}}/month. Cancel anytime.</small><!--/if:OLDHERO-->
 <!--if:HERO--><div class="hx-proof"><!--if:TOTAL--><a href="/record"><b>{{LEDGER_TOTAL}}</b> decided picks on the public record<span class="hx-pl"> · losses included</span></a><!--/if:TOTAL--><!--if:REVIEWS--><a href="/reviews">{{RV_LINE}}</a><!--/if:REVIEWS--></div><!--/if:HERO-->
 <p class="hero-member">Already a member? <a href="/auth/login">Sign in</a></p>
 <p id="signin-error" class="err" role="alert" hidden></p><div class="hero-trust"><a href="/record"><b>Public record</b><span>Wins and losses included</span></a><div><b>6 sports</b><span>One research workspace</span></div><div><b>Your call</b><span>The reasoning, not just a pick</span></div></div></div>
