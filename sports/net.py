@@ -157,6 +157,23 @@ def _clear_to_send(host, url, budget):
         budget[0] -= remaining
 
 
+def get_stream(url, params=None, headers=None, timeout=30, tries=3, ok=(200,)):
+    """GET like get(), but the body is NOT read: -> the open Response (stream=True) for a status in `ok`. The caller
+    iterates r.iter_content() and closes it. Pacing, holds, retries and the 429 count are get()'s own (soccer-board-1125:
+    a body too large to hold whole is parsed from the chunks, sports/jsonstream.py)."""
+    return _request(url, params, headers, timeout, tries, ok,
+                    lambda: session().get(url, params=params, headers=headers, timeout=timeout, stream=True))
+
+
+def _body(r):
+    """The first 300 characters of an error answer, or '' when it cannot be read (a streamed answer whose connection
+    dropped): a 429 must always surface as HttpError(429), never as a connection error (soccer-board-1125)."""
+    try:
+        return r.text[:300]
+    except (requests.RequestException, OSError, ValueError):
+        return ""
+
+
 def _request(url, params, headers, timeout, tries, ok, send):
     host = urlsplit(url).netloc
     budget = [MAX_SLEEP_S]                   # the most this call ever sleeps for holds (a source's Retry-After)
@@ -175,15 +192,15 @@ def _request(url, params, headers, timeout, tries, ok, send):
             if r.status_code in ok:
                 return r
             if r.status_code not in RETRY_STATUS:
-                raise HttpError(r.status_code, url, r.text[:300])
+                raise HttpError(r.status_code, url, _body(r))
             ra = retry_after_s(r.headers.get("Retry-After")) if r.status_code in (429, 503) else None
             if ra is not None:
                 until = time.time() + ra
                 hold(host, until)
                 if ra <= budget[0] and attempt + 1 < tries:
                     continue                 # the next attempt's _clear_to_send waits out the full hold
-                raise HttpError(r.status_code, url, r.text[:300], not_before=until)
-            last = HttpError(r.status_code, url, r.text[:300])
+                raise HttpError(r.status_code, url, _body(r), not_before=until)
+            last = HttpError(r.status_code, url, _body(r))
         if attempt + 1 < tries:
             time.sleep(backoff(attempt))
     if isinstance(last, HttpError):

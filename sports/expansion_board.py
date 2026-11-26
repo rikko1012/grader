@@ -6,6 +6,7 @@ features, model validation and house-rule settlement have been connected.
 """
 import argparse
 import hashlib
+import heapq
 from datetime import datetime, timedelta, timezone
 import json
 import math
@@ -238,6 +239,7 @@ QUOTE_ARCHIVE_EVERY_S = 3600    # an archive pass at most hourly while nothing i
 QUOTE_ARCHIVE_BUDGET_S = 15     # ... and at most this long per quotes run (the board is already written)
 QUOTE_PART_ROWS = 4000
 QUOTE_SAMPLES_H = 48
+QUOTE_ALT_ROOM = 0.8            # share of the cap past which demon / goblin revisions are not recorded (soccer-board-1125)
 
 
 def _history_connect(db):
@@ -281,12 +283,21 @@ def record_quote_history(directory, history_rows, observed_at, now=None, budget_
         if live > cap:
             out["state"] = "paused_at_cap"
         else:
+            if live > QUOTE_ALT_ROOM * cap:
+                # soccer-board-1125: past 80% of the cap the PrizePicks demon / goblin revisions are left out (counted
+                # here and in ops) - at the cap EVERY revision is skipped, and a flood of alt lines must never be what
+                # stops the history of the lines members see. They are recorded again once the archive has made room.
+                kept = [r for r in history_rows
+                        if not (r.get("platform") == "prizepicks" and r.get("variant") in PP_ALT)]
+                out["alt_skipped"] = len(history_rows) - len(kept)
+            else:
+                kept = history_rows
             con = _history_connect(db)
             try:
                 with con:
                     # Namespace native sportsbook markets so their IDs cannot collide
                     # with player-prop quotes from a future book adapter.
-                    for row in history_rows:
+                    for row in kept:
                         previous = con.execute("SELECT revision FROM revisions WHERE platform=? AND offer_id=? ORDER BY id DESC LIMIT 1",
                                                (row['platform'], row['offer_id'])).fetchone()
                         if not previous or previous[0] != row['revision']:
@@ -436,6 +447,174 @@ PRIORITY_STREAK = 2
 _sleep, _monotonic = time.sleep, time.monotonic     # tests replace them
 
 
+# soccer-board-1125 (owner 2026-11-25: "fix soccer it keeps removing props off the board"). PrizePicks' SOCCER tab went
+# from ~3,000 to 15,491 projections in a day (18.7 MB; 12,920 demon + 2,381 goblin + 190 standard). Parsed whole it took
+# 160-195 MB, the capped quotes job was killed on every read of the tab (21 times in 84 min), the failure back-off
+# pushed runs up to 12 min apart and every soccer line left the board by the 300 s rule. Now an answer is read from its
+# chunks (sports/jsonstream.py) and only these projections are ever built into rows:
+#   - every standard line (the only PrizePicks lines members are shown), and any type that is not demon / goblin;
+#   - of the demon / goblin lines: one line of every match (its lowest projection id), so each offered fixture still
+#     reaches the history job, research and forecasts; then the PP_ALT_MAX with the soonest starts (the board's own
+#     fit() rule: latest start leaves first). 1,000 keeps the tab at the size it had on 2026-11-19/20 (885 and 995 rows,
+#     776 and 920 of them demon / goblin): the volume at which research, forecasts and learning reach every member
+#     line inside their time budgets - forecasts are issued in start order with no standard-first rule, so thousands
+#     of soonest-start alt lines ahead of a later match's standard lines could cost those lines their letter. Under
+#     the bound nothing changes at all (same rows, same order, same revisions). A per-league tab keeps standard lines
+#     only, as it always has.
+# Memory is then one chunk + the kept projections, whatever the tab's size.
+PP_ALT = ("demon", "goblin")
+PP_ALT_MAX = 1000
+PP_ALT_GAMES = 2000             # matches that keep a line of their own (far above any real tab: a bound, not a setting)
+PP_INFO = "_pp"                 # the selection's counts, set on a body that has been through it (never a PrizePicks key)
+STATE_ROWS_BYTES = 5_000_000    # rows kept in pp-soccer-state.json: _read_json refuses a file over 8,000,000 bytes, and a
+                                # collector that cannot read its state starts from nothing EVERY run (tab 82 + /leagues
+                                # each 45 s, no rotation, no back-off memory)
+DIED_WAIT_MAX_S = 1800          # a tab whose read ended the run twice in a row is retried at 2x, 4x ... its normal
+                                # pace, at most this far apart, until one read comes back
+RETRY_SOON_S = 45               # tab 82 after ONE failed read that was not a rate limit (timeout, 5xx, cut / bad answer):
+                                # asked again on the next run that has a request to spend, not 170 s later - its rows
+                                # live 300 s and are re-read every ~180 s, so waiting the full pace after one failure
+                                # always took every tab-82 line off the board for a minute or more. Never after a 429 /
+                                # Retry-After, never twice in a row, never more requests (the level's credit still pays)
+
+
+def pp_alt_max():
+    """Demon / goblin rows carried from one PrizePicks answer besides one per match (SCOUT_SOCCER_PP_ALT_MAX, default
+    1,000; 0 = standard lines only). Soccer only: tennis answers are never bounded."""
+    try:
+        return max(0, int(float(os.environ.get("SCOUT_SOCCER_PP_ALT_MAX", PP_ALT_MAX))))
+    except (ValueError, OverflowError):
+        return PP_ALT_MAX
+
+
+class _Latest:
+    """Heap entry ordered latest start first, so the heap's top is the first one to give up its place."""
+    __slots__ = ("key", "seq", "item")
+
+    def __init__(self, key, seq, item):
+        self.key, self.seq, self.item = key, seq, item
+
+    def __lt__(self, other):
+        return self.key > other.key
+
+
+class PPSelect:
+    """Which projections of ONE PrizePicks answer are kept, decided one projection at a time (they are never all in
+    memory): everything that is not a demon / goblin line; of those, never one that has started or has no start (the
+    adapter leaves those out anyway) - one per match (the lowest projection id), and of the rest the `alt_max` with the
+    soonest start (ties: the lower id). alt_max 0 keeps no demon / goblin line at all. The choice does not depend on
+    the answer's order; result() is in it."""
+
+    def __init__(self, alt_max, now):
+        self.alt_max, self.now = max(0, int(alt_max)), adapters.timestamp(now)
+        self.seen = self.alt_seen = 0
+        self._kept, self._games, self._soon = [], {}, []
+
+    def add(self, item):
+        seq = self.seen
+        self.seen += 1
+        a = item.get("attributes") if isinstance(item, dict) else None
+        if not isinstance(a, dict) or a.get("odds_type") not in PP_ALT:
+            self._kept.append((seq, item))
+            return
+        self.alt_seen += 1
+        start = adapters.timestamp(a.get("start_time")) if self.alt_max else None
+        if not start or (self.now and start <= self.now):
+            return
+        pid = str(item.get("id"))
+        mine = ((len(pid), pid), start, seq, item)
+        try:
+            game = str(item["relationships"]["game"]["data"]["id"])
+        except (KeyError, TypeError):
+            game = None
+        if game is not None:
+            held = self._games.get(game)
+            if held is None:
+                if len(self._games) < PP_ALT_GAMES:
+                    self._games[game] = mine
+                    return
+            elif mine[0] < held[0]:
+                self._games[game], mine = mine, held    # the match's line is its lowest id; the other competes on
+        ident, start, seq, item = mine                  # its start like any line
+        key = (start,) + ident
+        if len(self._soon) < self.alt_max:
+            heapq.heappush(self._soon, _Latest(key, seq, item))
+        elif key < self._soon[0].key:
+            heapq.heapreplace(self._soon, _Latest(key, seq, item))
+
+    def result(self):
+        rows = self._kept + [(x[2], x[3]) for x in self._games.values()] + [(x.seq, x.item) for x in self._soon]
+        rows.sort(key=lambda r: r[0])
+        return [item for _, item in rows]
+
+    def info(self):
+        return {"seen": self.seen, "alt_seen": self.alt_seen, "alt_kept": len(self._games) + len(self._soon),
+                "alt_games": len(self._games)}
+
+
+def pp_reader(alt_max, now):
+    """-> reader(chunks) for expansion_sources.get_json(reader=...): one PrizePicks /projections answer read from its
+    byte chunks, "data" reduced by PPSelect while it streams, every other member whole. The answer comes back as the
+    body the adapter has always been given, with the selection's counts under PP_INFO."""
+    def reader(chunks):
+        from . import jsonstream
+        body, select = {}, None
+        for key, in_array, value in jsonstream.members(chunks):
+            if not in_array:
+                body[key] = value
+                if key == "data":
+                    select = None
+            elif value is jsonstream.START:
+                body[key] = []
+                if key == "data":
+                    select = PPSelect(alt_max, now)
+            elif key == "data":
+                select.add(value)
+            else:
+                body[key].append(value)
+        if select is not None:
+            body["data"], body[PP_INFO] = select.result(), select.info()
+        return body
+    return reader
+
+
+def pp_reduce(body, alt_max, now):
+    """The same selection on a body that arrived whole (the kill-switch path's fallback, tests' fakes); a body the
+    reader already reduced is left as it is. -> the selection's counts."""
+    info = body.get(PP_INFO)
+    if isinstance(info, dict):
+        return info
+    data = body.get("data")
+    if not isinstance(data, list):
+        return {"seen": 0, "alt_seen": 0, "alt_kept": 0, "alt_games": 0}
+    select = PPSelect(alt_max, now)
+    for item in data:
+        select.add(item)
+    body["data"], body[PP_INFO] = select.result(), select.info()
+    return body[PP_INFO]
+
+
+def _state_fit(per):
+    """The rows kept in the state file stay under STATE_ROWS_BYTES: over it, the largest tab gives up demon / goblin
+    rows first, then its furthest starts (fit()). -> rows left out (0 in normal running: PP_ALT_MAX bounds a tab)."""
+    def size(rows):
+        return sum(len(json.dumps(r, separators=(",", ":"))) + 1 for r in rows)
+    for e in per.values():
+        if isinstance(e, dict) and not isinstance(e.get("rows") or [], list):
+            e["rows"] = []                             # a damaged value: nothing to carry, never a crash
+    sizes = {sid: size(e.get("rows") or []) for sid, e in per.items() if isinstance(e, dict)}
+    over, dropped = sum(sizes.values()) - STATE_ROWS_BYTES, 0
+    for sid in sorted(sizes, key=lambda k: (-sizes[k], k)):
+        if over <= 0:
+            break
+        rows = per[sid].get("rows") or []
+        kept = fit(rows, max(0, sizes[sid] - over))
+        dropped += len(rows) - len(kept)
+        over -= sizes[sid] - size(kept)
+        per[sid]["rows"] = kept
+    return dropped
+
+
 def pp_leagues_on():
     """Kill switch (2026-11-19): SCOUT_SOCCER_PP_LEAGUES=0 puts soccer back on the single tab-82 request exactly as
     at 5036ce4 (SCOUT_SOCCER_PP_MLS then works as before). Default on."""
@@ -567,7 +746,10 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
     standard lines (or never read) least-recently-attempted first. By last ATTEMPT, so a failing tab never starves
     the others. Every source's last good rows stay on the board with their OWN observed_at until the 300 s rule hides
     them; below full coverage leagues therefore take turns on the board. A failed read never moves or invents a line.
-    Per-league rows are standard lines only, and tab 82 wins a projection id listed in two tabs.
+    Per-league rows are standard lines only, and tab 82 wins a projection id listed in two tabs. Every answer is read
+    in bounded memory (pp_reader): tab 82 keeps its standard lines plus at most PP_ALT_MAX demon / goblin lines, soonest
+    start first. A tab whose read ended the run (killed / timed out mid-read) twice in a row is retried at a growing
+    pace, so one answer the job cannot survive never takes the other tabs' turns or the whole board with it.
     The member-facing 'prizepicks' source follows tab 82 alone (a failing league tab only shows in ops).
     -> (rows, the 'prizepicks' source entry, status for ops)."""
     from . import net
@@ -575,8 +757,13 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
     from .expansion_history import atomic_json
     t0 = _monotonic()
     every = quotes_every_s()
-    state = _read_json(directory / PP_STATE, {})
+    state, state_lost = _read_json(directory / PP_STATE, None), None
     if not isinstance(state, dict):
+        try:                                       # a state file that is there but cannot be read back: ops must see it
+            size = (directory / PP_STATE).stat().st_size
+            state_lost = "too_large" if size > 8_000_000 else "unreadable"
+        except OSError:
+            state_lost = None                      # no file yet: a first run
         state = {}
     for k in ("per", "leagues", "aimd"):
         if not isinstance(state.get(k), dict):
@@ -589,6 +776,16 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
     calls, stopped, run_errors, roles = 0, None, {}, {}
     constrained, halved = None, None
     now = now_utc()
+    # soccer-board-1125: the last run ended INSIDE a tab read (memory cap, timeout, restart): the marker it left names
+    # the tab. Counted per tab and cleared by that tab's next read that comes back (good or failed).
+    reading = state.pop("reading", None)
+    if isinstance(reading, dict) and str(reading.get("lid")) in per:
+        dead = per[str(reading.get("lid"))]
+        try:
+            dead["died"] = max(0, int(dead.get("died") or 0)) + 1
+        except (TypeError, ValueError):
+            dead["died"] = 1
+        dead.update(died_at=reading.get("at"), error="run_ended_mid_read", error_at=now)
     try:
         level = max(1, int(aimd.get("level") or _env_num("SCOUT_SOCCER_PP_START_LEVEL", 1)))
     except (TypeError, ValueError):
@@ -646,11 +843,11 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
         if gap():
             _sleep(gap())
 
-    def fetch(url, params):
+    def fetch(url, params, **how):
         nonlocal calls, stopped
         calls += 1
         try:
-            body = get_json("soccer", url, params=params, timeout=15, tries=1)
+            body = get_json("soccer", url, params=params, timeout=15, tries=1, **how)
         except net.HttpError as e:
             stopped = "http_429" if e.status == 429 else "request_failed"
             if e.status == 429 and not getattr(e, "held", False):
@@ -662,18 +859,38 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
             raise ValueError("bad_body")
         return body
 
+    state_dropped = 0
+
+    def persist():
+        """Every write of the state file goes through the size guard: a state the next run cannot read back is the
+        worst case (it would start from nothing every 45 s)."""
+        nonlocal state_dropped
+        state_dropped += _state_fit(per)
+        atomic_json(directory / PP_STATE, state)
+
     def read(lid, role):
         entry = per.setdefault(str(lid), {})
         entry["attempt_at"] = now_utc()
+        entry.pop("retry_soon", None)                  # spent by this attempt
         roles[lid] = role
         state["aimd"] = dict(aimd, level=level)
-        # persisted BEFORE the request: a run killed mid-read (memory cap / timeout) still moves the rotation on
-        atomic_json(directory / PP_STATE, state)
+        state["reading"] = {"lid": lid, "at": entry["attempt_at"]}
+        # persisted BEFORE the request: a run killed mid-read (memory cap / timeout) still moves the rotation on, and
+        # the next run knows which tab it died in
+        persist()
+        alt_max = pp_alt_max() if lid == 82 else 0     # a league tab's rows are standard lines only (below)
         try:
-            body = fetch(PP_URL, {"league_id": lid, "per_page": 1000, "single_stat": "true", "game_mode": "pickem"})
+            try:
+                body = fetch(PP_URL, {"league_id": lid, "per_page": 1000, "single_stat": "true", "game_mode": "pickem"},
+                             reader=pp_reader(alt_max, entry["attempt_at"]))
+            finally:
+                state.pop("reading", None)             # the read came back (good or failed): the run is alive
+            entry.pop("died", None)                    # an answer came back whole: the tab is not what kills runs
+            entry.pop("died_at", None)
             observed = now_utc()
+            picked = pp_reduce(body, alt_max, entry["attempt_at"])
             listed = ((leagues.get("listing") or {}).get(str(lid)) or {}).get("count")
-            if not (body.get("data") or []) and listed:
+            if not picked["seen"] and listed:
                 # A tab /leagues lists with lines answered empty (the comma-list answer looked exactly like this):
                 # a failed read, never "no lines". /leagues is re-read (at most every LEAGUES_REFRESH_MIN_S).
                 leagues["refresh"] = True
@@ -687,11 +904,24 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
                 found = [r for r in found if r["variant"] == "standard"]
             starts = sorted(r["start"] for r in found if r["variant"] == "standard")
             entry.update(ok_at=observed, rows=found, parsed=parsed, kept=len(found), error=None,
-                         first_start=starts[0] if starts else None)
+                         first_start=starts[0] if starts else None, seen=picked["seen"],
+                         alt_seen=picked["alt_seen"], alt_kept=picked["alt_kept"], fails=0)
         except (net.HttpError, ValueError, OSError, KeyError, TypeError, AttributeError) as e:
             entry["error"] = str(e)[:60] if type(e) is ValueError else type(e).__name__
             entry["error_at"] = now_utc()
             run_errors[lid] = entry["error"]
+            try:
+                entry["fails"] = max(0, int(entry.get("fails") or 0)) + 1
+            except (TypeError, ValueError):
+                entry["fails"] = 1
+            limited = isinstance(e, net.HttpError) and (e.status == 429 or getattr(e, "held", False)
+                                                        or getattr(e, "not_before", None))
+            if lid == 82 and entry["fails"] == 1 and not limited and not entry.get("died"):
+                entry["retry_soon"] = True
+        # the read is over: its rows are saved and the marker is gone before anything else can end the run (the quote
+        # history's archive pass, the job's own timeout), so only a death INSIDE a read is ever counted against a tab
+        state["aimd"] = dict(aimd, level=level)
+        persist()
 
     list_age = _age_s(leagues.get("fetched_at"), now)
     trusted = leagues.get("listing") if list_age is not None and list_age < LEAGUES_MAX_AGE_S else None
@@ -706,13 +936,22 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
         e = per.get(str(lid)) or {}
         return (e.get("kept") or 0) > 0 or not e.get("ok_at")
 
-    def due(lid):
+    def due(lid, soon=True):
+        """soon=False: the back-off / cool-off branches, which ask tab 82 without spending the level's credit - there
+        the quick retry never applies, so tab 82 is never asked sooner than its normal pace while a rate limit is on."""
         a = attempt_age(lid)
         if a is None or a < 0:
             return True
-        if lid == 82 or with_lines(lid):
-            return a >= REREAD_MIN_S
-        return a >= DISCOVERY_S                    # listed, but its last read had no standard line
+        wait = REREAD_MIN_S if lid == 82 or with_lines(lid) else DISCOVERY_S   # DISCOVERY_S: listed, but its last read
+        if soon and lid == 82 and (per.get("82") or {}).get("retry_soon"):     # had no standard line
+            wait = min(wait, _env_num("SCOUT_SOCCER_PP_RETRY_SOON_S", RETRY_SOON_S))
+        try:
+            died = max(0, int((per.get(str(lid)) or {}).get("died") or 0))
+        except (TypeError, ValueError):
+            died = 0
+        if died >= 2:                              # its read ended the run twice running: 2x, 4x ... the pace
+            wait = max(wait, min(DIED_WAIT_MAX_S, REREAD_MIN_S * 2 ** min(died - 1, 6)))
+        return a >= wait
 
     order_ix = {lid: i for i, lid in enumerate(adapters.PP_SOCCER_LEAGUES)}
     sources_n = 1 + sum(1 for lid in use if with_lines(lid))
@@ -755,19 +994,22 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
     if promoted and streak >= max_streak and others_due:
         promoted = []                                  # fairness: this slot goes to the other leagues' rotation
     due_tabs = promoted + [lid for lid in due_tabs if lid not in promoted]
-    picks = ([82] if due(82) else []) + due_tabs
+    # the quick retry (retry_soon) only takes a slot a due league tab would have used this run - with fewer due tabs
+    # than requests to spend, it would be an extra request, and tab 82 waits for its normal pace instead
+    soon82 = due(82) and not due(82, soon=False) and len(due_tabs) >= int(credit + 1e-9)
+    picks = ([82] if due(82, soon=False) or soon82 else []) + due_tabs
     backoff_left = -(_age_s(state.get("backoff_until"), now) or 0)
 
     # 1. coverage requests
     if backoff_left > 0:
-        if due(82) and can_call():
+        if due(82, soon=False) and can_call():
             read(82, "coverage")
         stopped = stopped or "backoff"
         constrained = "backoff"
     elif cool:
         # another consumer's recent 429: like a back-off, tab 82 is still read when due (its pre-tab 180 s rate, so the
         # base board never goes dark); Retry-After holds still apply via can_call(); the other tabs wait
-        if due(82) and can_call():
+        if due(82, soon=False) and can_call():
             read(82, "coverage")
         stopped = stopped or "recent_429_other_consumer"
         constrained = "cool_off"
@@ -866,23 +1108,27 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
                             if _age_s(r.get("observed_at"), now) is not None
                             and 0 <= _age_s(r.get("observed_at"), now) <= MAX_AGE]
     state["aimd"] = aimd
-    atomic_json(directory / PP_STATE, state)
+    persist()
 
-    # Member-facing source: the one 'prizepicks' key, as before, but it follows TAB 82 ONLY: ok while tab 82 was read
-    # OK recently enough to stay on the board until the next run (age <= 300 s - every_s). A failing league tab is an
-    # ops matter (per-tab state below); its last good rows leave the board by the 300 s rule. checked_at = the OLDEST
-    # good read among the sources with rows on the board (the soccer page re-stamps rows with it on an 'unchanged'
-    # answer, so it must never look fresher than any row it covers).
+    # Member-facing source: the one 'prizepicks' key. The member page hides EVERY PrizePicks soccer line while it is
+    # not ok, so (soccer-board-1125) it is ok whenever the board holds lines that are still inside their own 300 s:
+    # tab 82 read OK within MAX_AGE (before: MAX_AGE - every, which hid 45 s of valid lines), or any league tab with
+    # rows on the board (before: tab 82 alone - one missed tab-82 read hid the fresh league lines too). A line is
+    # still shown only inside ITS OWN 300 s at every layer; nothing is re-stamped. Tab 82's own state is `tab82` in
+    # the ops status below. checked_at = the OLDEST good read among the sources with rows on the board (the soccer
+    # page re-stamps rows with it on an 'unchanged' answer, so it must never look fresher than any row it covers).
     e82 = per.get("82") or {}
     ok82 = e82.get("ok_at")
     on_board = [(per.get(str(lid)) or {}).get("ok_at") for lid, n in counts.items() if n]
     on_board = [x for x in on_board if x]
     checked = min(on_board) if on_board else (ok82 or now)
-    if ok82 and _age_s(ok82, now) is not None and 0 <= _age_s(ok82, now) <= MAX_AGE - every:
+    fresh82 = bool(ok82 and _age_s(ok82, now) is not None and 0 <= _age_s(ok82, now) <= MAX_AGE)
+    error82 = None if fresh82 else (run_errors.get(82) or e82.get("error") or "not_read_recently")
+    if fresh82 or any(n for lid, n in counts.items() if lid != 82):
         source = {"ok": True, "checked_at": checked, "offers": len(rows)}
     else:
-        source = {"ok": False, "checked_at": checked if on_board else (ok82 or now),
-                  "error": run_errors.get(82) or e82.get("error") or "not_read_recently", "offers": len(rows)}
+        source = {"ok": False, "checked_at": checked if on_board else (ok82 or now), "error": error82,
+                  "offers": len(rows)}
     listing = leagues.get("listing") or {}
     grow_left = None
     if level < cap and not (halved or constrained or run_errors):
@@ -905,13 +1151,16 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
               "pp_429": pp_429_counts(),
               "covered": [lid for lid in counts if counts[lid]], "not_covered": [
                   lid for lid in use if not counts.get(lid) and (per.get(str(lid)) or {}).get("kept", 0) > 0],
-              "source": source, "backoff_until": state.get("backoff_until"),
+              "source": source, "tab82": {"fresh": fresh82, "error": error82, "retry_soon": bool(e82.get("retry_soon")),
+                                          "fails": e82.get("fails") or 0},
+              "state_lost": state_lost, "backoff_until": state.get("backoff_until"),
               "recent_429": state.get("recent_429") or [],
               "league_list": {"fetched_at": leagues.get("fetched_at"), "trusted": trusted is not None,
                               "error": leagues.get("error"), "error_at": leagues.get("error_at"),
                               "fails": leagues.get("fails") or 0,
                               "next_try_after_error_s": leagues_wait_s(leagues.get("fails") or 0) or None},
-              "leagues": [], "unmapped_with_lines": unmapped, "renamed": renamed}
+              "leagues": [], "unmapped_with_lines": unmapped, "renamed": renamed,
+              "alt_max": pp_alt_max(), "state_rows_dropped": state_dropped}
     for lid, (name, code) in adapters.PP_SOCCER_LEAGUES.items():
         e = per.get(str(lid)) or {}
         ok_age = _age_s(e.get("ok_at"), now)
@@ -925,7 +1174,9 @@ def _soccer_prizepicks(get_json, directory, started=None, clock=None):
             "refresh_age_s": round(ok_age) if ok_age is not None else None,
             "last_attempt_at": e.get("attempt_at"), "last_error": e.get("error"),
             "last_error_at": e.get("error_at"), "parsed": e.get("parsed"),
-            "kept": e.get("kept"), "first_start": e.get("first_start"), "on_board": counts.get(lid, 0)})
+            "kept": e.get("kept"), "first_start": e.get("first_start"), "on_board": counts.get(lid, 0),
+            "seen": e.get("seen"), "alt_seen": e.get("alt_seen"), "alt_kept": e.get("alt_kept"),
+            "died": e.get("died") or 0, "died_at": e.get("died_at")})
     atomic_json(directory / PP_STATUS, status)
     return rows, source, status
 
@@ -1015,7 +1266,13 @@ def collect(sport):
     seen = {(r["platform"], r["offer_id"]) for r in rows}
     for source, provider, (url, params) in jobs:
         try:
-            body = get_json(sport, url, params=params, timeout=25, tries=1)
+            if provider == "prizepicks":
+                asked = now_utc()
+                bound = pp_alt_max() if sport == "soccer" else 10 ** 9      # tennis answers are never bounded
+                body = get_json(sport, url, params=params, timeout=25, tries=1, reader=pp_reader(bound, asked))
+                picked = pp_reduce(body, bound, asked)
+            else:
+                body = get_json(sport, url, params=params, timeout=25, tries=1)
             observed = now_utc()
             if provider == "prizepicks":
                 found = adapters.prizepicks(body, sport, observed)
@@ -1030,6 +1287,8 @@ def collect(sport):
             seen.update((r["platform"], r["offer_id"]) for r in found)
             rows.extend(found)
             sources[source] = {"ok": True, "checked_at": observed, "offers": len(found)}
+            if provider == "prizepicks" and picked.get("alt_kept", 0) < picked.get("alt_seen", 0):
+                sources[source].update(seen=picked["seen"], alt_seen=picked["alt_seen"], alt_kept=picked["alt_kept"])
         except (net.HttpError, ValueError, OSError) as e:
             sources[source] = {"ok": False, "checked_at": now_utc(), "error": type(e).__name__}
             if source in ("prizepicks", "underdog"):

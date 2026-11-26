@@ -1171,6 +1171,8 @@ def quotes_history_status(directory):
         return None
     out = {'at': q.get('at'), 'state': q.get('state'), 'live_mb': q.get('live_mb'), 'file_mb': q.get('file_mb'),
            'cap_mb': q.get('cap_mb'), 'error': q.get('error'),
+           # soccer-board-1125: demon / goblin revisions left out of the last run because the store is past 80% of its cap
+           'alt_skipped': q.get('alt_skipped'),
            'archive': {k: (q.get('archive') or {}).get(k) for k in ('rows', 'parts', 'pending', 'error', 'archived')}}
     samples = [s for s in q.get('samples') or [] if isinstance(s, list) and len(s) == 2]
     try:

@@ -162,8 +162,41 @@ MAX_JSON_BYTES = 32_000_000    # sg-stability: the largest answers seen are ~7 M
                                # soccer scoreboard, a busy Saturday): an answer over this fails cleanly as ValueError
 
 
-def get_json(sport, url, max_bytes=MAX_JSON_BYTES, **kwargs):
+def get_json(sport, url, max_bytes=MAX_JSON_BYTES, reader=None, **kwargs):
+    """reader (soccer-board-1125): the answer is NOT held whole - `reader(chunks)` is given the body's byte chunks as they
+    arrive and its return value is the answer (get_json_stream). Without it: the whole body, at most max_bytes."""
+    if reader is not None:
+        return get_json_stream(sport, url, reader, **kwargs)
     return _held(sport, url, lambda: net.get_json(url, max_bytes=max_bytes, **kwargs))
+
+
+STREAM_MAX_BYTES = 256_000_000  # soccer-board-1125: a streamed answer is never held whole, so its limit is about time,
+                                # not memory (18.7 MB parses in ~0.4 s); over it the read fails cleanly as ValueError
+
+
+def get_json_stream(sport, url, reader, max_bytes=STREAM_MAX_BYTES, **kwargs):
+    """One large answer in bounded memory, through the same shared holds / pacing / 429 record as get_json:
+    -> reader(chunks), where chunks are the decoded body's byte chunks as they arrive (never the whole body). The reader
+    parses them itself (sports/jsonstream). A cut, malformed or over-limit answer raises ValueError, a connection that
+    drops mid-body net.HttpError - never a partial answer."""
+    import requests
+
+    def send():
+        r = net.get_stream(url, **kwargs)
+        try:
+            def chunks():
+                n = 0
+                for chunk in r.iter_content(65536):
+                    n += len(chunk)
+                    if n > max_bytes:
+                        raise ValueError('response too large')
+                    yield chunk
+            return reader(chunks())
+        except requests.RequestException as e:      # the connection dropped mid-body: a failed request, as in net.get
+            raise net.HttpError(None, url, str(e)[:300])
+        finally:
+            r.close()
+    return _held(sport, url, send)
 
 
 def get_text(sport, url, max_bytes=2_000_000, **kwargs):

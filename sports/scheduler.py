@@ -392,6 +392,14 @@ def default_jobs():
             # Like books, keep fresh during long exclusive model jobs. Admission
             # still reserves the cap against the existing child memory budget.
             timeout_s=90, flag=f"SCOUT_{sport.upper()}_ENABLED", cap_mb=80, cls=LIGHT, prio=2,
+            # soccer-board-1125: board.json is refused once it is 300 s old (the whole sport answers 503, and a 5xx
+            # trips the main service's shared breaker for every sport). The plain failure back-off reaches 720 s at
+            # the 4th failure in a row, so on 2026-11-25 a job killed on every start left the sport dark for hours.
+            # A failed SOCCER quotes run is tried again at most 120 s later: that job paces its own requests (shared
+            # holds, AIMD level, credit), so a retry costs a few seconds of a LIGHT slot and no extra request to a
+            # source that asked us to wait. Tennis keeps the plain back-off: it has no pacing of its own, and each
+            # tennis 429 on the shared PrizePicks IP halves soccer's level.
+            **({"fail_wait_max_s": 120} if sport == "soccer" else {}),
             locks=(f"{sport}-quotes",))
         # Independent, bounded history stores (measured <60 MB including member
         # research publication). Do not starve cards behind long NBA/NFL fits.
@@ -874,7 +882,10 @@ class Scheduler:
             else:
                 wait = max(1.0, every - ran) * (0.9 + random.random() * 0.2)
             if rc != 0:
-                wait = max(wait, min(6 * 3600.0, every * (2 ** min(st["failures_in_a_row"], 4))))
+                back = min(6 * 3600.0, every * (2 ** min(st["failures_in_a_row"], 4)))
+                if spec.get("fail_wait_max_s"):         # soccer-board-1125: a job whose output goes stale sooner than
+                    back = min(back, float(spec["fail_wait_max_s"]))    # the plain back-off (quotes: rows live 300 s)
+                wait = max(wait, back)
         st["next_start"] = self.now() + wait
         if rc == 0:
             for nxt in spec.get("then") or ():          # e.g. the board build right after each collector cycle

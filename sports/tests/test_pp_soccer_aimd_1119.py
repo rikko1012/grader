@@ -215,14 +215,20 @@ def test_a_failing_league_tab_never_flips_the_prizepicks_source(env):
         assert visible_late(snap, env)['SOCCER'] == 2
     env['fail'] = {534: 'empty'}
     for calls, snap in run(env, 12):
-        assert snap['sources']['prizepicks']['ok'] is True                 # only tab 82 decides the member strip
+        assert snap['sources']['prizepicks']['ok'] is True                 # a failing league tab never flips it
     st = status(env)
     serie = next(lg for lg in st['leagues'] if lg['id'] == 534)
     assert serie['ok'] is False and serie['last_error'] == 'empty_listed_tab'
+    # soccer-board-1125: the member page hides every PrizePicks soccer line while the source is not ok, so it is ok
+    # exactly while PrizePicks lines are on the board (tab 82 failing alone no longer hides the fresh league lines);
+    # tab 82's own state is `tab82` in the ops status
     env['fail'] = {82: 'empty'}
-    for calls, snap in run(env, 8):
-        pass
-    assert snap['sources']['prizepicks']['ok'] is False
+    for calls, snap in run(env, 12):
+        assert snap['sources']['prizepicks']['ok'] is any(r['platform'] == 'prizepicks' for r in snap['offers'])
+    assert status(env)['tab82']['fresh'] is False
+    env['fail'] = {82: 'empty', 536: 'empty', 6: 'empty', 534: 'empty', 14: 'empty'}
+    env['clock'].t += timedelta(seconds=400)
+    assert run(env, 1)[0][1]['sources']['prizepicks']['ok'] is False
 
 
 def test_checked_at_is_never_fresher_than_a_carried_row(env):
