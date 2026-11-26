@@ -49,7 +49,7 @@ def test_on_replaces_the_tabs_with_five_sections(page, monkeypatch, value):
     assert all(h[1:] in doc.ids for h in doc.links if h.startswith("#"))
     assert "{{" not in s and "<!--if:" not in s and "<!--/if:" not in s
     assert s.count(JOIN.replace("&", "&amp;")) >= 9                # every section carries the trial link
-    assert "Every player prop." in s and "hero-grade-body" in doc.ids and "signin-error" in doc.ids
+    assert "Every player prop." in s and "hx" in doc.ids and "signin-error" in doc.ids          # the hero is on with them
 
 
 def test_features_need_the_story_page(monkeypatch):

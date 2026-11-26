@@ -27,7 +27,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap"></noscript>
 <script>(function(){var r=document.documentElement;r.className+=' js';if(window.matchMedia&&!matchMedia('(prefers-reduced-motion: reduce)').matches)r.className+=' motion';})();</script>
-<style>{{STORY_CSS}}</style><!--if:FEAT--><style>{{FEAT_CSS}}</style><!--/if:FEAT--></head>
+<style>{{STORY_CSS}}</style><!--if:FEAT--><style>{{FEAT_CSS}}</style><!--/if:FEAT--><!--if:HERO--><style>{{HERO_CSS}}</style><!--/if:HERO--></head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 <header class="nav">
@@ -39,7 +39,7 @@
 </header>
 
 <main id="main" class="interactive-landing">
-<section class="real-hero" id="experience"><div class="wrap hero-layout">
+<section class="real-hero<!--if:HERO--> hx-hero<!--/if:HERO-->" id="experience"><div class="wrap hero-layout">
 <div class="real-heading"><p class="real-eyebrow">{{SPORT_PILL}}</p>
 <h1>Every player prop.<br><span>One board.</span></h1>
 <p>The line is only half the story. See the projection, grade and reasoning behind your next pick—then compare the apps before you build your slip.</p>
@@ -47,13 +47,13 @@
 <small>1 day free. Then {{PRICE_M}}/month. Cancel anytime.</small>
 <p class="hero-member">Already a member? <a href="/auth/login">Sign in</a></p>
 <p id="signin-error" class="err" role="alert" hidden></p><div class="hero-trust"><a href="/record"><b>Public record</b><span>Wins and losses included</span></a><div><b>6 sports</b><span>One research workspace</span></div><div><b>Your call</b><span>The reasoning, not just a pick</span></div></div></div>
-<div class="device-stage" data-scene="0">
+<!--if:HERO--><div class="hx" id="hx" role="region" aria-label="Interactive Prop Grader demo on saved examples"><noscript><p class="noscript-demo">Enable JavaScript to explore the saved examples: the board, the player card and the slip.</p></noscript></div><!--/if:HERO--><!--if:OLDHERO--><div class="device-stage" data-scene="0">
 <div class="desktop-device"><div class="device-chrome"><span class="chrome-dots">● ● ●</span><span>Prop Grader · player props</span><span class="capture-tag">SAVED DEMO</span></div><div class="desktop-screen"><div id="demo-board"><noscript><p class="noscript-demo">Enable JavaScript to explore saved examples. Prop Grader brings the line, projection, side and player history together. Sign in to open your board.</p></noscript></div></div><div class="desktop-chin"><i></i></div></div><div class="desktop-stand" aria-hidden="true"></div>
 <div class="phone-device"><div class="phone-speaker" aria-hidden="true"></div><div class="phone-screen"><div id="demo-phone"></div></div><div class="phone-home" aria-hidden="true"></div></div>
 <section class="hero-grade-card" aria-label="Selected example prop"><div class="grade-card-bar"><span class="demo-label">CS2 · SAVED EXAMPLE</span><button id="replay-product" aria-label="Restart product tour">↺</button><button id="pause-product" aria-label="Pause product animation">Pause</button></div><div id="hero-grade-body"></div><div class="grade-card-footer"><span>Explore another player</span><button id="hero-prev" aria-label="Previous example player">←</button><button id="hero-next" aria-label="Next example player">→</button></div></section>
 <div class="device-callout"><span class="callout-index">THE BOARD</span><b id="capture-title">Select a player. Open the reasoning.</b><p id="capture-copy">Search the sample board or choose a player.</p></div>
 </div>
-<div class="hero-bottom"><div class="real-tour-controls" role="group" aria-label="Product demo tour"><button data-capture="0" aria-pressed="true">Board &amp; player</button><button data-capture="1" aria-pressed="false">Key insights</button><button data-capture="2" aria-pressed="false">Behind the grade</button><button id="mobile-product-play" class="mobile-product-play" aria-label="Play mobile product animation">Play</button></div><p class="real-caption">Interactive saved examples · not current picks. Explore the reasoning; decide for yourself.</p></div>
+<div class="hero-bottom"><div class="real-tour-controls" role="group" aria-label="Product demo tour"><button data-capture="0" aria-pressed="true">Board &amp; player</button><button data-capture="1" aria-pressed="false">Key insights</button><button data-capture="2" aria-pressed="false">Behind the grade</button><button id="mobile-product-play" class="mobile-product-play" aria-label="Play mobile product animation">Play</button></div><p class="real-caption">Interactive saved examples · not current picks. Explore the reasoning; decide for yourself.</p></div><!--/if:OLDHERO-->
 </div></section>
 <section class="member-carousel" id="members" aria-labelledby="member-heading" aria-roledescription="carousel">
 <div class="wrap review-heading"><div><p class="section-kicker">FROM THE MEMBERS</p><h2 id="member-heading">The research is the difference.</h2></div><div class="review-meta"><a href="/reviews"> <!--if:REVIEWS-->{{RV_LINE}} · <!--/if:REVIEWS-->All reviews</a><div class="review-controls"><button id="review-prev" aria-label="Previous review">‹</button><button id="review-play" aria-label="Pause review carousel">Pause</button><button id="review-next" aria-label="Next review">›</button></div></div></div>
@@ -184,4 +184,4 @@
   <p class="dk-t">then {{PRICE_M}}/mo</p>
 </div>
 
-<script>{{STORY_JS}}</script><!--if:FEAT--><script>{{FEAT_JS}}</script><!--/if:FEAT--></body></html>
+<script>{{STORY_JS}}</script><!--if:FEAT--><script>{{FEAT_JS}}</script><!--/if:FEAT--><!--if:HERO--><script>{{HERO_JS}}</script><!--/if:HERO--></body></html>

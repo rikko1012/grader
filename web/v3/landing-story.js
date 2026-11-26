@@ -243,6 +243,7 @@
 (() => {
  'use strict';
  const $=s=>document.querySelector(s), reduced=matchMedia('(prefers-reduced-motion: reduce)');
+ if(!$('#demo-board')) return;        // the new hero (landing-hero.js) replaces this block
  const players=[
   {name:'Vexite',role:'Star rifler',team:'FlyQuest',opponent:'Eternal Fire',stat:'Kills',period:'Map 1',line:14.5,projection:16.8,chance:65.2,grade:'B+',side:'Over',book:'PrizePicks',record:[3,5,11]},
   {name:'1NVISIBLEE',role:'IGL',team:'Lunacy',opponent:'Sökerorg',stat:'Kills',period:'Maps 1–2',line:29.5,projection:32.7,chance:64.6,grade:'B+',side:'Over',book:'Underdog',record:[3,8,12]},

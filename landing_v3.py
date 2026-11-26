@@ -72,6 +72,17 @@ FEAT_ASSETS = {"FEAT_CSS": ROOT / "web" / "v3" / "landing-features.css", "FEAT_J
 # tabbed block.
 
 
+# The hero (owner 2026-11-26: "the hero must be the true interactive visualization of the product ... no overlap"): one
+# member window - board, player card, slip tray - in normal flow, on the same saved examples as the feature sections
+# (web/v3/landing-hero.*). Replaces the stacked desktop / phone / grade-card collage. SCOUT_LANDING_HERO=0 restores it.
+HERO_ASSETS = {"HERO_CSS": ROOT / "web" / "v3" / "landing-hero.css", "HERO_JS": ROOT / "web" / "v3" / "landing-hero.js"}
+
+
+def hero_enabled():
+    # needs the feature sections: the old tabbed block's script lives with the old hero's
+    return features_enabled() and os.environ.get("SCOUT_LANDING_HERO", "1").strip().lower() not in ("0", "false", "off")
+
+
 def features_enabled(now=None):
     if not story_enabled():
         return False
@@ -144,9 +155,10 @@ def _mt():
             return None
     story = story_enabled()
     template, assets = (STORY_TEMPLATE, STORY_ASSETS) if story else (TEMPLATE, ASSETS)
-    feat = features_enabled()
-    return ((story, feat, template.stat().st_mtime) + tuple(f.stat().st_mtime for f in assets.values())
-            + (tuple(m(f) for f in FEAT_ASSETS.values()) if feat else ()) + (m(FALLBACK),))
+    feat, hero = features_enabled(), hero_enabled()
+    return ((story, feat, hero, template.stat().st_mtime) + tuple(f.stat().st_mtime for f in assets.values())
+            + (tuple(m(f) for f in FEAT_ASSETS.values()) if feat else ())
+            + (tuple(m(f) for f in HERO_ASSETS.values()) if hero else ()) + (m(FALLBACK),))
 
 
 def _template():
@@ -157,6 +169,8 @@ def _template():
         text = template.read_text(encoding="utf-8")
         if story_enabled() and features_enabled():
             assets = {**assets, **FEAT_ASSETS}
+        if hero_enabled():
+            assets = {**assets, **HERO_ASSETS}
         for k, f in assets.items():
             body = f.read_text(encoding="utf-8")
             if f.suffix == ".css":              # source comments are for the repo, not view-source (tokens.css names the old brand)
@@ -1035,7 +1049,8 @@ def build(srv, join_url, fetch=True):
     for name, on in (("FRAME", bool(pick)), ("PHONE", bool(ph)), ("GAP", bool(gp)), ("POOL", bool(pm)), ("SLIP", bool(real)),
                      ("LEDGER", bool(rows)), ("TOTAL", bool(total)), ("REVIEWS", bool(nrv)), ("RVCARDS", bool(cards)),
                      ("BASE", bool(base)), ("INSIDE", bool(gp or pm)), ("FMORE", bool(more_n > 0)),
-                     ("FEAT", features_enabled()), ("OLDFEAT", not features_enabled())):
+                     ("FEAT", features_enabled()), ("OLDFEAT", not features_enabled()),
+                     ("HERO", hero_enabled()), ("OLDHERO", not hero_enabled())):
         out = re.sub(rf"<!--if:{name}-->(.*?)<!--/if:{name}-->", (lambda m: m.group(1)) if on else "", out, flags=re.S)
     out = re.sub(r"\{\{([A-Z_0-9]+)\}\}", lambda m: fill.get(m.group(1), ""), out)
     return out.encode("utf-8")
