@@ -48,7 +48,9 @@ def test_on_replaces_the_tabs_with_five_sections(page, monkeypatch, value):
     assert not doc.images and not doc.scripts                      # still one response: nothing fetched for the demos
     assert all(h[1:] in doc.ids for h in doc.links if h.startswith("#"))
     assert "{{" not in s and "<!--if:" not in s and "<!--/if:" not in s
-    assert s.count(JOIN.replace("&", "&amp;")) >= 9                # every section carries the trial link
+    # nav, hero, the Slip Studio button, pricing, final, dock + the demo's own data-trial; the per-tool "Try it free"
+    # links went with the CRO pass (2026-11-26: they repeated the trial without its terms)
+    assert s.count(JOIN.replace("&", "&amp;")) >= 7 and 'class="fx-try"' not in s
     assert "Every player prop." in s and "hx" in doc.ids and "signin-error" in doc.ids          # the hero is on with them
 
 

@@ -1032,6 +1032,7 @@ def build(srv, join_url, fetch=True):
         "LEDGER_TOTAL": tot_s, "LEDGER_GAP": esc(ledger_gap(inp["record"], sp)), "LEDGER_N": str(total), "LEDGER_W": str(len(tot_s)),
         "REC_SRC": esc(f"{re.sub(r'^https://', '', base)}/record") if base else "the public record",
         "RV_HEAD": head, "RV_CARDS": cards, "RV_N": str(nrv),
+        "RV_AVG": f"{avg:.1f}" if avg is not None else "",          # proof chips: the rating, shown only with its count
         # the one rating line beside the Members H2 (brief 8); the story card carries the 6-man post only (critic round 5)
         "RV_LINE": (f'<span aria-hidden="true"><span class="star">★</span>&nbsp;{avg:.1f} ·&nbsp;</span><span class="sr-only">Rated {avg:.1f} out of 5 from </span>'
                     f'{nrv} reviews, all published' if avg is not None else f"{nrv} reviews, all published"),
@@ -1050,7 +1051,7 @@ def build(srv, join_url, fetch=True):
                      ("LEDGER", bool(rows)), ("TOTAL", bool(total)), ("REVIEWS", bool(nrv)), ("RVCARDS", bool(cards)),
                      ("BASE", bool(base)), ("INSIDE", bool(gp or pm)), ("FMORE", bool(more_n > 0)),
                      ("FEAT", features_enabled()), ("OLDFEAT", not features_enabled()),
-                     ("HERO", hero_enabled()), ("OLDHERO", not hero_enabled())):
+                     ("HERO", hero_enabled()), ("OLDHERO", not hero_enabled()), ("RATING", avg is not None and nrv > 0)):
         out = re.sub(rf"<!--if:{name}-->(.*?)<!--/if:{name}-->", (lambda m: m.group(1)) if on else "", out, flags=re.S)
     out = re.sub(r"\{\{([A-Z_0-9]+)\}\}", lambda m: fill.get(m.group(1), ""), out)
     return out.encode("utf-8")

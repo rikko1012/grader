@@ -48,7 +48,7 @@
     <section class="hx-board" aria-label="Sample board">
       <div class="hx-head"><div><h3>CS2 player props</h3><p>PGL Major Singapore · Kills, Maps 1–2</p></div>
         <div class="hx-apps" role="group" aria-label="App">${['pp', 'ud'].map(a => `<button type="button" data-app="${a}" aria-pressed="false">${APP[a]}</button>`).join('')}</div></div>
-      <div class="hx-cols" aria-hidden="true"><span>Player</span><span>Line</span><span>Grader side</span><span>Grade</span><span></span></div>
+      <div class="hx-cols" aria-hidden="true"><span>Player</span><span>Line</span><span>Side · model est.</span><span>Grade</span><span></span></div>
       <ul class="hx-rows">${ROWS.map(r => `<li class="hx-row" data-id="${r.id}">
         <button type="button" class="hx-pick" data-act="pick" aria-label="Open ${esc(r.name)}"><span class="hx-av" aria-hidden="true">${esc(r.name[0].toUpperCase())}</span><span class="hx-who"><b>${esc(r.name)}</b><small>${esc(r.team)} · ${esc(r.role)}</small></span></button>
         <span class="hx-ln"></span><span class="hx-sd"></span><span class="hx-gr"></span>
@@ -59,9 +59,8 @@
   <div class="hx-tray" aria-live="polite"></div>
 </div>
 <div class="hx-under"><button type="button" class="hx-replay" data-act="replay"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v2.8h2.8"/></svg>Replay</button>
-<p>Saved examples from the member board, Nov 25 · not current picks. Click any player, switch apps, build the slip.</p></div>`;
-  const trust = document.querySelector('.hx-hero .hero-trust');
-  if (trust) root.appendChild(trust);      // the trust row moves under the window: the product sits higher on the first screen
+<p>Saved examples from the member board, Nov 25 · not current picks. <span class="hx-click">Click</span><span class="hx-tap">Tap</span> any player, switch apps, build the slip.</p></div>`;
+
 
   function paint() {
     $$('.hx-apps button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.app === S.app)));
@@ -70,7 +69,7 @@
       li.classList.toggle('on', r.id === S.sel);
       $('.hx-pick', li).setAttribute('aria-pressed', String(r.id === S.sel));
       $('.hx-ln', li).innerHTML = `<b>${o.line}</b>`;
-      $('.hx-sd', li).innerHTML = `${side(o.side)}<b>${o.p.toFixed(1)}%</b>`;
+      $('.hx-sd', li).innerHTML = `${side(o.side)}<b>${o.p.toFixed(1)}%</b><small class="hx-est">est.</small>`;
       $('.hx-gr', li).innerHTML = grade(o);
       const add = $('.hx-add', li), on = inSlip(r.id);
       add.classList.toggle('on', on);

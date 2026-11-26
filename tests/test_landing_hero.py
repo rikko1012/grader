@@ -117,3 +117,38 @@ def test_a_visitor_click_takes_over_from_the_tour(browser, live):
     assert p.evaluate("document.getElementById('hx').classList.contains('hx-auto')")
     assert not errs, errs
     c.close()
+
+
+def test_cro_pass_structure(page, monkeypatch):
+    """The research pass (2026-11-26): proof chips with the page's own numbers, the owner's micro-copy under every primary
+    button, reviews after the record, weekly + renewal terms inside the pricing card, the objection FAQs, the final CTA."""
+    monkeypatch.setenv("SCOUT_LANDING_FEATURES", "1")
+    monkeypatch.delenv("SCOUT_LANDING_HERO", raising=False)
+    landing_v3.reset()
+    s = render(page)
+    assert 'class="hx-page"' in s
+    micro = "1 day free · Then $24.99/mo · Cancel anytime"
+    assert s.count(micro) >= 3                                   # hero, Slip Studio, final
+    total = re.search(r'data-to="(\d+)"', s)
+    rec = re.search(r'<a href="#record"><span><b>([\d,]+)</b> graded picks, losses included', s)
+    assert rec and s.count(rec.group(0)) == 2                    # hero + final, the record's own count
+    assert re.search(r'<caption>' + re.escape(rec.group(1)) + r' graded picks, by sport</caption>', s)
+    assert re.search(r'<a href="#members"><span><span class="star" aria-hidden="true">★</span> <b>\d\.\d</b> · \d+ member reviews', s)
+    assert s.index('id="record"') < s.index('id="members"') < s.index('id="pricing"') < s.index('id="faq"') < s.index('id="final"')
+    assert s.count('id="members"') == 1 and "hero-trust" in s       # markup kept; hidden in this layout
+    card = s[s.index('id="plan"'):s.index('id="faq"')]
+    assert "Prefer weekly?" in card and "Renews monthly until you cancel" in card
+    for q in ("Where do the grades come from?", "What does Lean mean?", "Which sports and apps?", "Does it work on my phone?"):
+        assert q in s
+    assert "Read the case<br>before you play the line." in s and "Grades are chances, not certainties." in s
+    visible = re.sub(r"(?s)<script.*?</script>|<style.*?</style>", "", s)       # the old demo's scripts carry disclaimers
+    assert not re.search(r"hit rate|guarantee|lock of|sure thing|most accurate", visible, re.I)
+    assert "{{" not in s and "<!--if:" not in s
+
+
+def test_no_rating_chip_without_a_rating(page, monkeypatch):
+    monkeypatch.setenv("SCOUT_LANDING_FEATURES", "1")
+    landing_v3.reset()
+    monkeypatch.setattr(landing_v3, "wall", lambda reviews: ("", "", 0, None))
+    s = render(page)
+    assert 'href="#members"><span><span class="star"' not in s and "member reviews</span>" not in s
