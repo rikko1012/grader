@@ -68,7 +68,7 @@ def run(a):
     raise SystemExit(f"unknown model job {a.job}")
 
 
-def write_snapshot(now=None):
+def write_snapshot(now=None, *, include_reports=True):
     """Precomputed answers for sports/api_model.py: forecasts of not-started events (latest per CURRENT offer revision x
     version) with their grade-policy output, PMFs of sm-1 / mi-1 (trimmed tails < 1e-9), registry, study summaries,
     scorecard.
@@ -76,8 +76,7 @@ def write_snapshot(now=None):
     Bounded (Starter, 2026-10-24): reads only the forecasts of not-started events (records_event index), keeps those
     made for the CURRENT offer revision (the one board / card / slip read - store.CURRENT_SQL), and reads saved
     inputs only for the forecasts it keeps. Memory follows the current board, never the stored-forecast history."""
-    from .. import features
-    from . import forward, learning
+    from . import forward
     now = now or now_utc()
     out = {"written_at": now, "leagues": {}}
     try:
@@ -121,6 +120,20 @@ def write_snapshot(now=None):
     icon.close()
     if scon is not None:
         scon.close()
+    if include_reports:
+        write_reports(now=now)
+    return out
+
+
+def write_reports(now=None):
+    """Historical admin reports, separate from latency-sensitive forecast publication.
+
+    Keep their own timestamp: a queued or failed report must not make an old
+    audit look newly computed just because current forecasts were published.
+    """
+    from .. import features
+    from . import forward, learning
+    now = now or now_utc()
     res_dir = Path(__file__).resolve().parents[1] / "research" / "results"
     studies = {}
     for p in sorted(res_dir.glob("model_study_*.json")):
@@ -160,7 +173,7 @@ def write_snapshot(now=None):
                                                       "grade_bands": bands, "shadow": shadow_state,
                                                       "diagnostics": diag, "forecast_run": _last_forecast_run(),
                                                       "grades": grades})
-    return out
+    return {"written_at": now, "reports": ["model_meta.json", "admin_learning.json"]}
 
 
 def _chunks(xs, n):
