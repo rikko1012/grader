@@ -348,7 +348,7 @@ def default_jobs():
         # Historical admin reporting must not extend the exclusive forward job.
         # Own timestamp and child process; a failure keeps the previous report.
         "model-report": dict(argv=_py("-m", "sports.model.report"), every_s=3600,
-                             timeout_s=900, flag="SPORTS_FORECAST", cap_mb=150,
+                             timeout_s=900, flag="SPORTS_FORECAST", cap_mb=250,
                              cls=HEAVY, prio=7, locks=("model-daily", "model-report"),
                              yields_to=("settle", "settle-post", "history")),
         # model (worker `train` commands need SPORTS_TRAIN - foundation rule)
