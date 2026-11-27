@@ -918,3 +918,17 @@ rows. Round 3 tests non-linear and precipitation hypotheses that were never test
    grade until a forward score on NWS kickoff forecasts (>= 48 NFL games after the challenger freeze) and gate F at
    real offered lines pass and the owner releases it. A failing factor stays shown at weight 0. Results are written to
    sports/research/results/wx3_nfl.json whatever they are.
+
+### A14 result (2026-11-27): 0 of 13 pass - no weather factor moves an NFL grade
+Run after an independent check found two departures from the A14 text (wind parser rejected spelled-out directions
+such as "South 13 mph"; test folds kept postseason games); both fixed before the result below, verdict unchanged
+(the first run was also 0 / 13). Results: sports/research/results/wx3_nfl.json.
+- Closest: wx.cold_hi | rec (CRPS -0.0003 [-0.00056, -0.00003], 4/4 folds, Holm p 0.234); wx.wind_hi | pass_yds
+  (-0.080 [-0.233, +0.076], 3/4 folds, Holm p 1.0). Every test fails (a); several also fail (b) - (d).
+- Power (post-hoc, not a gate): pass_yds wind has ~215 high-wind test rows; the smallest pooled effect detectable under
+  Holm is ~0.26 CRPS, larger than any achievable gain. Post-hoc observation: live sm-1 over-projects pass_yds on rows
+  with wind > 12 mph (mean residual about -17 yds, game-clustered CI about [-30, -5], first run's folds). This is a
+  hypothesis for a NEW single pre-registered test, not evidence that can change this verdict.
+- Correction to the A14 preamble: the sm-2 L2 local score had 0 of 97 outdoor pass_yds rows with a real wind value
+  (all on the missing indicator; nflverse schedule wind is absent for played 2026 games), so that L2 fail says nothing
+  about wind either way.

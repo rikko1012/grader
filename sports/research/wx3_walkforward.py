@@ -27,7 +27,7 @@ RESULTS = Path(__file__).resolve().parent / "results" / "wx3_nfl.json"
 SEASONS = (2023, 2024, 2025, 2026)
 B, SEED = 2000, 1126
 WET = re.compile(r"rain|shower|drizzle|snow|sleet|flurr|wintry|thunder", re.I)
-WIND = re.compile(r"Wind:\s*(?:[A-Za-z]{0,3}\s*)?(\d+)\s*mph", re.I)
+WIND = re.compile(r"Wind:\s*(?:[A-Za-z]+\s*)?(\d+)\s*mph", re.I)   # any direction word (A14 1)
 CALM = re.compile(r"Wind:\s*Calm", re.I)
 TEMP = re.compile(r"Temp:\s*(-?\d+)\s*°?\s*F", re.I)
 COVERED = {"dome", "closed"}
@@ -146,10 +146,11 @@ def main():
         el = model.eligible(df, mk) & np.isfinite(df.f(f"y_{mk}"))
         start = np.asarray(df["start_utc"]).astype(str)
         season = np.asarray(df["season"]).astype(int)
+        regular = np.asarray(df["season_type"]).astype(str) == "regular"   # A14 5: test folds are regular season
         lo, ks = dists.grid(mk)
         rows_d, rows_ll, rows_g, rows_nz, folds = [], [], [], [], {}
         for S in SEASONS:
-            te_m = el & (season == S)
+            te_m = el & (season == S) & regular
             if not te_m.any():
                 continue
             first = min(start[te_m])
