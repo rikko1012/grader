@@ -58,11 +58,14 @@ MEMBER, ADMIN = "member", "admin"
 ROUTES = {
     "/api/sports/expansion/board": ("sports.expansion_board:http_board", MEMBER, ("GET",)),
     "/api/sports/expansion/history": ("sports.expansion_history:history", MEMBER, ("GET",)),
+    "/api/sports/expansion/settle": ("sports.expansion_settle:http_settle", MEMBER, ("GET",)),
+    "/api/sports/expansion/record": ("sports.expansion_settle:http_record", MEMBER, ("GET",)),
     "/api/sports/market-tools": ("sports.api_market_tools:view", MEMBER, ("GET",)),
     "/api/sports/game-books": ("sports.game_books:view", MEMBER, ("GET",)),
     "/api/sports/status": ("sports.web:status", MEMBER, ("GET",)),
     "/api/sports/offers": ("sports.web:offers", MEMBER, ("GET",)),
     "/api/sports/admin/coverage": ("sports.web:admin_coverage", ADMIN, ("GET",)),
+    "/api/sports/admin/expansion/results": ("sports.expansion_settle:http_admin_results", ADMIN, ("GET",)),
     # ---- agent routes below: ONE line each, handler in sports/api_<NAME>.py ----
     "/api/sports/model/*": ("sports.api_model:model", MEMBER, ("GET",)),
     "/api/sports/admin/model/*": ("sports.api_model:admin_model", ADMIN, ("GET",)),

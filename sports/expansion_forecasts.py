@@ -568,6 +568,8 @@ def connect(sport):
     c.execute('CREATE TABLE IF NOT EXISTS forecasts(id TEXT PRIMARY KEY, offer_key TEXT, competition TEXT, event_id TEXT, start TEXT, payload TEXT)')
     c.execute('CREATE INDEX IF NOT EXISTS forecast_events ON forecasts(competition,event_id,start)')
     c.execute('CREATE TABLE IF NOT EXISTS reviews(id TEXT PRIMARY KEY, forecast_id TEXT, made_at TEXT, payload TEXT)')
+    # slip settlement / record / export reads (sports/expansion_settle.py) look reviews up by forecast id
+    c.execute('CREATE INDEX IF NOT EXISTS reviews_forecast ON reviews(forecast_id)')
     c.commit()
     return c
 
@@ -869,7 +871,9 @@ def settle(sport, now=None, budget_s=3):
                           'won':None if outcome in (None,'push') else outcome==f['side'],
                           'projection_error':None if actual is None else f['projection']-actual,
                           'result_ids':result_ids,'known_at':max(o.known_at for _,o in candidates),
-                          'kind':'model_evaluation','book_settlement':False}
+                          'kind':'model_evaluation','book_settlement':False,
+                          # slip legs (expansion_settle): every source saying "did not play" voids a member's leg
+                          'participation':sorted({str(o.participation) for _,o in candidates})}
                 added += c.execute('INSERT OR IGNORE INTO reviews VALUES (?,?,?,?)',
                                    (rid,f['id'],now,encode(report))).rowcount
             c.execute('INSERT OR REPLACE INTO checked VALUES (?,?)',(comp+'|'+eid,now))

@@ -61,12 +61,12 @@ VOID_SIBLING_CHECKS = 20
 SETTLE_LEGS = 400                       # other-sport keys read per sport per pass; a longer list takes more passes
 REOPENED = "reopened"
 FINAL = ("settled", "push", "void")
-SPORTS = ("cs2", "lol", "nba", "nfl")
-SPORT_LABEL = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL"}
+SPORTS = ("cs2", "lol", "nba", "nfl", "soccer", "tennis")
+SPORT_LABEL = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL", "soccer": "Soccer", "tennis": "Tennis"}
 
 RECEIPTS_DDL = """CREATE TABLE IF NOT EXISTS receipts(
   receipt_id TEXT PRIMARY KEY, member TEXT NOT NULL, slip_id TEXT NOT NULL, leg_no INTEGER NOT NULL, tracked_at TEXT NOT NULL,
-  sport TEXT NOT NULL CHECK(sport IN ('cs2','lol','nba','nfl')), platform TEXT NOT NULL, row_id TEXT NOT NULL, offer_rev TEXT NOT NULL, side TEXT NOT NULL,
+  sport TEXT NOT NULL CHECK(sport IN ('cs2','lol','nba','nfl','soccer','tennis')), platform TEXT NOT NULL, row_id TEXT NOT NULL, offer_rev TEXT NOT NULL, side TEXT NOT NULL,
   line REAL NOT NULL, line_type TEXT NOT NULL, pick_id INTEGER, forecast_id NOT NULL, match_slug TEXT NOT NULL,
   match_id TEXT, match_key TEXT NOT NULL, nick TEXT NOT NULL, prop TEXT NOT NULL, scope TEXT NOT NULL, start_utc TEXT, model_version TEXT,
   scratch INTEGER NOT NULL DEFAULT 0, payload TEXT NOT NULL, settle_key TEXT,
@@ -157,17 +157,19 @@ class Store:
 
     @staticmethod
     def _migrate(con):
-        """A database written while receipts took CS2 only: one transaction copies every row into the table that takes all four
-        sports, or changes nothing. The append-only triggers are made again by the caller, and receipts stay as written."""
+        """A database written while receipts took fewer sports (CS2 only, then the four of 2026-10; soccer / tennis since
+        2026-11-26): one transaction copies every row into the table that takes every sport, or changes nothing. The append-only
+        triggers are made again by the caller, and receipts stay as written."""
         cols = [r[1] for r in con.execute("PRAGMA table_info(member_state)")]
         if cols and "watch" not in cols:
             con.execute("ALTER TABLE member_state ADD COLUMN watch TEXT")
         if cols and "studio" not in cols:
             con.execute("ALTER TABLE member_state ADD COLUMN studio TEXT")
         row = con.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'receipts'").fetchone()
-        if row is None or "'lol'" in row["sql"]:
+        if row is None or "'tennis'" in row["sql"]:
             return
-        names = ", ".join(RECEIPT_COLS)
+        have = {r[1] for r in con.execute("PRAGMA table_info(receipts)")}
+        names = ", ".join(RECEIPT_COLS + (("settle_key",) if "settle_key" in have else ()))   # settle_key: the four-sport table's own column
         con.execute("BEGIN IMMEDIATE")
         try:
             before = con.execute("SELECT COUNT(*) FROM receipts").fetchone()[0]
