@@ -345,6 +345,12 @@ def default_jobs():
                               # most the stall replays allow (test_sports_stall_1108: at 900 MB nothing may run beside the waiting
                               # exclusive job inside the 1,200 MB child budget and the collectors back up).
                               flag="SPORTS_FORECAST", cap_mb=472 if std else 340, cls=EXCLUSIVE, prio=5),
+        # Historical admin reporting must not extend the exclusive forward job.
+        # Own timestamp and child process; a failure keeps the previous report.
+        "model-report": dict(argv=_py("-m", "sports.model.report"), every_s=3600,
+                             timeout_s=900, flag="SPORTS_FORECAST", cap_mb=250,
+                             cls=HEAVY, prio=7, locks=("model-daily", "model-report"),
+                             yields_to=("settle", "settle-post", "history")),
         # model (worker `train` commands need SPORTS_TRAIN - foundation rule)
         "model-forecast": dict(argv=_py("-m", "sports.worker", "train", "forecast", *lg), every_s=3600, timeout_s=900,
                                flag="SPORTS_TRAIN", cap_mb=340, cls=EXCLUSIVE, prio=5),   # 272-311 MB

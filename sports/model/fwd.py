@@ -409,7 +409,7 @@ def run(leagues=None, forecast_at=None, log=print):
     out["forecasts_added"] = after - before
     graded = [lg for lg, r in out["leagues"].items() if r.get("graded_or_staked")]
     out["withheld_check"] = "ok: no grade letter, stake 0" if not graded else f"VIOLATION in {graded}"
-    out["snapshot"] = pipeline.write_snapshot(now=forecast_at)
+    out["snapshot"] = pipeline.write_snapshot(now=forecast_at, include_reports=False)
     out["finished_at"] = now_utc()
     out["ran_s"] = round(time.time() - t0, 1)
     out["peak_rss_mb"] = _peak_rss_mb()
