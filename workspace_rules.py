@@ -41,9 +41,11 @@ EV_MIN_MATCHES = 300
 EV_MAX_GAP = 0.03
 EV_MAX_AGE_H = 24
 EV_NOT_VALIDATED = {"lol": "LoL chances have no settled record at real lines yet.", "nba": "Grader rates EV only on chances that passed its settled-results check; NBA chances have not.",
-                    "nfl": "Grader rates EV only on chances that passed its settled-results check; NFL chances have not."}
+                    "nfl": "Grader rates EV only on chances that passed its settled-results check; NFL chances have not.",
+                    "soccer": "Grader rates EV only on chances that passed its settled-results check; soccer chances have not.",
+                    "tennis": "Grader rates EV only on chances that passed its settled-results check; tennis chances have not."}
 
-SPORT = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL"}
+SPORT = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL", "soccer": "Soccer", "tennis": "Tennis"}
 LABEL = {"prizepicks": "PrizePicks", "underdog": "Underdog"}
 STATUS_VALID, STATUS_REFUSED, STATUS_NOT_PUBLISHED = "valid", "refused", "not_published"
 CHECK_COMBINATION = 3                   # index in the five member checks
@@ -119,7 +121,7 @@ def _norm(s):
 
 
 def _member_text(s):
-    return re.sub(r"\b(?:lol|nba|nfl):", "", str(s).replace(" - ", ". "))     # a team key carries its sport; the member reads the team
+    return re.sub(r"\b(?:lol|nba|nfl|soccer|tennis):", "", str(s).replace(" - ", ". "))     # a team key carries its sport; the member reads the team
 
 
 def _used(platform, *keys):
