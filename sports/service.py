@@ -257,7 +257,9 @@ def feed_state():
 ALERT_RULES = {                                         # sports/RUNBOOK.md section 9 - thresholds in one place
     "feed_stale_min": float(os.environ.get("SPORTS_ALERT_FEED_STALE_MIN", "45")),     # pick'em feeds: 10-min cadence
     "kalshi_stale_min": float(os.environ.get("SPORTS_ALERT_KALSHI_STALE_MIN", "150")),  # Kalshi: hourly (Starter)
-    "store_warn_mb": float(os.environ.get("SPORTS_ALERT_STORE_MB", "6000")),
+    # No fixed default tied to the former small disk. Explicit lower thresholds
+    # remain supported; otherwise warn at 80% of the actual ingestion cap.
+    "store_warn_mb": float(os.environ["SPORTS_ALERT_STORE_MB"]) if "SPORTS_ALERT_STORE_MB" in os.environ else None,
     "rss_warn_frac": 0.8,
 }
 
@@ -307,9 +309,12 @@ def alerts(o):
         stop_mb = store_cap_mb(float(os.environ.get("SPORTS_STORE_MAX_MB", "1500")))[0]   # read now, as before
     except Exception:                                   # noqa: BLE001 - the alert never breaks ops
         stop_mb = float(os.environ.get("SPORTS_STORE_MAX_MB", "1500"))
+    warn_mb = 0.8 * stop_mb
+    if ALERT_RULES["store_warn_mb"] is not None:
+        warn_mb = min(ALERT_RULES["store_warn_mb"], warn_mb)
     if mb is not None and mb >= stop_mb:
         out.append({"level": "page", "code": "store_full_ingest_paused", "detail": {"store_mb": mb, "max_mb": stop_mb}})
-    elif mb is not None and mb >= min(ALERT_RULES["store_warn_mb"], 0.8 * stop_mb):
+    elif mb is not None and mb >= warn_mb:
         out.append({"level": "warn", "code": "store_large", "detail": {"store_mb": mb, "max_mb": stop_mb}})
     disk = feeds.get("disk") or {}
     if disk.get("used_pct") is not None and disk["used_pct"] >= 90:

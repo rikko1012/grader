@@ -328,6 +328,9 @@ def test_flag_unset_board_is_byte_identical_with_or_without_a_stored_nba8_foreca
     from sports import snapshots
     monkeypatch.delenv("NBA_STATS8", raising=False)
     now = "2026-10-23T21:00:00Z"
+    # `now` is the data's as-of time; snapshots also stamps the real build time.
+    # Compare identical clocks, including when two builds cross a second boundary.
+    monkeypatch.setattr(snapshots, "now_utc", lambda: now)
     for name, with_fc in (("without", False), ("with", True)):
         with store.opened(tmp_path / f"{name}.db") as con:
             if with_fc:
