@@ -293,3 +293,26 @@ def test_packed_plays_are_lossless_and_legacy_rows_move_over_verified(gdb, nba_g
     assert any(p["x"] is not None for p in before["401809234"])    # shot locations survive
     assert any(p["athletes"] for p in before["401872996"])
     assert backfill_job.compact(gdb).startswith(("skipped", "vacuumed"))
+
+
+def test_weather_venue_aliases_and_covered_roofs():
+    """2026-11-26 audit: ESPN sends Kansas City's venue as "Arrowhead Stadium" (exact lookup missed every Chiefs home
+    game); SoFi's fixed canopy is 'dome' in the nflverse training rows, so live rows must treat it as covered too."""
+    from sports.games import weather
+    assert weather.coords("Arrowhead Stadium") == weather.STADIUMS["GEHA Field at Arrowhead Stadium"]
+    assert weather.coords("  arrowhead   stadium ") == weather.coords("GEHA Field at Arrowhead Stadium")
+    assert weather.coords("lambeau field") == (44.501, -88.062)
+    assert weather.covered("SoFi Stadium") and not weather.covered("Lambeau Field") and not weather.covered(None)
+    assert weather.coords("Allianz Arena") is None
+
+
+def test_weather_snapshot_covered_roof_is_indoor(monkeypatch):
+    from sports.games import collect, weather
+
+    saved = {}
+    monkeypatch.setattr(collect, "_venue", lambda db, lg, vid: {"indoor": False, "name": "SoFi Stadium"})
+    monkeypatch.setattr(collect.store, "save_snapshot", lambda db, lg, eid, kind, src, data, now=None: saved.update(data) or True)
+    monkeypatch.setattr(weather, "forecast", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no NWS call")))
+    body = {"gameInfo": {"venue": {"id": "1", "fullName": "SoFi Stadium"}}}
+    assert collect._weather(None, {"key": "nfl"}, {"id": "e", "start": "2026-11-30T21:25:00Z"}, body, lambda: None)
+    assert saved == {"indoor": True}

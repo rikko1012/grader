@@ -267,9 +267,9 @@ def _weather(db, lg, e, body, clock):
     """NWS kickoff forecast for an outdoor US game -> snapshot (indoor and foreign venues get none)."""
     v = (body.get("gameInfo") or {}).get("venue") or {}
     info = _venue(db, lg, v.get("id")) or {}
-    if info.get("indoor"):
+    if info.get("indoor") or weather.covered(v.get("fullName") or info.get("name")):
         return store.save_snapshot(db, lg["key"], e["id"], "weather", "nws", {"indoor": True}, now=clock())
-    c = weather.coords(v.get("fullName"))
+    c = weather.coords(v.get("fullName")) or weather.coords(info.get("name"))
     if not c:
         return False
     cache = json.loads(store.setting(db, "nws_points", "{}"))

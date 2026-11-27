@@ -1,0 +1,164 @@
+{
+ "register": "REGISTER.md A5 8",
+ "freeze_at": "2026-10-24T22:14:08Z",
+ "sm2": "e5751bf215095a10",
+ "sm1": "cc56aeb8b88c31d8",
+ "markets": {
+  "rush_att": {
+   "rows": 218,
+   "games": 71,
+   "crps_sm2_minus_sm1": {
+    "diff": -0.03921709551100188,
+    "ci_game": [
+     -0.11627293372579527,
+     0.029620365420429142
+    ]
+   },
+   "logloss_ref_sm2_minus_sm1": {
+    "diff": -0.006042414093439239,
+    "ci_game": [
+     -0.022621510489717275,
+     0.010813251480778753
+    ]
+   },
+   "calibration": {
+    "ece": 0.021113640426322567,
+    "in_the_large": 0.002938392216700836
+   },
+   "cov80": 0.7442237669834378,
+   "criteria": {
+    "a_crps_ci_below_0": false,
+    "b_ref_logloss_not_worse": true,
+    "c_calibration": true,
+    "d_cov80": false
+   },
+   "history_part_passed": false,
+   "next": "gate F at real offered lines on the shadow scorecard; owner release decides"
+  },
+  "rush_yds": {
+   "rows": 218,
+   "games": 71,
+   "crps_sm2_minus_sm1": {
+    "diff": 0.12038295313574998,
+    "ci_game": [
+     -0.1370016128808966,
+     0.38561809243061684
+    ]
+   },
+   "logloss_ref_sm2_minus_sm1": {
+    "diff": 0.0031622686098857857,
+    "ci_game": [
+     -0.009912140110506007,
+     0.016318230269966292
+    ]
+   },
+   "calibration": {
+    "ece": 0.04840283455125664,
+    "in_the_large": -0.006447713257586307
+   },
+   "cov80": 0.7626164152881508,
+   "criteria": {
+    "a_crps_ci_below_0": false,
+    "b_ref_logloss_not_worse": false,
+    "c_calibration": false,
+    "d_cov80": true
+   },
+   "history_part_passed": false,
+   "next": "gate F at real offered lines on the shadow scorecard; owner release decides"
+  },
+  "pass_yds": {
+   "rows": 145,
+   "games": 69,
+   "crps_sm2_minus_sm1": {
+    "diff": -0.2859829093784733,
+    "ci_game": [
+     -0.8350098385246477,
+     0.226702313251991
+    ]
+   },
+   "logloss_ref_sm2_minus_sm1": {
+    "diff": -0.002745431265644437,
+    "ci_game": [
+     -0.012175247407408643,
+     0.006455940497828341
+    ]
+   },
+   "calibration": {
+    "ece": 0.03413904333522558,
+    "in_the_large": -0.009413556375389542
+   },
+   "cov80": 0.8275862068965522,
+   "criteria": {
+    "a_crps_ci_below_0": false,
+    "b_ref_logloss_not_worse": true,
+    "c_calibration": false,
+    "d_cov80": true
+   },
+   "history_part_passed": false,
+   "next": "gate F at real offered lines on the shadow scorecard; owner release decides"
+  },
+  "rec": {
+   "rows": 623,
+   "games": 71,
+   "crps_sm2_minus_sm1": {
+    "diff": 0.0012077773094576472,
+    "ci_game": [
+     -0.002086580695406804,
+     0.004483774478220557
+    ]
+   },
+   "logloss_ref_sm2_minus_sm1": {
+    "diff": -0.0003947919692189159,
+    "ci_game": [
+     -0.002823016034723816,
+     0.002047720022652118
+    ]
+   },
+   "calibration": {
+    "ece": 0.01071476467002056,
+    "in_the_large": -0.009305971135165458
+   },
+   "cov80": 0.7942234255299326,
+   "criteria": {
+    "a_crps_ci_below_0": false,
+    "b_ref_logloss_not_worse": true,
+    "c_calibration": true,
+    "d_cov80": true
+   },
+   "history_part_passed": false,
+   "next": "gate F at real offered lines on the shadow scorecard; owner release decides"
+  },
+  "rec_yds": {
+   "rows": 623,
+   "games": 71,
+   "crps_sm2_minus_sm1": {
+    "diff": -0.057479957013963544,
+    "ci_game": [
+     -0.16063095630253404,
+     0.04227994992138271
+    ]
+   },
+   "logloss_ref_sm2_minus_sm1": {
+    "diff": -0.001451328236318139,
+    "ci_game": [
+     -0.0056978869671504674,
+     0.0028955610960081403
+    ]
+   },
+   "calibration": {
+    "ece": 0.034618709201618414,
+    "in_the_large": 0.010777904417257067
+   },
+   "cov80": 0.7776555681587344,
+   "criteria": {
+    "a_crps_ci_below_0": false,
+    "b_ref_logloss_not_worse": true,
+    "c_calibration": false,
+    "d_cov80": true
+   },
+   "history_part_passed": false,
+   "next": "gate F at real offered lines on the shadow scorecard; owner release decides"
+  }
+ },
+ "games_at_trigger": 71
+}

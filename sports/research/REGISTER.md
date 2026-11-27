@@ -885,3 +885,50 @@ Code: `sports/model/nflfix.py`, wired in `forward.forecast_league` (NFL only) an
    shares one forecast_at, so "fresh" reduces to the variant test. p_side is read from the RAW sm-1 PMF at the
    line (never a capped chance); start_utc is logged so a P1 run per game can be chosen later. Promotion needs settled forward rows over several
    Sundays (the confirmation rests on 11-15: 152 of 179 kept rows) and an owner decision on the 17% volume.
+
+## Amendment A14 - wx-3 NFL weather round 3 (registered 2026-11-27 UTC, BEFORE any wx-3 feature was computed against outcomes)
+
+Owner request 2026-11-26: "take into account weather issues for football now". Status before this amendment: no live
+NFL market uses weather (sm-1 artifact cc56aeb8b88c31d8); the one weather pass (A5 round 2, pass_yds linear wind) FAILED
+its L2 forward score (run 2026-11-27 on a locally rebuilt ds-1 from nflverse, 69 games after the sm-2 freeze: CRPS
+sm2-sm1 -0.286 [-0.835, +0.227], ECE 0.034). Caveat found while setting this up: the nflverse schedule has wind / temp for
+only 43 of 177 outdoor 2026 games and 107 of 188 outdoor 2022 games, so that L2 score saw real wind on a minority of
+rows. Round 3 tests non-linear and precipitation hypotheses that were never tested, with the weather gaps filled.
+
+1. **Weather values (game level, frozen).** outdoor = nflverse roof not in {dome, closed}; SoFi Stadium games count as
+   covered (roof 'dome' in nflverse). Wind / temp = nflverse schedule value when present, else parsed from the
+   play-by-play `weather` text ("Wind: <dir> N mph" -> N; "Wind: Calm" or "C 0" -> 0; "Temp: N° F" -> N). Wet = the
+   `weather` text matches /rain|shower|drizzle|snow|sleet|flurr|wintry|thunder/i. Indoor rows: all features 0.
+   Outdoor rows with no value after the fill: missing -> the existing design indicator (model.design).
+2. **Features.** wx.wind_hi = max(0, wind - 12) mph; wx.cold_hi = max(0, 32 - temp) °F; wx.wet = 0/1.
+3. **Tests (13).** wind_hi, cold_hi, wet on pass_yds, rec_yds, rec; wind_hi, wet on rush_att, rush_yds.
+   Hypothesised sign: negative on pass_yds / rec_yds / rec; positive on rush_att; rush_yds two-sided.
+4. **Model.** Each market's live sm-1 structure (features, family, half-lives from sm1_nfl.json), refitted per fold;
+   the candidate adds the one feature to the GLM. Calibration (1, 1) for both arms (paired, no tuning).
+5. **Folds.** Expanding walk-forward by season: test 2023, 2024, 2025, 2026 (regular season, final games on the
+   2026-11-27 nflverse files); train = eligible rows that started before the test season's first game. Disclosure:
+   2026 weeks 1-7 were already used as sm-1's locked window; no wx-3 feature has been scored on them.
+6. **Metrics.** Paired per-row CRPS (candidate - base), aggregated per game, pooled over folds; 95% game-clustered
+   bootstrap (2,000 resamples, seed 1126) and a one-sided bootstrap p. Log loss at the registered reference line
+   floor(mean of last <= 10) + 0.5. Descriptive: the same diff on rows where the feature is non-zero.
+7. **Pass (all four).** (a) Holm-adjusted one-sided p < 0.05 across the 13 tests; (b) pooled reference log-loss diff
+   <= 0; (c) CRPS diff < 0 in at least 3 of 4 folds; (d) the fitted coefficient has the hypothesised sign in every fold
+   (rush_yds: the same sign in every fold).
+8. **What a pass means.** A passing factor is a registered candidate for a weather challenger (shadow); it moves no
+   grade until a forward score on NWS kickoff forecasts (>= 48 NFL games after the challenger freeze) and gate F at
+   real offered lines pass and the owner releases it. A failing factor stays shown at weight 0. Results are written to
+   sports/research/results/wx3_nfl.json whatever they are.
+
+### A14 result (2026-11-27): 0 of 13 pass - no weather factor moves an NFL grade
+Run after an independent check found two departures from the A14 text (wind parser rejected spelled-out directions
+such as "South 13 mph"; test folds kept postseason games); both fixed before the result below, verdict unchanged
+(the first run was also 0 / 13). Results: sports/research/results/wx3_nfl.json.
+- Closest: wx.cold_hi | rec (CRPS -0.0003 [-0.00056, -0.00003], 4/4 folds, Holm p 0.234); wx.wind_hi | pass_yds
+  (-0.080 [-0.233, +0.076], 3/4 folds, Holm p 1.0). Every test fails (a); several also fail (b) - (d).
+- Power (post-hoc, not a gate): pass_yds wind has ~215 high-wind test rows; the smallest pooled effect detectable under
+  Holm is ~0.26 CRPS, larger than any achievable gain. Post-hoc observation: live sm-1 over-projects pass_yds on rows
+  with wind > 12 mph (mean residual about -17 yds, game-clustered CI about [-30, -5], first run's folds). This is a
+  hypothesis for a NEW single pre-registered test, not evidence that can change this verdict.
+- Correction to the A14 preamble: the sm-2 L2 local score had 0 of 97 outdoor pass_yds rows with a real wind value
+  (all on the missing indicator; nflverse schedule wind is absent for played 2026 games), so that L2 fail says nothing
+  about wind either way.
