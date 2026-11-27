@@ -152,3 +152,16 @@ def test_no_rating_chip_without_a_rating(page, monkeypatch):
     monkeypatch.setattr(landing_v3, "wall", lambda reviews: ("", "", 0, None))
     s = render(page)
     assert 'href="#members"><span><span class="star"' not in s and "member reviews</span>" not in s
+
+
+def test_footer_compliance_line(page, monkeypatch):
+    """Owner 2026-11-26: the footer says who we are not, the age rule and the helpline, on every landing version."""
+    for hero in ("1", "0"):
+        monkeypatch.setenv("SCOUT_LANDING_FEATURES", "1")
+        monkeypatch.setenv("SCOUT_LANDING_HERO", hero)
+        landing_v3.reset()
+        s = render(page)
+        foot = s[s.index('<footer class="foot">'):s.index("</footer>")]
+        assert "Not affiliated with PrizePicks or Underdog." in foot
+        assert "18+ only (21+ where local law requires)." in foot
+        assert '<a href="tel:18004262537">1-800-GAMBLER</a>' in foot
