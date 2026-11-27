@@ -148,8 +148,15 @@ def _team_sets(offer):
 # soccer-grades-1120: book team labels that are not one of ESPN's three names, each CHECKED by hand against a live
 # fixture (PrizePicks tab 82, 2026-11-20 raw pulls in cs2_scout_ops/logs/soccer_grades_1120/): same kick-off, the other
 # side matched exactly, one ESPN fixture at that time. Exact labels only - never a prefix, never fuzzy; a label that was
-# not seen live is not listed (Melbourne City, Newcastle Jets wait for their first observed fixture).
+# not seen live is not listed.
 BOOK_TEAM_ALIASES = {
+    # Verified against production PP offers and ESPN fixtures on 2026-11-27:
+    # 401892133 08:40Z, 401900870 14:20Z, 401900872 12:15Z.
+    # IDs, opponent and kickoff still have to match; no prefix/fuzzy matching.
+    'soccer:team:espn:11143': ('Melbourne City',),
+    'soccer:team:espn:21827': ('Fayha',),
+    'soccer:team:espn:21829': ('Khaleej',),
+    'soccer:team:espn:22022': ('Al-Qadsiah', 'Qadsiah'),
     # Nov 25 UCL fixtures 401915293 (17:45Z) and 401915377 (20:00Z), verified in both feeds.
     'soccer:team:espn:494': ('Slavia',),
     'soccer:team:espn:132': ('FC Bayern',),
@@ -175,6 +182,12 @@ BOOK_TEAM_ALIASES = {
 # same team, same listed position, the only roster player with that surname. Exact labels only - never a prefix, a
 # first-name rule or fuzzy matching; a label not seen live is not listed.
 BOOK_PLAYER_ALIASES = {
+    # 2026-11-27 PP NEOM/Ittihad, exact roster IDs of the matched fixture.
+    # NEOM roster and SPL player profile agree on Al Hejji's team/position;
+    # Masouras and Abdi are the provider's alternate spellings/order.
+    'soccer:player:espn:239483': ('Giorgos Masouras',),
+    'soccer:player:espn:357660': ('Alaa Al Hejji',),
+    'soccer:player:espn:268468': ('Faris Abdi',),
     # tennis: 365Scores 'Jay Dylan Hara Friend' (short name 'Jay Dylan Friend'), Underdog 'Jay Friend' - Challenger Kobe
     # semi-final, both listed at 2026-11-21 02:00Z, the opponent 'Liam Broady' exact in both. (Meligeni Alves /
     # Pucinelli de Almeida resolve from 365Scores' own long names, no hand label.)
@@ -1135,6 +1148,7 @@ def storage_status(sport, top=10):
     except Exception:                                   # noqa: BLE001 - ops never breaks on it
         out['archive_verify'] = None
     out['quotes_history'] = quotes_history_status(directory)
+    out['history_run'] = history_run_status(directory)
     out['side_stores'] = side_store_status(directory)
     out['state'] = ('full' if total > budget * 1.5 * 1048576 else 'backfill_paused' if total > budget * 1048576
                     else 'warn' if total > 0.7 * budget * 1048576 else 'ok')
@@ -1157,6 +1171,24 @@ def storage_status(sport, top=10):
     except (OSError, ValueError, AttributeError, TypeError, IndexError):
         pass
     return out
+
+
+def history_run_status(directory):
+    """Expose partial collector failures without reading databases or large files."""
+    try:
+        path = Path(directory) / 'history-state.json'
+        if path.stat().st_size > 65536:
+            return {'error': 'status_too_large'}
+        rec = json.loads(path.read_text(encoding='utf-8'))
+        if not isinstance(rec, dict):
+            return {'error': 'invalid_status'}
+        fields = ('finished_at', 'stored_at', 'requests', 'ok_requests', 'records',
+                  'matches', 'errors', 'storage', 'phases', 'sources', 'research', 'offset', 'stopped')
+        return {k: rec[k] for k in fields if k in rec}
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return {'error': 'unreadable_status'}
 
 
 def quotes_history_status(directory):
