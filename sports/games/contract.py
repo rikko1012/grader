@@ -159,6 +159,7 @@ _NFL = [
     ("weather_temp_f", "Environment", "Forecast temperature at kickoff (F)", WEATHER, "collected", "outdoor US"),
     ("weather_wind_mph", "Environment", "Forecast wind (mph)", WEATHER, "collected", ""),
     ("weather_precip_pct", "Environment", "Forecast chance of precipitation (%)", WEATHER, "collected", ""),
+    ("weather_sky", "Environment", "Forecast conditions (rain / snow)", WEATHER, "collected", "NWS short forecast text"),
     ("rest_days", "Environment", "Days since the team's last game", SCHED, "derived", ""),
     ("short_week", "Environment", "Short week (< 6 days)", SCHED, "derived", ""),
     ("off_bye", "Environment", "Off a bye (10+ days)", SCHED, "derived", ""),

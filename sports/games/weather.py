@@ -27,8 +27,33 @@ STADIUMS = {               # outdoor and retractable-roof NFL stadiums, 2026 (la
 }
 
 
+# ESPN does not always send the venue's sponsor name: Kansas City's venue 3622 comes through as "Arrowhead Stadium"
+# (checked 2026-11-26), so an exact-name lookup never found it and Chiefs home games got no forecast.
+ALIASES = {"arrowhead stadium": "GEHA Field at Arrowhead Stadium", "geha field at arrowhead": "GEHA Field at Arrowhead Stadium",
+           "everbank field": "EverBank Stadium", "tiaa bank field": "EverBank Stadium",
+           "fedexfield": "Northwest Stadium", "commanders field": "Northwest Stadium",
+           "cleveland browns stadium": "Huntington Bank Field", "firstenergy stadium": "Huntington Bank Field",
+           "new highmark stadium": "Highmark Stadium", "empower field": "Empower Field at Mile High"}
+# Fixed roof that ESPN flags outdoor: SoFi's canopy covers the field. The nflverse history (training rows) codes every
+# SoFi game 'dome' (wind 0), so live rows must treat it as covered too or the wind input differs from training.
+COVERED = {"SoFi Stadium"}
+_BY_LOWER = {k.lower(): k for k in STADIUMS}
+
+
+def canonical(venue_name):
+    """ESPN venue name -> the stadium table's name (exact, case-insensitive, or a listed alias); None if unknown."""
+    n = " ".join((venue_name or "").split()).lower()
+    return _BY_LOWER.get(n) or ALIASES.get(n)
+
+
 def coords(venue_name):
-    return STADIUMS.get((venue_name or "").strip())
+    c = canonical(venue_name)
+    return STADIUMS.get(c) if c else None
+
+
+def covered(venue_name):
+    """True for a stadium with a fixed roof that ESPN does not flag indoor (treated as indoor, as history does)."""
+    return canonical(venue_name) in COVERED
 
 
 def _mph(s):

@@ -661,13 +661,15 @@ def _dvp_rank(data, ath, opp_id, market, out, missing):
 def _weather(db, league, event_id, as_of, out, missing):
     w, _ = _snapshot(db, league, event_id, "weather", as_of)
     if not w:
-        for k in ("indoor", "weather_temp_f", "weather_wind_mph", "weather_precip_pct"):
+        for k in ("indoor", "weather_temp_f", "weather_wind_mph", "weather_precip_pct", "weather_sky"):
             missing[k] = "no venue / forecast snapshot before as_of (NWS covers outdoor US venues only)"
         return
     out["indoor"] = bool(w.get("indoor"))
     if not w.get("indoor"):
         out["weather_temp_f"], out["weather_wind_mph"] = w.get("temp_f"), w.get("wind_mph")
         out["weather_precip_pct"] = w.get("precip_pct")
+        if w.get("short"):
+            out["weather_sky"] = w.get("short")              # NWS text, e.g. "Light Rain", "Snow Showers" 
 
 
 # ------------------------------------------------------------------------------------------------------- payload

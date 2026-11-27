@@ -243,7 +243,8 @@ FACTORS = {
         ("Yards per game (pass / rush / receiving)", _AV, "player_game_log stats pass_yds / rush_yds / rec_yds", None),
         ("Game script: spread, implied team total, pace, plays per game", _NA, "spread / total markets refused; no "
          "play-by-play", None),
-        ("Weather", _NA, "no weather source yet", None),
+        ("Weather", _PART, "NWS kickoff forecast (wind, temperature, rain chance) for outdoor US stadiums; shown as "
+         "context, not in the grade", None),
         ("Home / away", _AV, "player_game_log splits=true", None),
         ("Rest / short week", _AV, "player_game_log rows carry rest_days", None),
         ("Injury status", _PART, "player_context: ESPN injury status + date only", None),
