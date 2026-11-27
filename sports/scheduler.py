@@ -297,7 +297,7 @@ def default_jobs():
                             every_s=900 if std else 3600,
                             timeout_s=1500 if std else 1800, flag="SPORTS_INGEST", cap_mb=150,
                             cls=HEAVY, prio=5, locks=("model-daily", "settle-post"),
-                            yields_to=("settle",),
+                            yields_to=("settle",), inherit_yield_priority=True,
                             env={"SPORTS_WORKER_MAX_VM_MB": str(_env_num("SPORTS_JOB_SETTLE_VM_MB", 1280, int))}
                             if std else {}),
         # the results ledger (<league>/results.json: admin Results + the board's settled-by-model counts) as its OWN job
@@ -843,7 +843,26 @@ class Scheduler:
                 # the member-facing jobs (each slot it waits for is held), it does not jump all of them at once
                 over -= self._starve_after(n)
             return (kind is None, self.specs[n]["prio"] - over / self.aging_s, ns)
-        out.sort(key=eff)
+        priorities = {n: eff(n) for n in out}
+        # Opt-in priority inheritance: a starved follow-up yields to its prerequisite,
+        # so that prerequisite must carry its urgency. Otherwise maintenance can
+        # repeatedly take the slot while BOTH settlement jobs remain queued.
+        # Ordinary reporting must not promote several unrelated workers merely
+        # because its own report is old. Relax only opted-in due dependencies;
+        # bounded passes also terminate on a cycle.
+        for _ in out:
+            changed = False
+            for n in out:
+                if priorities[n][0] or not self.specs[n].get("inherit_yield_priority"):
+                    continue
+                for target in self.specs[n].get("yields_to") or ():
+                    if target in priorities and priorities[n] < priorities[target]:
+                        priorities[target] = priorities[n]
+                        changed = True
+            if not changed:
+                break
+        self._due_urgent = {n for n in out if not priorities[n][0]}
+        out.sort(key=priorities.__getitem__)
         return out
 
     def _event(self, ev, name, detail=None):
@@ -980,7 +999,7 @@ class Scheduler:
                 if excl is None:
                     excl = name                         # hold everything behind a waiting exclusive job (no starvation)
                 continue
-            if held is None and self._urgent(name, t):
+            if held is None and name in self._due_urgent:
                 held = name                             # nothing may take the slot it is waiting for
 
     def run(self):
