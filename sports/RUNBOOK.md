@@ -454,7 +454,7 @@ deploys and health-check failures).
 | worker_down | page | ingest on and the collector (`ingest` job) has not finished OK for 3 cycles | ops `scheduler.jobs.ingest.last_exit`; Render logs |
 | scheduler_down | page | the job scheduler thread is not running | restart the service |
 | feed_stale | warn | ingest on and newest sighting older than 45 min (Kalshi 150 min) | check that source; a stale feed is never back-filled from another stat / scope / source |
-| store_large | warn | store >= 4 GB or 80% of `SPORTS_STORE_MAX_MB` | plan disk resize / retention |
+| store_large | warn | whole data directory >= 80% of the effective ingestion cap (`store_cap_mb`), or a lower explicit `SPORTS_ALERT_STORE_MB` | inspect growth and archive progress; preserve saved data |
 | store_full_ingest_paused | page | store >= `SPORTS_STORE_MAX_MB` | grow the disk, raise the cap |
 | service_memory_high | warn | RSS > 80% of `SPORTS_SERVICE_MAX_MB` | find the handler holding large answers; the watchdog restarts at 100% |
 | service_shedding | warn | (busy + 5xx) > 1% of requests | `peak_inflight` / `db_pool`: raise threads / pool or fix the slow route |

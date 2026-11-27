@@ -563,6 +563,25 @@ def test_alerts_clean_and_each_rule(monkeypatch):
     assert service.alerts(off) == []                                             # ingest off: no collector alerts
 
 
+def test_storage_warning_scales_with_capacity_and_preserves_explicit_limits(monkeypatch):
+    from sports import worker
+    monkeypatch.setattr(worker, "store_cap_mb", lambda *a: (50000, 60000))
+    monkeypatch.setitem(service.ALERT_RULES, "store_warn_mb", None)
+    def codes(mb, disk_pct=35):
+        return {a["code"] for a in service.alerts(_ops(feeds={
+            "store_mb": 1, "data_mb": {"canonical": mb}, "platforms": {},
+            "disk": {"used_pct": disk_pct}}))}
+    assert codes(33919) == set()
+    assert codes(39999) == set()
+    assert codes(40000) == {"store_large"}
+    assert codes(50000) == {"store_full_ingest_paused"}
+    assert codes(33919, 90) == {"disk_90"}
+    monkeypatch.setitem(service.ALERT_RULES, "store_warn_mb", 6000)
+    assert codes(6000) == {"store_large"}
+    monkeypatch.setitem(service.ALERT_RULES, "store_warn_mb", 60000)
+    assert codes(40000) == {"store_large"}  # an override cannot delay the safety warning
+
+
 def test_database_warning_recovers_without_erasing_incident_counters(monkeypatch):
     monkeypatch.setattr(service.time, "time", lambda: 1000.0)
     pool = {"waits_timed_out": 2, "queries_interrupted": 3, "last_error_at": 900.0}
