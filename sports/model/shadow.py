@@ -506,8 +506,11 @@ def settle(scon, path=None, now=None, deadline=None, fired=None):
     t_now = now or now_utc()
     mark = (con.execute("SELECT value FROM shadow_meta WHERE key = 'settled_known_at'").fetchone() or [None])[0]
     since = mark or (parse_utc(t_now) - timedelta(days=CORRECTION_WINDOW_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    evs = {r[0] for r in con.execute("SELECT DISTINCT event_id FROM shadow_forecasts f WHERE NOT EXISTS (SELECT 1 FROM "
-                                     "shadow_scorecard s WHERE s.shadow_id = f.shadow_id)")}
+    # Enumerate the covering event index, not every forecast payload plus a
+    # scorecard lookup. The old anti-join scanned the 6.7 GB live table before
+    # reaching any deadline/cursor checkpoint. Per-event signatures below skip
+    # unchanged completed events; new forecasts and corrections change the signature.
+    evs = {r[0] for r in con.execute("SELECT DISTINCT event_id FROM shadow_forecasts")}
     newest = since
     shadow_evs = None
     for ev, kn in scon.execute("SELECT event_id, MAX(known_at) FROM records WHERE kind='settlement' AND known_at >= ? "

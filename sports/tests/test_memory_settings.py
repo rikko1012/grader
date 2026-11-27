@@ -23,6 +23,9 @@ def _settle(tmp_path, **env_over):
     """`settle` on an empty store: offline, applies the worker's memory cap, imports the settlement path."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("SPORTS_")}
     env.update({"SPORTS_DATA_DIR": str(tmp_path), "SPORTS_INGEST": "1", "PYTHONPATH": str(ROOT),
+                # Match scheduler._env: native math thread stacks consume virtual
+                # address space too. Host CPU/thread defaults are not the VM knob.
+                "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",
                 "MALLOC_ARENA_MAX": "2", **env_over})
     return subprocess.run([sys.executable, "-m", "sports.worker", "settle", "nba"], cwd=str(ROOT), env=env,
                           capture_output=True, text=True, timeout=120, stdin=subprocess.DEVNULL)

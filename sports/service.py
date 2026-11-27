@@ -469,6 +469,11 @@ EXPANSION_FORECASTS_STALE_S = 1800      # soccer / tennis grades (forecasts.json
 def expansion_side_alerts(sport, st):
     """sg-stability 2026-11-20: soccer / tennis side stores and archives - before anything fills or goes dark."""
     out = []
+    run = st.get('history_run') or {}
+    if run.get('error') or run.get('errors'):
+        out.append({'level': 'warn', 'code': 'expansion_history_partial', 'detail': {
+            'sport': sport, 'at': run.get('finished_at'), 'records': run.get('records'),
+            'errors': run.get('errors') or [run.get('error')]}})
     q = st.get("quotes_history") or {}
     cap = q.get("cap_mb") or st.get("quotes_cap_mb", 250)
     live = q.get("live_mb") if q.get("live_mb") is not None else st.get("quotes_mb")
