@@ -317,6 +317,9 @@ def collect(sport, get, directory, catalogs, recent=None):
                 result['requests'] += 1
                 state[f'{venue}:{key}'] = checked                  # rotate on; the last good prices stay
                 result['errors'].append(type(e).__name__)
+                result.setdefault('failures', []).append({
+                    'venue': venue, 'series': str(key), 'error': type(e).__name__,
+                    'status': getattr(e, 'status', None), 'held': bool(getattr(e, 'held', False))})
                 continue
             vname = 'kalshi' if venue == 'kalshi' else 'polymarket'
             for eid, entry in found.items():

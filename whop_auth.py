@@ -27,7 +27,7 @@ import os
 import secrets
 import threading
 import time
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import requests
 
@@ -77,6 +77,19 @@ def products():
 
 def public_url():
     return _env("PUBLIC_URL", "https://cs2-scout-production.up.railway.app").rstrip("/")
+
+
+def login_origin_redirect(host):
+    """Issue PKCE only on the configured callback host (cookies are host-only)."""
+    configured = _env("PUBLIC_URL")
+    if not configured:
+        return None
+    origin = urlsplit(configured)
+    if origin.scheme not in ("http", "https") or not origin.netloc or origin.username or origin.password:
+        raise ValueError("PUBLIC_URL must be an HTTP(S) origin")
+    if (host or "").lower() != origin.netloc.lower():
+        return f"{origin.scheme}://{origin.netloc}/auth/login"
+    return None
 
 
 def upgrade_url():

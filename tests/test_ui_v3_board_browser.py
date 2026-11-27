@@ -397,13 +397,18 @@ def open_patched(browser, env, monkeypatch, size, theme="dark", patch=None):
 def test_qa_card_rows_give_the_market_the_room_and_hits_stay_whole(browser, env, monkeypatch, size):
     c, p = open_board(browser, env, monkeypatch, "/#all-sports", size, "dark")
     try:
-        # line 2: Grader's letter + stake take only the right-hand tracks; the market is not squeezed beside an empty 1fr track
-        areas = p.evaluate("getComputedStyle(document.querySelector('#hub-rows>tr[data-record]')).gridTemplateAreas")
-        assert '"ln mk pj pj pj gr gr gr"' in areas, areas
-        gaps = p.evaluate("""[...document.querySelectorAll('#hub-rows>tr[data-record]')].slice(0, 10).map(tr => {
-          const g = tr.querySelector('.h-scout-grade'), m = tr.querySelector('td.h-c-market .h-mcell>div');
-          return g && m && g.getClientRects().length ? Math.round(g.getBoundingClientRect().left - m.getBoundingClientRect().right) : 0; })""")
-        assert all(x >= 0 for x in gaps), gaps                                   # the market never runs under the letter
+        # A long market gets its own full-width row, never a tiny track beside the line.
+        geometry = p.evaluate("""() => {
+          const tr = document.querySelector('#hub-rows>tr[data-record]');
+          const m = tr.querySelector('td.h-c-market .h-mcell>div');
+          m.querySelector('b').textContent = 'Outfield Fantasy Score';
+          const r = m.getBoundingClientRect(), row = tr.getBoundingClientRect();
+          const grade = tr.querySelector('.h-scout-grade').getBoundingClientRect();
+          return {width:r.width, row:row.width, height:r.height, bottom:r.bottom, gradeTop:grade.top};
+        }""")
+        assert geometry['width'] >= geometry['row'] * .85, geometry
+        assert geometry['height'] < 60, geometry
+        assert geometry['bottom'] <= geometry['gradeTop'] + 1, geometry
         # a few-games hit ("16/18") is one token on the strip's baseline, its dashed mark no taller than the text line
         d = p.evaluate("""() => { const h = document.querySelector('#hub-rows>tr[data-record] .h-strip .h-hit'); h.classList.add('h-few');
           h.innerHTML = '<b>16</b><em>/18</em>'; const r = h.getBoundingClientRect(), s = getComputedStyle(h);
