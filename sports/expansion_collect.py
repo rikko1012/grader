@@ -120,7 +120,16 @@ def run(sport, catalogs, persist, directory, deadline):
             return max(1.0, min(15.0, end - time.monotonic()))
 
         def get(url, params, timeout=10):
-            body = get_json(sport, url, params=params, timeout=min(timeout, gate()), tries=1)
+            try:
+                body = get_json(sport, url, params=params, timeout=min(timeout, gate()), tries=1)
+            except net.HttpError as error:
+                # One transient retry, charged against the SAME phase request/time
+                # budget. Never retry access denials or bypass a provider hold.
+                if (error.status not in (None, 500, 502, 503, 504) or error.held
+                        or error.not_before is not None or info['requests'] >= max_requests
+                        or end - time.monotonic() < 3):
+                    raise
+                body = get_json(sport, url, params=params, timeout=min(timeout, gate()), tries=1)
             info['ok'] += 1
             return body
 

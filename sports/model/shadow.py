@@ -485,6 +485,19 @@ def l2_score(sport, hcon, freeze, art):
 CORRECTION_WINDOW_DAYS = 30            # first scan: settlements learned this far back (learning.on_settled's window)
 
 
+def _event_ids(con):
+    """Seek once per event in shadow_event, rather than scanning every forecast revision."""
+    ids = set()
+    row = con.execute("SELECT event_id FROM shadow_forecasts WHERE event_id IS NOT NULL "
+                      "ORDER BY event_id LIMIT 1").fetchone()
+    while row:
+        event = row[0]
+        ids.add(event)
+        row = con.execute("SELECT event_id FROM shadow_forecasts WHERE event_id > ? "
+                          "ORDER BY event_id LIMIT 1", (event,)).fetchone()
+    return ids
+
+
 def settle(scon, path=None, now=None, deadline=None, fired=None):
     """Score shadow forecasts whose offer has a settlement (same rule as learning._score_one: the forecast's OWN line
     and chosen side), each under its OWN model_version (sm-2, sm-nfl-2). Idempotent.
@@ -510,16 +523,16 @@ def settle(scon, path=None, now=None, deadline=None, fired=None):
     # scorecard lookup. The old anti-join scanned the 6.7 GB live table before
     # reaching any deadline/cursor checkpoint. Per-event signatures below skip
     # unchanged completed events; new forecasts and corrections change the signature.
-    evs = {r[0] for r in con.execute("SELECT DISTINCT event_id FROM shadow_forecasts")}
+    evs = _event_ids(con)
     newest = since
-    shadow_evs = None
-    for ev, kn in scon.execute("SELECT event_id, MAX(known_at) FROM records WHERE kind='settlement' AND known_at >= ? "
-                               "AND event_id IS NOT NULL GROUP BY event_id", (since,)):
-        if shadow_evs is None:
-            shadow_evs = {r[0] for r in con.execute("SELECT DISTINCT event_id FROM shadow_forecasts")}
-        if ev in shadow_evs:
-            evs.add(ev)
-        newest = max(newest, kn or newest)
+    # All forecast events are already included, including completed events whose
+    # settlements were corrected. records_event covers (kind,event_id,known_at):
+    # one reverse seek per event avoids a GROUP BY over every saved settlement.
+    for ev in evs:
+        row = scon.execute("SELECT known_at FROM records WHERE kind='settlement' AND event_id=? "
+                           "ORDER BY known_at DESC LIMIT 1", (ev,)).fetchone()
+        if row:
+            newest = max(newest, row[0] or newest)
     n = 0
     from .learning import event_sig
     done = dict(con.execute("SELECT event_id, sig FROM shadow_events"))
