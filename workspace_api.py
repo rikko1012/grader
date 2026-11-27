@@ -39,6 +39,9 @@ import workspace_store as wstore
 
 SPORTS = ("cs2", "lol", "nba", "nfl")
 READ_SPORTS = SPORTS + ("soccer", "tennis")
+# owner 2026-11-26 "add soccer & tennis to the auto builder": the sports a slip leg can be (recheck, track, settle, Auto-build, adder).
+# SPORTS stays the list every other route reads (book lines, results, grade review).
+SLIP_SPORTS = READ_SPORTS
 LEAGUES = ("nba", "nfl")
 BOOKS = ("underdog", "prizepicks")
 SCOPE = {"1": ("map1", "Map 1"), "12": ("maps12", "Maps 1-2"), "123": ("maps13", "Maps 1-3")}
@@ -133,7 +136,13 @@ def _sources():
             return workspace_sports.settle(_ST["srv"], lg, rows) if _ST.get("srv") and _ST.get("sports") else {}
         read.page = LEG_PAGE
         return read
-    return {"lol": lol, "nba": league("nba"), "nfl": league("nfl")}
+    def expansion(sport):
+        def read(rows):
+            import workspace_expansion
+            return workspace_expansion.settle(_ST["srv"], sport, rows) if _ST.get("srv") and _ST.get("sports") else {}
+        read.page = LEG_PAGE
+        return read
+    return {"lol": lol, "nba": league("nba"), "nfl": league("nfl"), "soccer": expansion("soccer"), "tennis": expansion("tennis")}
 
 
 def store():
@@ -580,7 +589,7 @@ def _legs_of(d):
         return None
     out = []
     for l in legs:
-        if not isinstance(l, dict) or l.get("sport") not in SPORTS or l.get("side") not in ("over", "under"):
+        if not isinstance(l, dict) or l.get("sport") not in SLIP_SPORTS or l.get("side") not in ("over", "under"):
             return None
         if not isinstance(l.get("id"), str) or not _LEG_ID_RE.match(l["id"]) or not isinstance(l.get("book"), str) or len(l["book"]) > 32:
             return None
@@ -2108,7 +2117,7 @@ GEN_TTL, CAL_TTL = 20, 900
 EXCLUDE_MAX = 60
 SLIP_SCOPE = {"map1": "1", "maps12": "12", "maps13": "123"}
 _SLIP_POOL = {}
-_SLIP_LOCKS = {s: threading.Lock() for s in SPORTS}
+_SLIP_LOCKS = {s: threading.Lock() for s in SLIP_SPORTS}
 LOL_SETTLED_SQL = (
     "SELECT f.stat, f.p_over, f.p_under, f.model_side, f.sid, f.series_start, s.over_hit, f.platform, f.sides FROM lol_forecasts f "
     "JOIN (SELECT platform, market_key, line, MAX(id) AS id FROM lol_forecasts WHERE forecast_at < series_start "
@@ -2162,9 +2171,10 @@ def _slip_table(srv):
             pass
         table = sq.calibration_table(units)
         bands = {}
-        for lg in sq.RESEARCH_SPORTS:          # sb-1: NBA / NFL legs rank by their league's settled chance band
+        for lg in sq.RESEARCH_SPORTS:          # sb-1: NBA / NFL (and soccer / tennis) legs rank by their sport's settled chance band
             try:
-                got = sq.sport_bands_from_results(_adapter(lg).results(srv, lg))
+                mod = _adapter(lg)
+                got = sq.sport_bands_from_results(mod.record(srv, lg) if lg in sq.EXPANSION_SPORTS else mod.results(srv, lg))
             except Exception:                   # the sports Results file is down: that league ranks at the research weight
                 got = []
             if got:
@@ -2198,7 +2208,7 @@ def _slip_pool(srv, sport, table):
             if book not in sq.PLATFORMS:
                 continue
             try:
-                recs.append(record_of(x) if sport == "cs2" else json.loads(x["rec"]))
+                recs.append(record_of(x) if sport == "cs2" else x["rec"] if isinstance(x["rec"], dict) else json.loads(x["rec"]))
             except (KeyError, TypeError, ValueError):
                 continue
         legs, why = sq.pool(recs, feeds={sport: snap.get("feeds") or {}}, research_ok=True, table=table)
@@ -2231,9 +2241,9 @@ def _gen_opts(q, allowed):
     if platform == "prizepicks" and et == "flex" and size < 3:
         return None, "PrizePicks Flex needs at least 3 picks."            # Flex 2-pick: help center only, not in the app
     asked = [s for s in (q.get("sports") or "cs2").split(",") if s]
-    if not asked or len(asked) > len(SPORTS) or any(s not in SPORTS for s in asked):
+    if not asked or len(asked) > len(SLIP_SPORTS) or any(s not in SLIP_SPORTS for s in asked):
         return None, "Choose at least one sport."
-    sports = tuple(s for s in SPORTS if s in asked and allowed.get(s))
+    sports = tuple(s for s in SLIP_SPORTS if s in asked and allowed.get(s))
     if not sports:
         return None, "Choose at least one sport."
     mix, games, repeats = q.get("mix") or "any", q.get("games") or "spread", q.get("repeats") or "allow"
@@ -2498,7 +2508,7 @@ def post_slip_advice(h, srv, q, member, scratch, name, n):
         return None
     allowed, table, now = access(h, srv, q), _slip_table(srv), datetime.now(timezone.utc)
     pool_legs = []
-    for sport in [s for s in SPORTS if allowed.get(s) and any(l["sport"] == s for l in legs)]:
+    for sport in [s for s in SLIP_SPORTS if allowed.get(s) and any(l["sport"] == s for l in legs)]:
         got = _slip_pool(srv, sport, table)
         if got:
             # NBA / NFL legs (research=True) join too: their letters are released and Auto-build ranks them whenever the sport is on

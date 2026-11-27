@@ -47,11 +47,15 @@ import workspace_rules as rules
 VERSION = "sq-1"
 PLATFORMS = ("prizepicks", "underdog")
 ENTRY_TYPES = {"prizepicks": ("power", "flex"), "underdog": ("standard", "flex")}
-SPORTS = ("cs2", "lol", "nba", "nfl")
-RESEARCH_SPORTS = ("nba", "nfl")
-SPORT_LABEL = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL"}
+SPORTS = ("cs2", "lol", "nba", "nfl", "soccer", "tennis")
+# soccer / tennis (owner 2026-11-26 "add soccer & tennis to the auto builder"): new 0U models, ranked like NBA / NFL - each sport's
+# settled chance band from its own forecast reviews (sports/expansion_settle.record), shrunk toward the research weight
+EXPANSION_SPORTS = ("soccer", "tennis")
+RESEARCH_SPORTS = ("nba", "nfl") + EXPANSION_SPORTS
+SPORT_LABEL = {"cs2": "CS2", "lol": "LoL", "nba": "NBA", "nfl": "NFL", "soccer": "Soccer", "tennis": "Tennis"}
 CS2_GRADES = ("A+", "A", "A-", "B+", "B")          # B- left out, as the studio and batch builders (no evidence it belongs in slips)
 LOL_GRADES = ("A+", "A", "A-", "B+", "B")
+EXPANSION_GRADES = ("A+", "A", "A-", "B+", "B")    # gradecore.policy letters; a "Lean" is not a quality leg
 RESEARCH_GRADES = ("A", "B", "C")                   # a research "Lean" is not a quality leg
 BANDS = ((0.50, 0.55), (0.55, 0.60), (0.60, 0.65), (0.65, 0.70), (0.70, 0.80), (0.80, 1.0001))
 PRIOR_K = 150                                       # settled picks of shrinkage of a band toward its stat's line
@@ -229,6 +233,14 @@ def leg_key(book, row_id, side):
     return f"{book}|{row_id}|{side}"
 
 
+def slip_team(rec):
+    """The player's team; a tennis player is their own side of the match (the tennis feeds give no team)."""
+    p = rec.get("player") or {}
+    if rec.get("sport") == "tennis":
+        return p.get("team") or p.get("name") or p.get("key") or ""
+    return p.get("team") or ""
+
+
 def exclusion(rec, now, feeds=None, research_ok=False):
     """None when this record is a pool leg, else the reason it is not. feeds: {platform: {"state"}} of the record's sport."""
     sport, sc, offer = rec.get("sport"), rec.get("scout") or {}, rec.get("offer") or {}
@@ -251,13 +263,17 @@ def exclusion(rec, now, feeds=None, research_ok=False):
         return "started"
     if side not in ("over", "under") or not (offer.get(side) or {}).get("offered"):
         return "side"
+    if sport in EXPANSION_SPORTS and not ((offer.get("over") or {}).get("offered") and (offer.get("under") or {}).get("offered")):
+        return "side"                               # owner 2026-11-06: a one-sided line is never on a slip
+    if sport in EXPANSION_SPORTS and not rec.get("slip_ok"):
+        return "settle"                             # no forecast to settle from, or a total that may include extra time
     p = sc.get("p_over") if side == "over" else sc.get("p_under")
     if not _num(p) or not 0 < p < 1:
         return "chance"
     proj, line = sc.get("projection"), offer.get("line")
     if p >= DEGENERATE_P or (_num(proj) and _num(line) and line > 0 and proj < NEAR_ZERO_PROJ * line):
         return "degenerate"
-    if not (rec.get("player") or {}).get("team"):
+    if not slip_team(rec):
         return "team"
     grade = sc.get("grade")
     if sport == "cs2":
@@ -269,6 +285,11 @@ def exclusion(rec, now, feeds=None, research_ok=False):
     elif sport == "lol":
         if grade not in LOL_GRADES:
             return "grade"
+    elif sport in EXPANSION_SPORTS:
+        if grade not in EXPANSION_GRADES:
+            return "grade"
+        if not research_ok:
+            return "research"
     else:
         if grade not in RESEARCH_GRADES:
             return "grade"
@@ -286,11 +307,13 @@ def make_leg(rec, table):
     # printed chance p is unchanged
     p_rank = sc["p_raw"] if isinstance(sc.get("p_raw"), (int, float)) and not isinstance(sc.get("p_raw"), bool) else p
     q, band = ranked_chance(rec["sport"], m["stat"], side, p_rank, sc.get("p_push"), research, table)
+    if rec["sport"] in EXPANSION_SPORTS and _num(sc.get("p_push")) and 0 < sc["p_push"] < 1:
+        q *= 1 - sc["p_push"]                       # soccer / tennis chances are stated on a non-push result; all_hit multiplies rank_p
     start = rec["event"].get("lock_utc") or rec["event"].get("start_utc")
     return {"key": leg_key(offer["platform"], offer["offer_id"], side), "sport": rec["sport"], "book": offer["platform"], "row_id": str(offer["offer_id"]),
             "side": side, "line": offer.get("line"), "line_type": m.get("line_type") or "standard", "event": str(rec["event"]["id"]),
             "event_label": rec["event"].get("label") or "", "start": start, "player": rec["player"].get("name") or "", "pkey": rec["player"]["key"],
-            "team": rec["player"].get("team") or "", "stat": m["stat"], "stat_label": m.get("stat_label") or m["stat"], "period": m["period"],
+            "team": slip_team(rec), "stat": m["stat"], "stat_label": m.get("stat_label") or m["stat"], "period": m["period"],
             "period_label": m.get("period_label") or m["period"], "p": p, "p_push": sc.get("p_push") or 0.0, "rank_p": q, "band": band,
             "research": research, "grade": sc.get("grade"), "multiplier": (offer.get(side) or {}).get("payout"), "model_version": sc.get("model_version"),
             "prop": prop_key(rec),

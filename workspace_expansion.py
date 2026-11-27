@@ -13,6 +13,7 @@ import expansion_leagues
 import workspace_sports as remote
 
 SPORTS = ('soccer', 'tennis')
+Down = remote.Down
 PERIODS = {'full_game': 'Full match', 'regulation': 'Regulation time', 'set1': 'First set',
            'first_half': 'First half', 'second_half': 'Second half'}
 _SNAP = {}
@@ -151,6 +152,10 @@ def _record(o, research, forecast=None):
             # no letter: a short fact, never the stored grade_reason (test / process detail stays in admin and logs)
             hold=None if f['grade'] else {'short':'Model estimate','reason':'No grade for this line.'},
             validation={'kind':'model_estimate','label':'Model estimate','detail':detail})
+        # owner 2026-11-26: a line with a saved forecast can go on a slip (recheck, track and settle: check_leg / settle below);
+        # research_only stays for the history notes the card shows. Not a line whose book total may include extra time: its review
+        # can fall back to the 90-minute value (expansion_forecasts settle_scopes), which is not what the app settles.
+        record['slip_ok'] = f.get('settlement_scope') != 'regulation_plus_extra_time'
     return record
 
 
@@ -189,7 +194,7 @@ def _build(srv, sport):
         'platforms': {k: {'label': v, 'kind': 'pickem'} for k, v in remote.LABEL.items()}}, separators=(',', ':')).encode()
     # v3 card pictures (img_index.py): the sports service's per-player PrizePicks picture map, kept beside the board (never in it)
     images = doc.get('images') if isinstance(doc.get('images'), dict) else {}
-    _SNAP[sport] = {'body': body, 'index': index, 'props': props, 'at': now, 'images': images}
+    _SNAP[sport] = {'body': body, 'index': index, 'props': props, 'at': now, 'images': images, 'feeds': feeds}   # feeds: slip pool + recheck
     return 200, body
 
 
@@ -269,3 +274,163 @@ def line_doc(srv, sport, book, rid):
         'avg': r['history']['avg'], 'scope': research['scope']}, 'context': {'rows': context}, 'books': books,
         'market_books': {'same': [], 'other': []}, 'h2h': None,
         'market': {'available': False, 'reason': 'No verified price for this exact player market.'}}
+
+
+# ---------------------------------------------------------------------------------------------------------------- slips
+# owner 2026-11-26 "add soccer & tennis to the auto builder": a soccer / tennis line with a saved forecast goes on a slip like an
+# NBA / NFL one - rechecked against this snapshot (exact offer revision, line, offered side, both sides offered, the forecast the
+# member saw), tracked with its forecast id, and settled from that forecast's own review on the sports service
+# (sports/expansion_settle.py). Every stake stays 0U; no EV is rated (workspace_rules.EV_NOT_VALIDATED).
+
+SETTLE_IDS = 40                         # forecast ids per settle read (64-hex each: a short GET)
+SETTLE_CALLS = 6                        # reads per sport per settler pass: 6 x 40 covers a whole pass (2 tiers x workspace_api.LEG_PAGE)
+
+
+def slip_team(rec):
+    """The team the entry rules and the slip pool read: a tennis player is their own side of the match (the feed gives no team)."""
+    p = rec.get('player') or {}
+    if rec.get('sport') == 'tennis':
+        return p.get('team') or p.get('name') or p.get('key') or ''
+    return p.get('team') or ''
+
+
+def _side_p(rec, side):
+    sc = rec['scout']
+    return sc.get('p_over') if side == 'over' else sc.get('p_under')
+
+
+def check_leg(srv, leg, sport, now):
+    """One soccer / tennis leg against the current snapshot. -> {ok, problems, current} plus what the entry needs."""
+    from workspace_api import SIDE_WORD, _n, _pr, DISPLAY_MAX_GAP
+    snap = snapshot(srv, sport)
+    book, side = leg['book'], leg['side']
+    if snap is None:
+        return {'ok': False, 'problems': [_pr(1, 'retry', 'Grader could not check this line just now.', retry=True)], 'current': None}
+    x = snap['index'].get((book, leg['row_id']))
+    if x is None:
+        return {'ok': False, 'problems': [_pr(1, 'gone', 'This line is no longer on the board.')], 'current': None}
+    if book not in remote.PICKEM:
+        return {'ok': False, 'problems': [_pr(1, 'gone', 'Slips cover PrizePicks and Underdog.')], 'current': None}
+    r, f = x['rec'], x.get('forecast')
+    o, sc, label = r['offer'], r['scout'], remote.LABEL.get(book, book)
+    problems = []
+    if (snap['feeds'].get(book) or {}).get('state') != 'ok' or now.timestamp() - snap['at'] > 120:
+        problems.append(_pr(1, 'board_failed', f'Grader could not read the {sport} board just now.', retry=True))
+    lock = remote._ts(r['event'].get('lock_utc') or r['event'].get('start_utc'))
+    if lock is None:
+        problems.append(_pr(0, 'start_unknown', 'No start time on the feed for this line.'))
+    elif lock <= now:
+        problems.append(_pr(0, 'locked', 'Match started.'))
+    if o['revision'] != leg.get('rev') or float(leg['line']) != float(o['line']):
+        moved = float(leg['line']) != float(o['line'])
+        problems.append(_pr(1, 'moved', f"Line moved from {_n(leg['line'])} to {_n(o['line'])}." if moved else f'This offer changed on {label}.', swap=True))
+    if not o[side]['offered']:
+        problems.append(_pr(1, 'side', f'{SIDE_WORD[side]} is not offered on {label}.'))
+    if not (o['over']['offered'] and o['under']['offered']):       # owner 2026-11-06: one-sided lines are never on a slip
+        only = 'Over only' if o['over']['offered'] else 'Under only'
+        problems.append(_pr(1, 'not_gradable', f'{only}: Grader grades lines that offer both sides.'))
+    now_p = _side_p(r, side)
+    if not f or sc.get('read_rev') in (None, 'history-only') or now_p is None:
+        problems.append(_pr(2, 'no_forecast', 'No saved forecast for this line, so it cannot be tracked.'))
+    elif not r.get('slip_ok'):
+        problems.append(_pr(1, 'not_gradable', 'Extra time may count on this line, so Grader cannot settle it like the app.'))
+    else:
+        shown_p = leg.get('shown_p')
+        if leg.get('read_rev') != sc['read_rev'] or shown_p is None or abs(shown_p - now_p) > DISPLAY_MAX_GAP:
+            problems.append(_pr(2, 'display_mismatch', f"Grader's read changed: now {SIDE_WORD[side]} {now_p * 100:.1f}%.", swap=True))
+    team = slip_team(r)
+    return {'ok': not problems, 'problems': problems,
+            'current': {'row_id': o['offer_id'], 'line': o['line'], 'rev': o['revision'], 'read_rev': sc.get('read_rev'), 'scout_side': sc.get('side'),
+                        'p_side': now_p, 'forecast_id': f['id'] if f else None, 'forecast_at': sc.get('forecast_at'),
+                        'model_version': sc.get('model_version'), 'start_utc': r['event'].get('start_utc'), 'lock_utc': r['event'].get('lock_utc')},
+            '_x': x,
+            '_ident': {'nick': r['player']['key'], 'prop': r['market']['stat'], 'scope': r['market']['period'], 'match_slug': r['event']['id'],
+                       'match_key': r['event']['id'], 'platform': book, 'line': o['line'], 'side': side},
+            '_rule': {'sport': sport, 'book': book, 'team': f'{sport}:{team}' if team else '', 'nick': r['player']['name'], 'side': side,
+                      'event': f"{sport}|{r['event']['id']}"},
+            '_ev': {'name': r['player']['name'], 'sport': sport, 'match': r['event']['id'], 'line': o['line'], 'multiplier': o[side].get('payout'),
+                    'on_side': side == sc.get('side'), 'p': now_p, 'tag': sc.get('model_version'), 'prop': r['market']['stat'],
+                    'scope': r['market']['period']}}
+
+
+def payload(x, leg, e):
+    """What the member saw, frozen: the letter only on its published side, stakes 0."""
+    r = x['rec']
+    sc, side = r['scout'], leg['side']
+    on = side == sc.get('side')
+    grade = sc.get('grade') if on else None
+    p = _side_p(r, side)
+    return {'player': r['player']['name'], 'team': r['player']['team'], 'opponent': r['player']['opponent'], 'matchup': r['event']['label'],
+            'competition': r['event'].get('competition_label') or r['event']['competition'], 'stat_label': r['market']['stat_label'],
+            'period_label': r['market']['period_label'], 'platform_label': r['offer']['platform_label'], 'scout_side': sc.get('side'), 'on_side': on,
+            'displayed_p': p, 'grade': grade, 'units': 0 if grade else None, 'stake_reason': sc.get('stake_reason') if grade else None,
+            'research': True, 'hold': None, 'projection': sc.get('projection'), 'forecast_p': p, 'forecast_at': sc.get('forecast_at'),
+            'forecast_grade': grade, 'forecast_units': 0 if grade else None, 'l10': r['history']['l10'], 'feed_at': r['offer']['seen_at'],
+            'rules_version': e.get('rules_version'), 'entry_type': e.get('entry_type')}
+
+
+def receipt_fields(x, leg, sport, res, e):
+    r, f = x['rec'], x['forecast']
+    o, side = r['offer'], leg['side']
+    return {'sport': sport, 'row_id': o['offer_id'], 'offer_rev': o['revision'], 'side': side, 'line': o['line'],
+            'line_type': r['market'].get('line_type') or 'standard', 'pick_id': None, 'forecast_id': f['id'], 'match_slug': r['event']['id'],
+            'match_id': r['event']['id'], 'match_key': r['event']['id'], 'nick': r['player']['key'], 'prop': r['market']['stat'],
+            'scope': r['market']['period'], 'start_utc': r['event'].get('lock_utc') or r['event'].get('start_utc'),
+            'model_version': r['scout'].get('model_version'), 'payload': payload(x, leg, e),
+            'settle_key': f"{sport}|{f['id']}|{side}|{o['line']}",
+            'settle_ref': {'sport': sport, 'forecast_id': f['id'], 'platform': o['platform'], 'offer_id': x['offer']['offer_id'],
+                           'side': side, 'line': o['line']}}
+
+
+def entry_link(x, side):
+    return None                                  # the soccer / tennis feeds carry no per-line Underdog link
+
+
+def entry_projection(x, side):
+    o = x['offer']
+    if o.get('platform') != 'prizepicks':
+        return None
+    return {'book': 'prizepicks', 'projection_id': str(o.get('offer_id')), 'side': side, 'line': o.get('line'),
+            'odds_type': o.get('variant') or 'standard'}
+
+
+def leg_result(actual, side, line):
+    if actual == line:
+        return 'push'
+    return 'hit' if (actual > line if side == 'over' else actual < line) else 'miss'
+
+
+def settle(srv, sport, rows, now=None):
+    """Each due leg's result from its own forecast's latest review, at the leg's own line and side. No review or no actual (did not
+    play, retired, conflicting sources) = no answer: the leg stays pending. remote.Down raises: every result stays as it was."""
+    now = now or datetime.now(timezone.utc)
+    due = {}
+    for w in rows:
+        t, ref = remote._ts(w.get('start_utc')), w.get('ref') or {}
+        if t is not None and t <= now and ref.get('forecast_id') and ref.get('side') in ('over', 'under'):
+            due.setdefault(ref['forecast_id'], []).append(w)
+    out, ids = {}, list(due)               # page order: the open tier first (workspace_store._settle_sport)
+    for i in range(0, min(len(ids), SETTLE_IDS * SETTLE_CALLS), SETTLE_IDS):
+        part = ids[i:i + SETTLE_IDS]
+        doc, _ = remote.call(srv, '/api/sports/expansion/settle', {'sport': sport, 'ids': ','.join(part)})
+        got = doc.get('results') or {}
+        for fid in part:
+            a = got.get(fid)
+            void = bool(a and a.get('void'))
+            if not a or (not void and (isinstance(a.get('actual'), bool) or not isinstance(a.get('actual'), (int, float)))):
+                continue
+            for w in due[fid]:
+                line, side = w['ref'].get('line'), w['ref']['side']
+                if isinstance(line, bool) or not isinstance(line, (int, float)) or a.get('line') != line:
+                    continue                     # the forecast was made at another line: never settle a leg at a line it did not hold
+                res = 'void' if void else leg_result(a['actual'], side, line)   # void: every source says the player did not play
+                out[w['settle_key']] = {'result': res, 'actual': a['actual'], 'source': 'grader-review', 'settled_at': a.get('known_at'),
+                                        'final': True, 'mark': remote._hash(res, a['actual'], a.get('review_id'))}
+    return out
+
+
+def record(srv, sport):
+    """The sports service's settled chance bands for one sport, in the Results-file shape slip_quality.sport_bands_from_results reads."""
+    doc, _ = remote.call(srv, '/api/sports/expansion/record', {'sport': sport})
+    return {'groups': {'chance': [{'name': b.get('name'), 'wins': b.get('wins'), 'losses': b.get('losses'), 'printed': b.get('printed')}
+                                  for b in doc.get('bands') or []]}}

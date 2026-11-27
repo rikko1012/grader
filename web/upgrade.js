@@ -336,7 +336,7 @@
     if (T.legs.length) { scheduleCheck(); scheduleAdvice(); }
   }
   function addRefusal(rec, side) {
-    if (rec.research_only) return 'This prop has verified history; tracked slips need a released forecast and settlement rules.';
+    if (rec.research_only && !rec.slip_ok) return 'This prop has verified history; tracked slips need a released forecast and settlement rules.';
     if (started(rec)) return `${startWord(rec)} at ${when(rec.event.start_utc)}.`;
     if (!slipOffer(rec)) return `${rec.offer.platform_label} is shown for comparison. Slips cover PrizePicks and Underdog.`;
     if (oneSided(rec)) return oneSidedNote(rec);
@@ -753,7 +753,7 @@
     const n = T.legs.length, phase = slipPhase();
     const done = T.tracked ? `<div class="u-note good"><b>${plural(T.tracked.n, "pick")} tracked on ${esc(T.tracked.label)}.</b> <button class="u-link" type="button" data-u="tab" data-id="picks">View receipts</button></div>` : "";
     const saved = T.saveFail ? '<p class="u-dim">Your changes will save when the connection returns.</p>' : "";
-    if (!n) return `${done}${saved}<p class="u-empty">${HUB && !$("u-hub").hidden ? "No picks yet. Add a side from any board with + Add. Your slip follows your account across CS2, LoL, NBA and NFL." : "Add a line from any board with + Slip tray. It follows your account across CS2, LoL and Sports."}</p>`;
+    if (!n) return `${done}${saved}<p class="u-empty">${HUB && !$("u-hub").hidden ? "No picks yet. Add a side from any board with + Add. Your slip follows your account across every sport." : "Add a line from any board with + Slip tray. It follows your account across CS2, LoL and Sports."}</p>`;
     const retry = phase === "down" ? `<button class="u-link" type="button" data-u="check">Retry</button>` : phase === "fresh" ? `<button class="u-link" type="button" data-u="check">Check again</button>` : "";
     const checks = phase === "fresh" ? `<details class="u-det" ${det("checks")}><summary>Check details</summary><ul>${CHECKS.map((t, i) => `<li><b class="${T.check.fails[i] ? "no" : "yes"}">${T.check.fails[i] ? "Refused" : "Pass"}</b> ${t}${T.check.fails[i] ? ` (${esc(T.check.fails[i])})` : ""}</li>`).join("")}</ul></details>` : "";
     return `${done}<div class="u-status"><p>${statusLine(phase)} ${retry}</p><button class="u-link" type="button" data-u="clear">Clear</button></div>${saved}${checks}${entries().map((e) => entryHtml(e, phase)).join("")}`;
