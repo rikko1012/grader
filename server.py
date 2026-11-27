@@ -5128,6 +5128,11 @@ class Handler(BaseHTTPRequestHandler):
                                        "upgrade": whop_auth.upgrade_url(), "slip_studio": SLIP_STUDIO, "lol": lol_public(),
                                        **({"pp_open_link": True} if PP_OPEN_LINK else {})})
             if u.path == "/auth/login" and whop_auth.enabled():
+                canonical = whop_auth.login_origin_redirect(self.headers.get("Host"))
+                if canonical:
+                    if q.get("next") in reviews.NEXT_PAGES:
+                        canonical += "?next=" + quote(q["next"], safe="")
+                    return self.redirect(canonical)
                 url, pkce = whop_auth.start_login()
                 cookies = [f"{whop_auth.PKCE_COOKIE}={pkce}; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax"]
                 if q.get("next") in reviews.NEXT_PAGES:      # ?next=<key> from a FIXED allow-list - never a raw URL
