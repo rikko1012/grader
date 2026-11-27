@@ -164,3 +164,22 @@ def test_current_offer_ids_same_as_the_old_query():
         "EXPLAIN QUERY PLAN SELECT source, source_key, MAX(revision) FROM records INDEXED BY records_event WHERE "
         "kind = 'offer' AND late = 0 AND league = ? AND event_id IN (?) GROUP BY source, source_key", ["nba", "x"]))
     assert "records_event" in plan
+
+def test_target_slate_reads_once_with_identical_market_rows(monkeypatch):
+    con = store.connect()
+    _offer_world(con)
+    markets = ['points', 'rebounds', 'assists']
+    ids = ['nba:espn:1', 'nba:espn:2']
+    expected = {mk: [(rid, o.to_dict()) for rid, o in forward._slate_offers(
+        con, 'nba', ids, stat=mk, platforms=forward.TARGETS)] for mk in markets}
+    real = forward._slate_offers
+    calls = []
+    def counted(*args, **kwargs):
+        calls.append(kwargs)
+        return real(*args, **kwargs)
+    monkeypatch.setattr(forward, '_slate_offers', counted)
+    grouped = forward._target_slate_by_market(con, 'nba', iter(ids), markets)
+    assert {mk: [(rid, o.to_dict()) for rid, o in rows] for mk, rows in grouped.items()} == expected
+    assert len(calls) == 1
+    assert forward._target_slate_by_market(con, 'nba', ids, []) == {}
+    assert len(calls) == 1

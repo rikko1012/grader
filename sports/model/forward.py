@@ -326,6 +326,21 @@ def _slate_offers(scon, league, event_ids, **filters):
         yield rid, offer
 
 
+
+def _target_slate_by_market(scon, league, event_ids, markets):
+    """Read the current target slate once; release each market after consumption.
+
+    Keep the canonical latest-revision reader and its order. Materializing before
+    writes also avoids retaining a WAL read snapshot across forecast inserts.
+    """
+    grouped = {mk: [] for mk in markets}
+    if grouped:
+        for rid, offer in _slate_offers(scon, league, event_ids, platforms=TARGETS):
+            if offer.stat in grouped:
+                grouped[offer.stat].append((rid, offer))
+    return grouped
+
+
 def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     """sm-1 + mi-1 + mc-1 + single-source market forecasts for every gradable target offer of `league`."""
     forecast_at = forecast_at or now_utc()
@@ -368,6 +383,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
     cap = league == "nfl" and nflfix.cap_on()                    # pc-cap (audit_1121 r2, default OFF)
     if tw is not None:
         out["tw1"] = {"sha": tw["sha"], "markets": sorted(tw["markets"])}
+    targets = _target_slate_by_market(scon, league, (key[0] for key in idmap), art["markets"])
     cur_hl, df = None, None
     for mk in _ordered(league, art["markets"]):
         sh_items, sm1_probs = [], {}
@@ -399,7 +415,7 @@ def forecast_league(scon, hcon, league, forecast_at=None, log=print):
         # the store.put calls below; once the books job (beside_exclusive since 2026-11-06) committed, that stale
         # snapshot could not become a write transaction -> "database is locked" (SQLITE_BUSY_SNAPSHOT, no busy wait)
         # and model-forward exited 1. Same query, same rows, same order: forecasts unchanged.
-        for rid, o in list(_slate_offers(scon, league, (key[0] for key in idmap), stat=mk, platforms=TARGETS)):
+        for rid, o in targets.pop(mk, ()):
             if o.platform not in TARGETS or (o.event_id, o.player_id) not in idmap:
                 continue
             ok, _ = capabilities.gate(o)
@@ -579,8 +595,9 @@ def _nba8_league(scon, hcon, forecast_at, up, idmap, events, out, icon, log):
     cv = "nba8-cal:" + ",".join(f"{c}={art['components'][c]['cal']:.4f}" for c in nba8.COMPONENTS)
     feats = {}
     w = out.setdefault("written", {})
+    targets = _target_slate_by_market(scon, "nba", (key[0] for key in idmap), live)
     for mk in sorted(live):
-        for rid, o in _slate_offers(scon, "nba", (key[0] for key in idmap), stat=mk, platforms=TARGETS):
+        for rid, o in targets.pop(mk, ()):
             if o.platform not in TARGETS or (o.event_id, o.player_id) not in idmap:
                 continue
             ok, _ = capabilities.gate(o)
@@ -656,12 +673,13 @@ def _nba8_shadow(scon, hcon, forecast_at, idmap, events, path=None):
     live = capabilities.nba_stats8_markets()
     mks = [m for m in capabilities.NBA_STATS8_ALL if m not in live]
     feats, pmfs, n, seen, known, why = {}, {}, 0, 0, 0, {}
+    targets = _target_slate_by_market(scon, "nba", (key[0] for key in idmap), mks)
     con = shadow.db(path)
     try:
         for mk in mks:
             # the in-population offers first (a small list), so the store cursor is closed before any model work
             todo = []
-            for rid, o in _slate_offers(scon, "nba", (key[0] for key in idmap), stat=mk, platforms=TARGETS):
+            for rid, o in targets.pop(mk, ()):
                 ev = events.get(o.event_id)
                 if ev is None or ev.start_utc <= forecast_at or not capabilities.nba8_tested(o):
                     continue
