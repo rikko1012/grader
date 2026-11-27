@@ -18,6 +18,15 @@ from tests.test_workspace_api import call
 GRADES = ("A+", "A", "A-", "B+", "Lean", "A")         # the last one is offered on one side only
 
 
+@pytest.fixture(autouse=True)
+def production_accept_queue(monkeypatch):
+    # Autouse runs before env constructs/listens on the HTTP server. Changing
+    # this attribute inside the load test is too late: the socket still has
+    # Python's default backlog of 5, rather than server.main's production 2048.
+    from http.server import ThreadingHTTPServer
+    monkeypatch.setattr(ThreadingHTTPServer, "request_queue_size", 2048)
+
+
 def _fkey(o):
     return hashlib.sha256(json.dumps([o[k] for k in ("sport", "platform", "offer_id", "revision")], separators=(",", ":")).encode()).hexdigest()
 
@@ -259,9 +268,7 @@ def test_700_members_generate_and_recheck_soccer_tennis_at_once(exp, monkeypatch
     import http.client
     import time
     from concurrent.futures import ThreadPoolExecutor
-    from http.server import ThreadingHTTPServer
     import whop_auth
-    monkeypatch.setattr(ThreadingHTTPServer, "request_queue_size", 2048)
     st, doc = gen(exp, slips=1)
     assert st == 200 and doc["slips"], doc
     boards = {s: board(exp, s) for s in adapter.SPORTS}
