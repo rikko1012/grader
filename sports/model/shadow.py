@@ -174,7 +174,7 @@ def db(path=None):
     # even when nothing expired. These additive indexes leave every row intact.
     con.execute("CREATE INDEX IF NOT EXISTS shadow_forecast_at ON shadow_forecasts (forecast_at)")
     con.execute("CREATE INDEX IF NOT EXISTS shadow_model_progress ON shadow_forecasts "
-                "(model_version, forecast_at, event_start, platform, shadow_id, stat, line)")
+                "(model_version, forecast_at, event_start, platform, shadow_id, stat, line, league, event_id)")
     con.execute("""CREATE TABLE IF NOT EXISTS shadow_scorecard (shadow_id TEXT, settlement_id TEXT, model_version TEXT,
         league TEXT, stat TEXT, event_id TEXT, line REAL, side TEXT, p_side REAL, p_push REAL, status TEXT,
         value REAL, settled_at TEXT, PRIMARY KEY (shadow_id, settlement_id))""")

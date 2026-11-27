@@ -25,4 +25,7 @@ def test_shadow_indexes_preserve_rows_and_cover_progress(tmp_path):
     retention = ' '.join(str(tuple(r)) for r in con.execute(
         'EXPLAIN QUERY PLAN SELECT shadow_id FROM shadow_forecasts WHERE forecast_at < ?', ('2026-01-01',)))
     assert 'shadow_forecast_at' in retention
+    report = ' '.join(str(tuple(r)) for r in con.execute(
+        'EXPLAIN QUERY PLAN SELECT league, stat, COUNT(*), COUNT(DISTINCT event_id) FROM shadow_forecasts GROUP BY 1,2'))
+    assert 'COVERING INDEX shadow_model_progress' in report
     con.close()
